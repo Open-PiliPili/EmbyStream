@@ -1,0 +1,69 @@
+[General]
+# Log level for the application (e.g., "info", "debug", "error")
+log_level = "info"
+
+# Backend type for media streaming: "disk", "direct_link", or "alist"
+backend_type = "disk"
+
+# 16-byte key for AES-128 encryption
+encipher_key = "1234567890123456"
+
+# Cache TTL in seconds for URL parsing results
+cache_ttl_seconds = 1800
+
+# API key for Swagger API authentication (auto-generated on first run if empty)
+api_key = ""
+
+[Frontend]
+# Port for the frontend server
+server_port = 60001
+
+# Emby server URL
+emby_url = "http://127.0.0.1:8096"
+
+# Emby API key (optional)
+# emby_api_key = "your_emby_api_key"
+
+# Base path for local files (optional)
+# Example: /mnt/media/
+storage_base_path = ""
+
+[Disk]
+# Port for the disk backend server
+listen_port = 60002
+
+# Stream service URL for disk backend
+stream_url = "https://your.stream.server"
+
+# Stream port for disk backend (default: "443")
+stream_port = "443"
+
+# Base path for local files (optional)
+# Example: /mnt/media/
+storage_base_path = ""
+
+# Path replace rule (regex, optional, default: "")
+# Example: /mnt/media/ -> /mnt2/media/
+path_replace_rule_regex = ""
+
+[AList]
+# AList server base URL
+base_url = "https://your.alist.server"
+
+# AList authentication token
+token = "your_alist_token"
+
+# Path replace rule (regex, optional, default: "")
+# Example: /d/dc3zoccczdbjyx5da -> ''
+path_replace_rule_regex = ""
+
+[DirectLink]
+# Base URL for CDN direct links
+base_url = "https://your.directlink.server"
+
+# Stream port for direct links (default: "443")
+stream_port = "443"
+
+# Path replace rule (regex, optional, default: "")
+# Example: /d/dc3zoccczdbjyx5da -> ''
+path_replace_rule_regex = ""
