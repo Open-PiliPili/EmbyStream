@@ -27,16 +27,14 @@ impl AesEncrypt {
     /// * `key` - The decryption key as a UTF-8 string, must be at least 6 characters long.
     ///           The key will be converted to bytes, padded with `0` if shorter than 16 bytes,
     ///           or truncated if longer than 16 bytes.
-    ///
+    /// * `iv` - The initialization vector as a UTF-8 string, must be at least 6 characters long.
+    ///          when encoded to UTF-8, used for AES-128-CBC decryption.
     /// # Returns
     ///
     /// * `Ok(String)` - The Base64-encoded encrypted string (IV + ciphertext).
     /// * `Err(Error)` - If the key length is invalid or encryption fails.
-    pub fn encrypt(dict: &HashMap<String, String>, key: &str) -> Result<String, Error> {
+    pub fn encrypt(dict: &HashMap<String, String>, key: &str, iv: &str) -> Result<String, Error> {
         info_log!(CRYPTO_LOGGER_DOMAIN, "Starting AES encryption for dictionary");
-
-        // Validate key length
-        let key = KeyNormalizer::normalize_from_str(key)?;
 
         // Serialize dictionary to JSON
         let json = serde_json::to_string(dict).map_err(|e| {
@@ -44,10 +42,12 @@ impl AesEncrypt {
             Error::JsonError(e)
         })?;
 
-        // Use reversed key as IV
-        let mut reversed_key = key.to_vec();
-        reversed_key.reverse();
-        let iv = GenericArray::from_slice(&reversed_key);
+        // Validate key length
+        let key = KeyNormalizer::normalize_from_str(key)?;
+
+        // Validate iv length
+        let iv_bytes = KeyNormalizer::normalize_from_str(iv)?;
+        let iv = GenericArray::from_slice(&iv_bytes);
 
         // Initialize cipher
         let cipher = Aes128CbcEncryptor::new(&GenericArray::from_slice(&key), &iv);
@@ -63,13 +63,8 @@ impl AesEncrypt {
                 Error::EncryptionError(e.to_string())
             })?;
 
-        // Prepend IV to ciphertext
-        let mut result = Vec::new();
-        result.extend_from_slice(iv.as_slice());
-        result.extend_from_slice(ciphertext);
-
         // Encode to Base64
-        let encoded = BASE64.encode(&result);
+        let encoded = BASE64.encode(&ciphertext);
         info_log!(CRYPTO_LOGGER_DOMAIN, "Encryption successful, produced Base64 string");
         Ok(encoded)
     }

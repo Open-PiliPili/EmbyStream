@@ -17,6 +17,8 @@ impl Crypto {
     /// * `operation` - The operation to perform (Encrypt or Decrypt).
     /// * `input` - For Encrypt: HashMap<String, String>; for Decrypt: Base64-encoded string.
     /// * `key` - The 16-byte encryption/decryption key.
+    /// * `iv` - The initialization vector as a UTF-8 string, must be at least 6 characters long.
+    ///          when encoded to UTF-8, used for AES-128-CBC decryption.
     ///
     /// # Returns
     ///
@@ -26,7 +28,8 @@ impl Crypto {
     pub fn execute(
         operation: CryptoOperation,
         input: CryptoInput,
-        key: &str
+        key: &str,
+        iv: &str,
     ) -> Result<CryptoOutput, Error> {
         info_log!(CRYPTO_LOGGER_DOMAIN, "Executing cryptographic operation: {:?}", operation);
 
@@ -39,7 +42,7 @@ impl Crypto {
                         return Err(Error::EncryptionError("Invalid input: expected dictionary".to_string()));
                     }
                 };
-                let encrypted = AesEncrypt::encrypt(&dict, key)?;
+                let encrypted = AesEncrypt::encrypt(&dict, key, iv)?;
                 Ok(CryptoOutput::Encrypted(encrypted))
             }
             CryptoOperation::Decrypt => {
@@ -57,7 +60,7 @@ impl Crypto {
                         );
                     }
                 };
-                let dict = AesDecrypt::decrypt(&encrypted, key)?;
+                let dict = AesDecrypt::decrypt(&encrypted, key, iv)?;
                 Ok(CryptoOutput::Dictionary(dict))
             }
         }

@@ -27,16 +27,15 @@ impl AesDecrypt {
     /// * `key` - The decryption key as a UTF-8 string, must be at least 6 characters long.
     ///           The key will be converted to bytes, padded with `0` if shorter than 16 bytes,
     ///           or truncated if longer than 16 bytes.
+    /// * `iv` - The initialization vector as a UTF-8 string, must be at least 6 characters long.
+    ///          when encoded to UTF-8, used for AES-128-CBC decryption.
     ///
     /// # Returns
     ///
     /// * `Ok(HashMap<String, String>)` - The decrypted dictionary.
     /// * `Err(Error)` - If the key length is invalid, Base64 decoding fails, or decryption fails.
-    pub fn decrypt(encrypted: &str, key: &str) -> Result<HashMap<String, String>, Error> {
+    pub fn decrypt(encrypted: &str, key: &str, iv: &str) -> Result<HashMap<String, String>, Error> {
         info_log!(CRYPTO_LOGGER_DOMAIN, "Starting AES decryption for Base64 string");
-
-        // Validate key length
-        let key = KeyNormalizer::normalize_from_str(key)?;
 
         // Decode Base64
         let decoded = BASE64.decode(encrypted).map_err(|e| {
@@ -44,15 +43,14 @@ impl AesDecrypt {
             Error::Base64DecodeError(e)
         })?;
 
-        // Extract IV (first 16 bytes) and ciphertext
-        if decoded.len() < 16 {
-            error_log!(CRYPTO_LOGGER_DOMAIN, "Decoded data too short to contain IV");
-            return Err(Error::DecryptionError(
-                "Decoded data too short to contain IV".to_string(),
-            ));
-        }
-        let iv = GenericArray::from_slice(&decoded[0..16]);
-        let ciphertext = &decoded[16..];
+        // Validate key length
+        let key = KeyNormalizer::normalize_from_str(key)?;
+
+        // Validate iv length
+        let iv_bytes = KeyNormalizer::normalize_from_str(iv)?;
+        let iv = GenericArray::from_slice(&iv_bytes);
+
+        let ciphertext = &decoded;
 
         // Initialize cipher
         let cipher = Aes128CbcDecryptor::new(&GenericArray::from_slice(&key), iv);
