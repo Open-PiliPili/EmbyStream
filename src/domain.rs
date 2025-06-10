@@ -9,3 +9,5 @@ pub const CONFIG_LOGGER_DOMAIN: &str = "CONFIG";
 pub const CRYPTO_LOGGER_DOMAIN: &str = "CRYPTO";
 
 pub const CACHE_LOGGER_DOMAIN: &str = "CACHE";
+
+pub const NETWORK_LOGGER_DOMAIN: &str = "NETWORK";
