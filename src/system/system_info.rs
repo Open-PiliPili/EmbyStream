@@ -39,13 +39,6 @@ impl SystemInfo {
     }
 
     pub fn get_user_agent(&self) -> String {
-        let env_str = match self.environment {
-            Environment::Docker => "Docker",
-            Environment::Linux => "Linux",
-            Environment::MacOS => "MacOS",
-            Environment::Windows => "Windows",
-            Environment::Unknown => "Unknown",
-        };
-        format!("PStreamer/{}/{}", self.version, env_str)
+        format!("PStreamer/{}", self.version)
     }
 }
