@@ -138,6 +138,9 @@ impl LoggerBuilder {
         let file_appender = self.rolling
             .create_file_appender(self.directory, self.file_name_prefix);
 
+        // Determine if the log level is DEBUG or more verbose
+        let is_debug = self.max_level == LogLevel::Debug;
+
         // File logging layer
         let file_layer = fmt::Layer::new()
             .compact()
@@ -145,8 +148,8 @@ impl LoggerBuilder {
             .with_timer(timer.clone())
             .with_level(true)
             .with_target(false)
-            .with_file(true)
-            .with_line_number(true)
+            .with_file(is_debug)
+            .with_line_number(is_debug)
             .with_thread_names(false)
             .with_thread_ids(false)
             .with_writer(file_appender);
@@ -158,8 +161,8 @@ impl LoggerBuilder {
             .with_timer(timer)
             .with_level(true)
             .with_target(false)
-            .with_file(true)
-            .with_line_number(true)
+            .with_file(is_debug)
+            .with_line_number(is_debug)
             .with_thread_names(false)
             .with_thread_ids(false);
 
