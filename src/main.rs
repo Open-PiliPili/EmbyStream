@@ -27,5 +27,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info_log!("Telegram Response: {:?}", response);
      */
 
+    /*
+    let alist_client = ClientBuilder::<AlistClient>::new()
+        .with_plugin(CurlPlugin)
+        .build();
+
+    let alist_token = "alist-XXXXXXXXX";
+    let file_link = alist_client.fetch_file_link(
+        "http://XXXXXXXXXXXXX:5244/",
+        alist_token,
+        "/115/影视/国产/一把青 (2015)/Season 1/一把青 (2015) - S01E01 - 1080p WEB-DL.mkv"
+    ).await?;
+    info_log!("File_link: {}", file_link);
+    */
+
     Ok(())
 }

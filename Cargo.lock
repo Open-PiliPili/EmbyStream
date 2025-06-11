@@ -261,6 +261,7 @@ dependencies = [
  "dashmap",
  "generic-array 1.2.0",
  "once_cell",
+ "percent-encoding",
  "reqwest",
  "serde",
  "serde_json",

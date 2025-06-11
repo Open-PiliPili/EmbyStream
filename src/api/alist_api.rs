@@ -28,6 +28,18 @@ impl AlistAPI {
             operation: AlistOperation::FsGet { path: path.into() },
         }
     }
+
+    pub fn fs_link(
+        url: impl Into<String>,
+        token: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Self {
+        AlistAPI {
+            url: url.into(),
+            token: token.into(),
+            operation: AlistOperation::FsLink { path: path.into() },
+        }
+    }
 }
 
 impl NetworkTarget for AlistAPI {
@@ -46,6 +58,7 @@ impl NetworkTarget for AlistAPI {
     fn path(&self) -> String {
         match &self.operation {
             AlistOperation::FsGet { .. } => "api/fs/get".to_string(),
+            AlistOperation::FsLink { .. } => "api/fs/link".to_string(),
         }
     }
 
@@ -64,6 +77,12 @@ impl NetworkTarget for AlistAPI {
                 let json = serde_json::json!({
                     "path": path,
                     "password": ""
+                });
+                NetworkTask::RequestJson(json)
+            }
+            AlistOperation::FsLink { path } => {
+                let json = serde_json::json!({
+                    "path": path
                 });
                 NetworkTask::RequestJson(json)
             }
