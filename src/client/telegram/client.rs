@@ -1,21 +1,21 @@
 use crate::{
-    api::{TextMessage, PhotoMessage, TelegramAPI, TelegramResponse, MessageResult},
+    api::telegram::{TextMessage, PhotoMessage, API, Response, MessageResult},
     client::BuildableClient,
     network::{NetworkPlugin, NetworkProvider}
 };
 
-pub struct TelegramClient {
+pub struct Client {
     provider: NetworkProvider,
 }
 
-impl BuildableClient for TelegramClient {
+impl BuildableClient for Client {
     fn build_from_plugins(plugins: Vec<Box<dyn NetworkPlugin>>) -> Self {
         let provider = NetworkProvider::new(plugins);
-        TelegramClient { provider }
+        Client { provider }
     }
 }
 
-impl TelegramClient {
+impl Client {
     /// Sends a text message to a Telegram chat asynchronously.
     ///
     /// Constructs and sends a Telegram API request using the provided token, chat ID,
@@ -40,10 +40,10 @@ impl TelegramClient {
         token: impl Into<String>,
         chat_id: impl Into<String>,
         text: TextMessage,
-    ) -> Result<TelegramResponse<MessageResult>, anyhow::Error> {
-        let request = TelegramAPI::text(token, chat_id, text);
+    ) -> Result<Response<MessageResult>, anyhow::Error> {
+        let request = API::text(token, chat_id, text);
         let response = self.provider.send_request(&request).await?;
-        let result: TelegramResponse<MessageResult> = response.json().await?;
+        let result: Response<MessageResult> = response.json().await?;
         Ok(result)
     }
 
@@ -72,10 +72,10 @@ impl TelegramClient {
         token: impl Into<String>,
         chat_id: impl Into<String>,
         photo: PhotoMessage,
-    ) -> Result<TelegramResponse<MessageResult>, anyhow::Error> {
-        let request = TelegramAPI::photo(token, chat_id, photo);
+    ) -> Result<Response<MessageResult>, anyhow::Error> {
+        let request = API::photo(token, chat_id, photo);
         let response = self.provider.send_request(&request).await?;
-        let result: TelegramResponse<MessageResult> = response.json().await?;
+        let result: Response<MessageResult> = response.json().await?;
         Ok(result)
     }
 }

@@ -1,31 +1,31 @@
 use crate::{
-    api::AlistOperation,
+    api::alist::Operation,
     network::{HttpMethod, NetworkTarget, NetworkTask},
-    system::SystemInfo,
+    system::SystemInfo
 };
 
 /// Represents Alist API endpoints with their respective parameters.
 #[derive(Debug, Clone)]
-pub struct AlistAPI {
+pub struct API {
     /// The base URL for the Alist server (e.g., "http://127.0.0.1:5244").
     url: String,
     /// The token for authenticating with the Alist server.
     token: String,
     /// The specific API operation (e.g., FsGet).
-    operation: AlistOperation,
+    operation: Operation,
 }
 
-impl AlistAPI {
+impl API {
     /// Constructs a new `AlistAPI` instance for fetching file information.
     pub fn fs_get(
         url: impl Into<String>,
         token: impl Into<String>,
         path: impl Into<String>,
     ) -> Self {
-        AlistAPI {
+        API {
             url: url.into(),
             token: token.into(),
-            operation: AlistOperation::FsGet { path: path.into() },
+            operation: Operation::FsGet { path: path.into() },
         }
     }
 
@@ -34,15 +34,15 @@ impl AlistAPI {
         token: impl Into<String>,
         path: impl Into<String>,
     ) -> Self {
-        AlistAPI {
+        API {
             url: url.into(),
             token: token.into(),
-            operation: AlistOperation::FsLink { path: path.into() },
+            operation: Operation::FsLink { path: path.into() },
         }
     }
 }
 
-impl NetworkTarget for AlistAPI {
+impl NetworkTarget for API {
     /// Gets the base URL for Alist API requests.
     ///
     /// Ensures the URL ends with a trailing slash, if not already present.
@@ -57,8 +57,8 @@ impl NetworkTarget for AlistAPI {
     /// Gets the API endpoint path for the specific operation.
     fn path(&self) -> String {
         match &self.operation {
-            AlistOperation::FsGet { .. } => "api/fs/get".to_string(),
-            AlistOperation::FsLink { .. } => "api/fs/link".to_string(),
+            Operation::FsGet { .. } => "api/fs/get".to_string(),
+            Operation::FsLink { .. } => "api/fs/link".to_string(),
         }
     }
 
@@ -73,14 +73,14 @@ impl NetworkTarget for AlistAPI {
     /// A `NetworkTask` containing the JSON body with path and password.
     fn task(&self) -> NetworkTask {
         match &self.operation {
-            AlistOperation::FsGet { path } => {
+            Operation::FsGet { path } => {
                 let json = serde_json::json!({
                     "path": path,
                     "password": ""
                 });
                 NetworkTask::RequestJson(json)
             }
-            AlistOperation::FsLink { path } => {
+            Operation::FsLink { path } => {
                 let json = serde_json::json!({
                     "path": path
                 });

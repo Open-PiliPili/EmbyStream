@@ -1,11 +1,9 @@
-pub mod alist_client;
+pub mod alist;
 pub mod client_builder;
-pub mod emby_client;
-pub mod markdown;
-pub mod telegram_client;
+pub mod emby;
+pub mod telegram;
 
-pub use alist_client::*;
-pub use client_builder::*;
-pub use emby_client::*;
-pub use markdown::*;
-pub use telegram_client::*;
+pub use alist::Client as AlistClient;
+pub use client_builder::{BuildableClient, ClientBuilder};
+pub use emby::Client as EmbyClient;
+pub use telegram::Client as TelegramClient;

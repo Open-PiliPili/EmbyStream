@@ -1,5 +1,5 @@
 use crate::{
-    api::TelegramOperation,
+    api::telegram::Operation,
     network::{HttpMethod, NetworkTarget, NetworkTask},
     system::SystemInfo,
 };
@@ -12,25 +12,25 @@ const TELEGRAM_API_BASE: &str = "https://api.telegram.org/bot";
 
 /// Represents Telegram Bot API endpoints with their respective parameters.
 #[derive(Debug, Clone)]
-pub struct TelegramAPI {
+pub struct API {
     /// The bot token for authenticating with the Telegram API.
     token: String,
     /// The default chat ID for sending messages.
     chat_id: String,
     /// The specific API operation (SendMessage or SendPhoto).
-    operation: TelegramOperation,
+    operation: Operation,
 }
 
-impl TelegramAPI {
+impl API {
     pub fn text(
         token: impl Into<String>,
         chat_id: impl Into<String>,
         params: TextMessage,
     ) -> Self {
-        TelegramAPI {
+        API {
             token: token.into(),
             chat_id: chat_id.into(),
-            operation: TelegramOperation::SendMessage(params),
+            operation: Operation::SendMessage(params),
         }
     }
 
@@ -39,10 +39,10 @@ impl TelegramAPI {
         chat_id: impl Into<String>,
         params: PhotoMessage,
     ) -> Self {
-        TelegramAPI {
+        API {
             token: token.into(),
             chat_id: chat_id.into(),
-            operation: TelegramOperation::SendPhoto(params),
+            operation: Operation::SendPhoto(params),
         }
     }
 
@@ -52,7 +52,7 @@ impl TelegramAPI {
     }
 }
 
-impl NetworkTarget for TelegramAPI {
+impl NetworkTarget for API {
     /// Gets the base URL for Telegram API requests.
     ///
     /// Constructs the URL using the bot token from configuration.
@@ -63,8 +63,8 @@ impl NetworkTarget for TelegramAPI {
     /// Gets the API endpoint path for the specific operation.
     fn path(&self) -> String {
         match &self.operation {
-            TelegramOperation::SendMessage(_) => "sendMessage".to_string(),
-            TelegramOperation::SendPhoto(_) => "sendPhoto".to_string(),
+            Operation::SendMessage(_) => "sendMessage".to_string(),
+            Operation::SendPhoto(_) => "sendPhoto".to_string(),
         }
     }
 
@@ -79,8 +79,8 @@ impl NetworkTarget for TelegramAPI {
     /// A `NetworkTask` containing all necessary request parameters.
     fn task(&self) -> NetworkTask {
         match &self.operation {
-            TelegramOperation::SendMessage(params) => params.clone().into_task(self.get_chat_id()),
-            TelegramOperation::SendPhoto(params) => params.clone().into_task(self.get_chat_id()),
+            Operation::SendMessage(params) => params.clone().into_task(self.get_chat_id()),
+            Operation::SendPhoto(params) => params.clone().into_task(self.get_chat_id()),
         }
     }
 

@@ -7,7 +7,7 @@ use serde::Deserialize;
 /// This is a generic wrapper for all Telegram API responses that follows their standard format.
 /// The actual response data is contained in the `result` field when successful.
 #[derive(Debug, Deserialize)]
-pub struct TelegramResponse<T> {
+pub struct Response<T> {
     /// Indicates whether the request was successful
     pub ok: bool,
 
@@ -20,7 +20,7 @@ pub struct TelegramResponse<T> {
     pub description: Option<String>,
 }
 
-impl<T: Display> Display for TelegramResponse<T> {
+impl<T: Display> Display for Response<T> {
     /// Formats the Telegram response for display purposes.
     ///
     /// Shows the status, error description (if any), and result (if any).

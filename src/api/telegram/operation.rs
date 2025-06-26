@@ -7,7 +7,7 @@ use crate::{
 /// This enum encapsulates all supported Telegram API operations,
 /// providing a type-safe way to construct API requests.
 #[derive(Debug, Clone)]
-pub enum TelegramOperation {
+pub enum Operation {
     /// Send a text message to a chat
     SendMessage(TextMessage),
 

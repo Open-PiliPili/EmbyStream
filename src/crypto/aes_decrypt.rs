@@ -9,7 +9,7 @@ use base64::{
     engine::general_purpose::STANDARD as BASE64
 };
 
-use super::KeyNormalizer;
+use super::key_normalizer::KeyNormalizer;
 use crate::{CRYPTO_LOGGER_DOMAIN, Error, error_log, info_log};
 
 // Create type alias for AES-128-CBC Decryptor

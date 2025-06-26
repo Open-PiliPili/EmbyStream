@@ -3,46 +3,46 @@ use std::{collections::HashMap, fmt};
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone)]
-pub struct AlistFileResponse {
-    data: AlistFileData,
+pub struct FileResponse {
+    data: FileData,
 }
 
-impl AlistFileResponse {
-    pub fn get_data(&self) -> AlistFileData {
+impl FileResponse {
+    pub fn get_data(&self) -> FileData {
         self.data.clone()
     }
 }
 
 #[derive(Deserialize, Clone)]
-pub struct AlistFileData {
+pub struct FileData {
     raw_url: Option<String>,
 }
 
-impl AlistFileData {
+impl FileData {
     pub fn get_raw_url(&self) -> Option<String> {
         self.raw_url.clone()
     }
 }
 
 #[derive(Deserialize)]
-pub struct AlistLinkResponse {
-    data: AlistLinkData,
+pub struct LinkResponse {
+    data: LinkData,
 }
 
-impl AlistLinkResponse {
-    pub fn get_data(&self) -> AlistLinkData {
+impl LinkResponse {
+    pub fn get_data(&self) -> LinkData {
         self.data.clone()
     }
 }
 
 #[derive(Deserialize, Clone, Default)]
-pub struct AlistLinkData {
+pub struct LinkData {
     url: String,
     #[serde(default)]
     header: Option<HashMap<String, Vec<String>>>,
 }
 
-impl AlistLinkData {
+impl LinkData {
     pub fn get_url(&self) -> String {
         self.url.clone()
     }
@@ -52,7 +52,7 @@ impl AlistLinkData {
     }
 }
 
-impl fmt::Display for AlistLinkData {
+impl fmt::Display for LinkData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

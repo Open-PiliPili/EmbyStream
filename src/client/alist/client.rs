@@ -1,22 +1,21 @@
 use crate::{
-    AlistLinkResponse,
-    api::{AlistAPI, AlistFileResponse, AlistLinkData},
+    api::alist::{API, LinkResponse, FileResponse, LinkData},
     client::BuildableClient,
     network::{NetworkPlugin, NetworkProvider},
 };
 
-pub struct AlistClient {
+pub struct Client {
     provider: NetworkProvider,
 }
 
-impl BuildableClient for AlistClient {
+impl BuildableClient for Client {
     fn build_from_plugins(plugins: Vec<Box<dyn NetworkPlugin>>) -> Self {
         let provider = NetworkProvider::new(plugins);
-        AlistClient { provider }
+        Client { provider }
     }
 }
 
-impl AlistClient {
+impl Client {
     pub async fn fetch_file_path(
         &self,
         url: impl Into<String>,
@@ -28,9 +27,9 @@ impl AlistClient {
             return Ok("".to_string());
         }
 
-        let request = AlistAPI::fs_get(url, token, emby_path);
+        let request = API::fs_get(url, token, emby_path);
         let response = self.provider.send_request(&request).await?;
-        let json: AlistFileResponse = response.json().await?;
+        let json: FileResponse = response.json().await?;
         Ok(json.get_data().get_raw_url().unwrap_or_default())
     }
 
@@ -39,15 +38,15 @@ impl AlistClient {
         url: impl Into<String>,
         token: impl Into<String>,
         emby_path: impl Into<String>,
-    ) -> Result<AlistLinkData, anyhow::Error> {
+    ) -> Result<LinkData, anyhow::Error> {
         let emby_path = emby_path.into();
         if emby_path.is_empty() {
-            return Ok(AlistLinkData::default());
+            return Ok(LinkData::default());
         }
 
-        let request = AlistAPI::fs_link(url, token, emby_path);
+        let request = API::fs_link(url, token, emby_path);
         let response = self.provider.send_request(&request).await?;
-        let json: AlistLinkResponse = response.json().await?;
+        let json: LinkResponse = response.json().await?;
         Ok(json.get_data())
     }
 }

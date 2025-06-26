@@ -1,6 +1,6 @@
 use crate::{Error, CRYPTO_LOGGER_DOMAIN, error_log};
 
-pub struct KeyNormalizer;
+pub(crate) struct KeyNormalizer;
 
 impl KeyNormalizer {
     /// Normalize a key to 16 bytes:
