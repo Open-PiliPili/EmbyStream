@@ -4,7 +4,7 @@ use std::{
     fmt::Debug
 };
 use super::{builder::CacheBuilder, cache_inner::CacheInner};
-use crate::{CACHE_LOGGER_DOMAIN, debug_log, error_log};
+use crate::{CRYPTO_CACHE_LOGGER_DOMAIN, debug_log, error_log};
 
 /// Thread-safe cache with automatic expiration and capacity limits.
 pub struct Cache {
@@ -29,7 +29,7 @@ impl Cache {
         let now = Instant::now();
 
         debug_log!(
-            CACHE_LOGGER_DOMAIN,
+            CRYPTO_CACHE_LOGGER_DOMAIN,
             "Inserting cache entry: key={}, value={:?}",
             key,
             value
@@ -40,7 +40,7 @@ impl Cache {
             Ok(order) => order,
             Err(e) => {
                 error_log!(
-                    CACHE_LOGGER_DOMAIN,
+                    CRYPTO_CACHE_LOGGER_DOMAIN,
                     "Failed to acquire write lock for order: {}",
                     e
                 );
@@ -60,7 +60,7 @@ impl Cache {
             if let Some(oldest_key) = order.pop_front() {
                 self.inner.entries.remove(&oldest_key);
                 debug_log!(
-                    CACHE_LOGGER_DOMAIN,
+                    CRYPTO_CACHE_LOGGER_DOMAIN,
                     "Evicted oldest cache entry: key={}",
                     oldest_key
                 );
@@ -80,7 +80,7 @@ impl Cache {
                 self.inner.entries.remove(key);
                 if let Ok(mut order) = self.inner.order.write() {
                     order.retain(|k| k != key);
-                    debug_log!(CACHE_LOGGER_DOMAIN, "Removed expired cache entry: key={}", key);
+                    debug_log!(CRYPTO_CACHE_LOGGER_DOMAIN, "Removed expired cache entry: key={}", key);
                 }
                 None
             } else {
@@ -89,7 +89,7 @@ impl Cache {
         });
 
         debug_log!(
-            CACHE_LOGGER_DOMAIN,
+            CRYPTO_CACHE_LOGGER_DOMAIN,
             "Retrieved cache entry: key={}, value={}",
             key,
             result.as_ref().map(|v| format!("{:?}", v)).unwrap_or("None".to_string())
@@ -103,10 +103,10 @@ impl Cache {
         if self.inner.entries.remove(key).is_some() {
             if let Ok(mut order) = self.inner.order.write() {
                 order.retain(|k| k != key);
-                debug_log!(CACHE_LOGGER_DOMAIN, "Removed cache entry: key={}", key);
+                debug_log!(CRYPTO_CACHE_LOGGER_DOMAIN, "Removed cache entry: key={}", key);
             } else {
                 error_log!(
-                    CACHE_LOGGER_DOMAIN,
+                    CRYPTO_CACHE_LOGGER_DOMAIN,
                     "Failed to acquire write lock for order"
                 );
             }
@@ -116,31 +116,6 @@ impl Cache {
     /// Returns the current number of entries in the cache.
     pub fn len(&self) -> usize {
         self.inner.entries.len()
-    }
-
-    /// Cleans expired entries from the cache.
-    fn clean_expired(inner: &CacheInner, now: &Instant) {
-        let expired_keys: Vec<String> = inner
-            .entries
-            .iter()
-            .filter(|entry| {
-                let (_, inserted, ttl) = entry.value();
-                now.duration_since(*inserted) > *ttl
-            })
-            .map(|entry| entry.key().clone())
-            .collect();
-
-        for key in expired_keys {
-            inner.entries.remove(&key);
-            if let Ok(mut order) = inner.order.write() {
-                order.retain(|k| k != &key);
-                debug_log!(
-                    CACHE_LOGGER_DOMAIN,
-                    "Removed expired cache entry: key={}",
-                    key
-                );
-            }
-        }
     }
 }
 

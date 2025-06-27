@@ -6,8 +6,10 @@ pub const DEFAULT_LOGGER_DOMAIN: &str = "GENERAL";
 
 pub const CONFIG_LOGGER_DOMAIN: &str = "CONFIG";
 
+pub const NETWORK_LOGGER_DOMAIN: &str = "NETWORK";
+
 pub const CRYPTO_LOGGER_DOMAIN: &str = "CRYPTO";
 
-pub const CACHE_LOGGER_DOMAIN: &str = "CACHE";
+pub const CRYPTO_CACHE_LOGGER_DOMAIN: &str = "CRYPTO_CACHE";
 
-pub const NETWORK_LOGGER_DOMAIN: &str = "NETWORK";
+pub const FILE_CACHE_LOGGER_DOMAIN: &str = "FILE_CACHE";

@@ -17,7 +17,7 @@ impl CacheBuilder {
     pub fn new() -> Self {
         CacheBuilder {
             max_capacity: 2000,
-            default_ttl: Duration::from_secs(30 * 60),
+            default_ttl: Duration::from_secs(60 * 60),
         }
     }
 

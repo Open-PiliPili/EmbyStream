@@ -1,9 +1,20 @@
-use embystream::{info_log, logger::*};
+#[allow(warnings)]
+use std::{
+    collections::HashMap,
+    path::PathBuf
+};
 
-#[allow(unused_imports)]
-use std::collections::HashMap;
-#[allow(unused_imports)]
+#[allow(warnings)]
+use tokio::time::{
+    Duration,
+    sleep
+};
+
+#[allow(warnings)]
 use embystream::{
+    debug_log,
+    info_log,
+    logger::*,
     AlistClient,
     CryptoCacheManager,
     EmbyClient,
@@ -12,6 +23,7 @@ use embystream::{
     MarkdownV2Builder,
     TelegramClient,
     TextMessage,
+    FileCache
 };
 
 fn setup_logger() {
@@ -101,6 +113,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     cache_manager
         .decrypted_cache()
         .get::<HashMap<String, String>>(&base64_key);
+
+    let cache = FileCache::builder()
+        .with_max_capacity(2000)
+        .build()
+        .await;
+    let file_path = PathBuf::from("/Users/hsuyelin/Downloads/test.mov");
+
+    let fs_handle = cache.get_file(file_path.clone()).await.unwrap();
+    debug_log!("fs_handle: {:?}", fs_handle);
+
+    for index in 0..20 {
+        let metadata = cache.get_metadata(&file_path).await;
+        debug_log!("metadata-{}: {:?}", index, metadata);
+        sleep(Duration::from_millis(100)).await;
+    }
     */
 
     Ok(())
