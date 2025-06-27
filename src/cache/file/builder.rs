@@ -21,7 +21,7 @@ impl CacheBuilder {
     pub fn new() -> Self {
         CacheBuilder {
             max_capacity: 2000,
-            metadata_expiry: 60 * 60 * 60
+            metadata_expiry: 60 * 60
         }
     }
 
