@@ -119,12 +119,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     cache_manager
         .decrypted_cache()
         .get::<HashMap<String, String>>(&base64_key);
-    */
+
     let cache = FileCache::builder()
         .with_max_capacity(2000)
         .build()
         .await;
-    let file_path = PathBuf::from("/Users/hsuyelin/Downloads/test.mov");
+    let file_path = PathBuf::from("/Users/xxxxxx/Downloads/test.mov");
 
     // Mock user1 get filehandle and seek
     let handle1 = cache.get_file(file_path.clone()).await.unwrap();
@@ -190,6 +190,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         debug_log!("metadata-{}: {:?}", index, metadata);
         sleep(Duration::from_millis(100)).await;
     }
+    */
 
     Ok(())
 }
