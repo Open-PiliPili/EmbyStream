@@ -1,15 +1,10 @@
 use std::{
-    any::Any,
-    collections::VecDeque,
-    sync::{Arc, RwLock},
-    time::{Duration, Instant}
+    sync::{Arc},
+    time::{Duration, Instant},
+    fmt::Debug
 };
-
-use dashmap::DashMap;
-use once_cell::sync::OnceCell;
-
-use super::builder;
-use crate::{CACHE_LOGGER_DOMAIN, error_log, debug_log};
+use super::{builder::CacheBuilder, cache_inner::CacheInner};
+use crate::{CACHE_LOGGER_DOMAIN, debug_log, error_log};
 
 /// Thread-safe cache with automatic expiration and capacity limits.
 pub struct Cache {
@@ -21,40 +16,24 @@ pub struct Cache {
     pub(crate) max_capacity: usize,
 }
 
-/// Inner cache state, holding entries and insertion order
-pub(crate) struct CacheInner {
-    // Key-value store: key -> (value, insertion time, TTL)
-    pub entries: DashMap<String, (Box<dyn Any + Send + Sync>, Instant, Duration)>,
-    // Tracks insertion order for FIFO eviction
-    pub order: RwLock<VecDeque<String>>,
-}
-
-// Global singleton instance of Cache
-static INSTANCE: OnceCell<Arc<Cache>> = OnceCell::new();
-
 impl Cache {
-    /// Returns the global singleton Cache instance.
-    pub fn get_instance() -> &'static Arc<Cache> {
-        INSTANCE.get_or_init(|| {
-            builder::CacheBuilder::new()
-                .with_max_capacity(2000)
-                .with_max_alive_seconds(30 * 60)
-                .build()
-        })
-    }
-
     /// Creates a new CacheBuilder for configuring the cache.
-    pub fn builder() -> builder::CacheBuilder {
-        builder::CacheBuilder::new()
+    pub(crate) fn builder() -> CacheBuilder {
+        CacheBuilder::new()
     }
 
     /// Inserts a key-value pair with optional TTL (uses default if None).
     /// Evicts oldest entries if capacity is exceeded.
     /// Refreshes TTL if key already exists.
-    pub fn insert<V: 'static + Send + Sync>(&self, key: String, value: V) {
+    pub fn insert<V: 'static + Send + Sync + Debug>(&self, key: String, value: V) {
         let now = Instant::now();
 
-        debug_log!(CACHE_LOGGER_DOMAIN, "Inserting cache entry: key={}", key);
+        debug_log!(
+            CACHE_LOGGER_DOMAIN,
+            "Inserting cache entry: key={}, value={:?}",
+            key,
+            value
+        );
 
         // Clean expired entries
         Self::clean_expired(&self.inner, &now);
@@ -63,45 +42,61 @@ impl Cache {
         let mut order = match self.inner.order.write() {
             Ok(order) => order,
             Err(e) => {
-                error_log!(CACHE_LOGGER_DOMAIN, "Failed to acquire write lock for order: {}", e);
+                error_log!(
+                    CACHE_LOGGER_DOMAIN,
+                    "Failed to acquire write lock for order: {}",
+                    e
+                );
                 return;
             }
         };
         order.retain(|k| k != &key);
 
         // Insert new entry
-        self.inner.entries.insert(key.clone(), (Box::new(value), now, self.default_ttl));
+        self.inner
+            .entries
+            .insert(key.clone(), (Box::new(value), now, self.default_ttl));
         order.push_back(key.clone());
 
         // Evict the oldest entries if over capacity
         while self.inner.entries.len() > self.max_capacity {
             if let Some(oldest_key) = order.pop_front() {
                 self.inner.entries.remove(&oldest_key);
-                debug_log!(CACHE_LOGGER_DOMAIN, "Evicted oldest cache entry: key={}", oldest_key);
+                debug_log!(
+                    CACHE_LOGGER_DOMAIN,
+                    "Evicted oldest cache entry: key={}",
+                    oldest_key
+                );
             }
         }
     }
 
     /// Retrieves a value by key, returning None if not found or expired.
     /// Returns a cloned value to avoid lifetime issues.
-    pub fn get<V: 'static + Clone>(&self, key: &str) -> Option<V> {
+    pub fn get<V: 'static + Clone + Debug>(&self, key: &str) -> Option<V> {
         let now = Instant::now();
 
         // Clean expired entries
         Self::clean_expired(&self.inner, &now);
 
         // Get value
-        self.inner
-            .entries
-            .get(key)
-            .and_then(|entry| {
-                let (value, inserted, ttl) = entry.value();
-                if now.duration_since(*inserted) > *ttl {
-                    None // Expired
-                } else {
-                    value.downcast_ref::<V>().map(|v| v.clone())
-                }
-            })
+        let result = self.inner.entries.get(key).and_then(|entry| {
+            let (value, inserted, ttl) = entry.value();
+            if now.duration_since(*inserted) > *ttl {
+                None
+            } else {
+                value.downcast_ref::<V>().map(|v| v.clone())
+            }
+        });
+
+        debug_log!(
+            CACHE_LOGGER_DOMAIN,
+            "Retrieved cache entry: key={}, value={}",
+            key,
+            result.as_ref().map(|v| format!("{:?}", v)).unwrap_or("None".to_string())
+        );
+
+        result
     }
 
     /// Removes a key from the cache.
@@ -111,7 +106,10 @@ impl Cache {
                 order.retain(|k| k != key);
                 debug_log!(CACHE_LOGGER_DOMAIN, "Removed cache entry: key={}", key);
             } else {
-                error_log!(CACHE_LOGGER_DOMAIN, "Failed to acquire write lock for order");
+                error_log!(
+                    CACHE_LOGGER_DOMAIN,
+                    "Failed to acquire write lock for order"
+                );
             }
         }
     }
@@ -137,7 +135,11 @@ impl Cache {
             inner.entries.remove(&key);
             if let Ok(mut order) = inner.order.write() {
                 order.retain(|k| k != &key);
-                debug_log!(CACHE_LOGGER_DOMAIN, "Removed expired cache entry: key={}", key);
+                debug_log!(
+                    CACHE_LOGGER_DOMAIN,
+                    "Removed expired cache entry: key={}",
+                    key
+                );
             }
         }
     }

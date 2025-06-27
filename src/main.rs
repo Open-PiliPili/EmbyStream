@@ -1,8 +1,17 @@
 use embystream::{info_log, logger::*};
 
 #[allow(unused_imports)]
+use std::collections::HashMap;
+#[allow(unused_imports)]
 use embystream::{
-    AlistClient, EmbyClient, ClientBuilder, CurlPlugin, MarkdownV2Builder, TelegramClient, TextMessage,
+    AlistClient,
+    CryptoCacheManager,
+    EmbyClient,
+    ClientBuilder,
+    CurlPlugin,
+    MarkdownV2Builder,
+    TelegramClient,
+    TextMessage,
 };
 
 fn setup_logger() {
@@ -45,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     info_log!("File_link: {}", file_link);
 
-    let base_url = "https://bps8m.onyra.cc/";
+    let base_url = "https://**********/";
     let emby_api_key = "***************************";
     let emby_client = ClientBuilder::<EmbyClient>::new()
         .with_plugin(CurlPlugin)
@@ -63,7 +72,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "723b389488a54e03b69404bdbcd628d3"
     ).await?;
     info_log!("user: {:?}", user_result.name);
-     */
+
+    let cache_manager = CryptoCacheManager::new(
+        5000,
+        60 * 60,
+        5000,
+        60 * 60
+    );
+
+    cache_manager
+        .encrypted_cache()
+        .insert("item123_source456".to_string(), "base64_encoded_json_string".to_string());
+    cache_manager
+        .encrypted_cache()
+        .insert("item123_source456".to_string(), "base641_encoded_json_string".to_string());
+    cache_manager
+        .encrypted_cache()
+        .insert("item456_source456".to_string(), "base642_encoded_json_string".to_string());
+
+    let base64_key = "base64_encoded_json_string".to_string();
+    let mut decrypted_value: HashMap<String, String> = HashMap::new();
+    decrypted_value.insert("key1".to_string(), "value1".to_string());
+    decrypted_value.insert("key2".to_string(), "value2".to_string());
+    decrypted_value.insert("key3".to_string(), "value3".to_string());
+    cache_manager
+        .decrypted_cache()
+        .insert(base64_key.clone(), decrypted_value);
+    cache_manager
+        .decrypted_cache()
+        .get::<HashMap<String, String>>(&base64_key);
+    */
 
     Ok(())
 }

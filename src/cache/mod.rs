@@ -1,5 +1,6 @@
-pub mod cache;
-pub mod builder;
+pub mod crypto;
 
-pub use cache::*;
-pub use builder::*;
+pub use crypto::{
+    Cache as CryptoCache,
+    CacheManager as CryptoCacheManager,
+};

@@ -12,6 +12,7 @@ pub mod system;
 pub mod util;
 
 pub use api::{AlistAPI, EmbyAPI, PhotoMessage, TelegramAPI, TextMessage};
+pub use cache::{CryptoCache, CryptoCacheManager};
 pub use client::{AlistClient, ClientBuilder, EmbyClient, TelegramClient};
 pub use crypto::*;
 pub use domain::*;

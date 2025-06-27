@@ -3,10 +3,11 @@ use std::time::Duration;
 
 use dashmap::DashMap;
 
-use super::Cache;
+use super::cache_inner::CacheInner;
+use crate::cache::crypto::cache::Cache;
 
 /// Builder for configuring and creating a Cache instance.
-pub struct CacheBuilder {
+pub(crate) struct CacheBuilder {
     max_capacity: usize,
     default_ttl: Duration,
 }
@@ -33,15 +34,15 @@ impl CacheBuilder {
     }
 
     /// Builds and returns a Cache instance.
-    pub fn build(self) -> Arc<Cache> {
-        Arc::new(Cache {
-            inner: Arc::new(super::CacheInner {
+    pub fn build(self) -> Cache {
+        Cache {
+            inner: Arc::new(CacheInner {
                 entries: DashMap::new(),
                 order: RwLock::new(std::collections::VecDeque::new()),
             }),
             default_ttl: self.default_ttl,
             max_capacity: self.max_capacity,
-        })
+        }
     }
 }
 
