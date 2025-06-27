@@ -1,13 +1,8 @@
-use std::{
-    num::NonZeroUsize,
-    sync::Arc
-};
+use std::{num::NonZeroUsize, sync::Arc};
 
 use dashmap::DashMap;
 use lru::LruCache;
-use tokio::{
-    sync::RwLock as TokioRwLock
-};
+use tokio::sync::RwLock as TokioRwLock;
 
 use crate::cache::file::cache::Cache;
 
@@ -17,10 +12,9 @@ pub struct CacheBuilder {
 }
 
 impl CacheBuilder {
-
     pub fn new() -> Self {
         CacheBuilder {
-            max_capacity: 2000,
+            max_capacity: 1000,
             metadata_expiry: 60 * 60
         }
     }
@@ -44,7 +38,7 @@ impl CacheBuilder {
             cache,
             lru,
             capacity: self.max_capacity,
-            metadata_expiry: self.metadata_expiry
+            metadata_expiry: self.metadata_expiry,
         }
     }
 }

@@ -1,13 +1,19 @@
 #[allow(warnings)]
 use std::{
     collections::HashMap,
-    path::PathBuf
+    io::SeekFrom,
+    path::PathBuf,
+    sync::Arc
 };
 
 #[allow(warnings)]
-use tokio::time::{
-    Duration,
-    sleep
+use tokio::{
+    io::AsyncSeekExt,
+    time::{
+        Duration,
+        sleep,
+        timeout
+    }
 };
 
 #[allow(warnings)]
@@ -113,22 +119,77 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     cache_manager
         .decrypted_cache()
         .get::<HashMap<String, String>>(&base64_key);
-
+    */
     let cache = FileCache::builder()
         .with_max_capacity(2000)
         .build()
         .await;
     let file_path = PathBuf::from("/Users/hsuyelin/Downloads/test.mov");
 
-    let fs_handle = cache.get_file(file_path.clone()).await.unwrap();
-    debug_log!("fs_handle: {:?}", fs_handle);
+    // Mock user1 get filehandle and seek
+    let handle1 = cache.get_file(file_path.clone()).await.unwrap();
+    debug_log!("Attempting to seek to position 1000...");
+    let seek_result = timeout(Duration::from_secs(5), async {
+        let mut file = handle1.write().await;
+        file.seek(SeekFrom::Start(1000)).await
+    }).await;
+    match seek_result {
+        Ok(Ok(position)) => {
+            debug_log!("User1: Successfully seeked to position: {}", position);
+        }
+        Ok(Err(e)) => {
+            debug_log!("User1: Failed to seek to position 1000: {}", e);
+        }
+        Err(_) => {
+            debug_log!("User1: Seek operation timed out after 5 seconds");
+        }
+    }
+    cache.release_file(file_path.clone()).await;
+    sleep(Duration::from_secs(1)).await;
 
-    for index in 0..20 {
+    // Mock user2 get filehandle and seek
+    let handle2 = cache.get_file(file_path.clone()).await.unwrap();
+    debug_log!("Attempting to seek to position 2000...");
+    let seek_result2 = timeout(Duration::from_secs(5), async {
+        let mut file = handle2.write().await;
+        file.seek(SeekFrom::Start(2000)).await
+    }).await;
+    match seek_result2 {
+        Ok(Ok(position)) => {
+            debug_log!("User2: Successfully seeked to position: {}", position);
+        }
+        Ok(Err(e)) => {
+            debug_log!("User2: Failed to seek to position 2000: {}", e);
+        }
+        Err(_) => {
+            debug_log!("User2: Seek operation timed out after 5 seconds");
+        }
+    }
+
+    // Mock user3 get filehandle and seek
+    let handle3 = cache.get_file(file_path.clone()).await.unwrap();
+    debug_log!("Attempting to seek to position 3000...");
+    let seek_result3 = timeout(Duration::from_secs(5), async {
+        let mut file = handle3.write().await;
+        file.seek(SeekFrom::Start(3000)).await
+    }).await;
+    match seek_result3 {
+        Ok(Ok(position)) => {
+            debug_log!("User2: Successfully seeked to position: {}", position);
+        }
+        Ok(Err(e)) => {
+            debug_log!("User2: Failed to seek to position 3000: {}", e);
+        }
+        Err(_) => {
+            debug_log!("User2: Seek operation timed out after 5 seconds");
+        }
+    }
+
+    for index in 0..5 {
         let metadata = cache.get_metadata(&file_path).await;
         debug_log!("metadata-{}: {:?}", index, metadata);
         sleep(Duration::from_millis(100)).await;
     }
-    */
 
     Ok(())
 }
