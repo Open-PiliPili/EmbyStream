@@ -35,8 +35,10 @@ impl Cache {
             value
         );
 
-        // Clean expired entries
-        Self::clean_expired(&self.inner, &now);
+        // Clean expired entries with probability
+        if self.len() > self.max_capacity {
+            Self::clean_expired(&self.inner, &now);
+        }
 
         // Update order
         let mut order = match self.inner.order.write() {
@@ -76,13 +78,15 @@ impl Cache {
     pub fn get<V: 'static + Clone + Debug>(&self, key: &str) -> Option<V> {
         let now = Instant::now();
 
-        // Clean expired entries
-        Self::clean_expired(&self.inner, &now);
-
         // Get value
         let result = self.inner.entries.get(key).and_then(|entry| {
             let (value, inserted, ttl) = entry.value();
             if now.duration_since(*inserted) > *ttl {
+                self.inner.entries.remove(key);
+                if let Ok(mut order) = self.inner.order.write() {
+                    order.retain(|k| k != key);
+                    debug_log!(CACHE_LOGGER_DOMAIN, "Removed expired cache entry: key={}", key);
+                }
                 None
             } else {
                 value.downcast_ref::<V>().map(|v| v.clone())
