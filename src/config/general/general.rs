@@ -2,8 +2,10 @@ use std::fmt;
 
 use serde::Deserialize;
 
-use super::BackendType;
-use crate::util::privacy::Privacy;
+use crate::{
+    config::backend::r#type::BackendType,
+    util::privacy::Privacy
+};
 
 /// Configuration for the General section of the config file.
 #[derive(Deserialize, Clone, Debug)]

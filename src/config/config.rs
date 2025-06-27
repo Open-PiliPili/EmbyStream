@@ -4,12 +4,13 @@ use std::{
     path::Path,
 };
 
+use serde::Deserialize;
 use toml;
 use uuid::Uuid;
-use serde::Deserialize;
 
 use crate::config::{
-    backend::BackendConfig, r#type::BackendType, frontend::FrontendConfig,
+    backend::{BackendConfig, r#type::BackendType},
+    frontened::FrontendConfig,
     general::GeneralConfig,
 };
 use crate::{CONFIG_LOGGER_DOMAIN, Error, error_log, info_log};
@@ -141,7 +142,11 @@ impl Config {
     /// * `Ok(())` if the api_key is saved successfully.
     /// * `Err(Error)` if the file cannot be read or written.
     fn save_api_key(&mut self, path: &str) -> Result<(), Error> {
-        info_log!(CONFIG_LOGGER_DOMAIN, "Saving new api_key to config file: {}", path);
+        info_log!(
+            CONFIG_LOGGER_DOMAIN,
+            "Saving new api_key to config file: {}",
+            path
+        );
 
         // Generate new api_key
         let new_api_key = Uuid::new_v4().to_string();
@@ -211,7 +216,8 @@ impl Config {
         info_log!(
             CONFIG_LOGGER_DOMAIN,
             "Initializing config from template: {} to {}",
-            template_path, target_path
+            template_path,
+            target_path
         );
 
         // Check if target path exists

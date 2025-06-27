@@ -16,7 +16,8 @@ pub struct FrontendConfig {
 impl fmt::Display for FrontendConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let privacy = Privacy::new();
-        let emby_api_key_display = self.emby_api_key
+        let emby_api_key_display = self
+            .emby_api_key
             .as_ref()
             .map_or("None".to_string(), |key| privacy.desensitize(key));
         write!(

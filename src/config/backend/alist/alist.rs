@@ -6,14 +6,14 @@ use crate::util::privacy::Privacy;
 
 /// Configuration for the AList backend.
 #[derive(Deserialize, Clone, Debug)]
-pub struct AListConfig {
+pub struct Config {
     pub base_url: String,
     pub token: String,
     #[serde(default)]
     pub path_replace_rule_regex: String,
 }
 
-impl fmt::Display for AListConfig {
+impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let privacy = Privacy::new();
         write!(

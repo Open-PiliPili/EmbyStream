@@ -2,10 +2,8 @@ use std::fmt;
 
 use serde::Deserialize;
 
-use crate::config::{
-    alist::AListConfig,
-    direct_link::DirectLinkConfig,
-    disk::DiskConfig,
+use crate::config::backend::{
+    alist::Config as AlistConfig, direct::Config as DirectLinkConfig, disk::Config as DiskConfig,
 };
 
 /// Unified backend configuration.
@@ -13,7 +11,7 @@ use crate::config::{
 #[serde(tag = "type", content = "config")]
 pub enum BackendConfig {
     Disk(DiskConfig),
-    AList(AListConfig),
+    AList(AlistConfig),
     DirectLink(DirectLinkConfig),
 }
 
