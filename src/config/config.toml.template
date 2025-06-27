@@ -5,8 +5,8 @@ log_level = "info"
 # Backend type for media streaming: "disk", "direct_link", or "alist"
 backend_type = "disk"
 
-# 16-byte key for AES-128 encryption
-encipher_key = "1234567890123456"
+# At least 6-byte key for AES-128 encryption
+encipher_key = "123456"
 
 # Cache TTL in seconds for URL parsing results
 cache_ttl_seconds = 1800

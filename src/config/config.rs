@@ -9,8 +9,8 @@ use uuid::Uuid;
 use serde::Deserialize;
 
 use crate::config::{
-    backend_config::BackendConfig, backend_type::BackendType, frontend_config::FrontendConfig,
-    general_config::GeneralConfig,
+    backend::BackendConfig, r#type::BackendType, frontend::FrontendConfig,
+    general::GeneralConfig,
 };
 use crate::{CONFIG_LOGGER_DOMAIN, Error, error_log, info_log};
 
@@ -20,7 +20,7 @@ pub struct Config {
     #[serde(rename = "General")]
     general: GeneralConfig,
     #[serde(rename = "Frontend")]
-    frontend: FrontendConfig,
+    frontend: Option<FrontendConfig>,
     #[serde(flatten)]
     backend: Option<BackendConfig>,
 }
@@ -77,10 +77,10 @@ impl Config {
 
         // Validate encipher_key length
         let encipher_key_len = config.general.encipher_key.len();
-        if encipher_key_len != 16 {
+        if encipher_key_len < 6 {
             error_log!(
                 CONFIG_LOGGER_DOMAIN,
-                "Encipher key must be 16 bytes, got {} bytes",
+                "Encipher key must be at least 6 bytes, got {} bytes",
                 encipher_key_len
             );
             return Err(Error::InvalidEncipherKey(encipher_key_len));
@@ -257,8 +257,8 @@ impl Config {
     }
 
     /// Gets the Frontend configuration.
-    pub fn frontend(&self) -> &FrontendConfig {
-        &self.frontend
+    pub fn frontend(&self) -> Option<&FrontendConfig> {
+        self.frontend.as_ref()
     }
 
     /// Gets the backend configuration, if present and matches the backend type.
@@ -273,7 +273,9 @@ impl Display for Config {
             f,
             "Config {{ general: {}, frontend: {}, backend: {} }}",
             self.general,
-            self.frontend,
+            self.frontend
+                .as_ref()
+                .map_or("None".to_string(), |b| b.to_string()),
             self.backend
                 .as_ref()
                 .map_or("None".to_string(), |b| b.to_string())

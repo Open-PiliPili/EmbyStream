@@ -3,9 +3,9 @@ use std::fmt;
 use serde::Deserialize;
 
 use crate::config::{
-    alist_config::AListConfig,
-    direct_link_config::DirectLinkConfig,
-    disk_config::DiskConfig,
+    alist::AListConfig,
+    direct_link::DirectLinkConfig,
+    disk::DiskConfig,
 };
 
 /// Unified backend configuration.
