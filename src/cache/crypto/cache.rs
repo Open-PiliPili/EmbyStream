@@ -35,11 +35,6 @@ impl Cache {
             value
         );
 
-        // Clean expired entries with probability
-        if self.len() > self.max_capacity {
-            Self::clean_expired(&self.inner, &now);
-        }
-
         // Update order
         let mut order = match self.inner.order.write() {
             Ok(order) => order,
@@ -61,7 +56,7 @@ impl Cache {
         order.push_back(key.clone());
 
         // Evict the oldest entries if over capacity
-        while self.inner.entries.len() > self.max_capacity {
+        while self.len() > self.max_capacity {
             if let Some(oldest_key) = order.pop_front() {
                 self.inner.entries.remove(&oldest_key);
                 debug_log!(
