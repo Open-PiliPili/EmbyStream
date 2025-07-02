@@ -8,6 +8,7 @@ pub use crypto::{
 
 pub use file::{
     Cache as FileCache,
-    Cached as CachedFile,
-    Metadata as FileMetadata
+    Entry as FileEntry,
+    Metadata as FileMetadata,
+    Error as FileCacheError
 };

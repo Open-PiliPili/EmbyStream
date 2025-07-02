@@ -1,44 +1,43 @@
-use std::{num::NonZeroUsize, sync::Arc};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use dashmap::DashMap;
-use lru::LruCache;
 use tokio::sync::RwLock as TokioRwLock;
 
-use crate::cache::file::cache::Cache;
+use crate::cache::file::cache::Cache as FileCache;
 
 pub struct CacheBuilder {
-    max_capacity: usize,
-    metadata_expiry: u64
+    default_ttl: Duration,
+    clean_interval: Duration,
 }
 
 impl CacheBuilder {
     pub fn new() -> Self {
         CacheBuilder {
-            max_capacity: 1000,
-            metadata_expiry: 60 * 60
+            default_ttl: Duration::from_secs(60 * 60),
+            clean_interval: Duration::from_secs(60 * 10),
         }
     }
 
-    pub fn with_max_capacity(mut self, capacity: usize) -> Self {
-        self.max_capacity = capacity;
+    /// Sets the default TTL in seconds.
+    pub fn with_max_alive_seconds(mut self, seconds: u64) -> Self {
+        self.default_ttl = Duration::from_secs(seconds);
         self
     }
 
-    pub fn with_metadata_expiry(mut self, expiry_seconds: u64) -> Self {
-        self.metadata_expiry = expiry_seconds;
+    pub fn with_clean_interval(mut self, seconds: u64) -> Self {
+        self.clean_interval = Duration::from_secs(seconds);
         self
     }
 
-    pub async fn build(self) -> Cache {
-        let cache = Arc::new(DashMap::new());
-        let lru = Arc::new(TokioRwLock::new(LruCache::new(
-            NonZeroUsize::new(self.max_capacity).unwrap(),
-        )));
-        Cache {
-            cache,
-            lru,
-            capacity: self.max_capacity,
-            metadata_expiry: self.metadata_expiry,
+    pub async fn build(self) -> FileCache {
+        FileCache {
+            cache: Arc::new(DashMap::new()),
+            default_ttl: self.default_ttl,
+            clean_interval: self.clean_interval,
+            last_cleaned: Arc::new(TokioRwLock::new(Instant::now())),
         }
     }
 }

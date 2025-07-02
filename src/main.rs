@@ -15,7 +15,6 @@ use tokio::{
         timeout
     }
 };
-
 #[allow(warnings)]
 use embystream::{
     debug_log,
@@ -121,16 +120,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get::<HashMap<String, String>>(&base64_key);
 
     let cache = FileCache::builder()
-        .with_max_capacity(2000)
+        .with_max_alive_seconds(5)
+        .with_clean_interval(1)
         .build()
         .await;
-    let file_path = PathBuf::from("/Users/xxxxxx/Downloads/test.mov");
+    let file_path = PathBuf::from("/Users/***/Downloads/test.mov");
 
-    // Mock user1 get filehandle and seek
-    let handle1 = cache.get_file(file_path.clone()).await.unwrap();
+    {
+        file_cache_test(&cache, file_path.clone(), 1).await;
+
+        sleep(Duration::from_secs(1)).await;
+        file_cache_test(&cache, file_path.clone(), 2).await;
+
+        sleep(Duration::from_secs(1)).await;
+        file_cache_test(&cache, file_path.clone(), 3).await;
+    }
+
+    sleep(Duration::from_secs(5)).await;
+    cache.check_and_clean_expired().await;
+    let items_count = cache.len().await;
+    debug_log!("all cache items: -----------------> {}", items_count);
+    */
+
+    Ok(())
+}
+
+/*
+async fn file_cache_test(cache: &FileCache, file_path: PathBuf, count: u16) {
+    let entry = cache.fetch_entry(file_path.clone()).await.unwrap();
+    let metadata = cache.fetch_metadata(&file_path).await.unwrap();
+
+    let items_count = cache.len().await;
+    debug_log!("all cache items: {}", items_count);
+
     debug_log!("Attempting to seek to position 1000...");
     let seek_result = timeout(Duration::from_secs(5), async {
-        let mut file = handle1.write().await;
+        let binding = entry.clone();
+        let mut file = binding.handle.write().await;
         file.seek(SeekFrom::Start(1000)).await
     }).await;
     match seek_result {
@@ -144,53 +170,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             debug_log!("User1: Seek operation timed out after 5 seconds");
         }
     }
-    cache.release_file(file_path.clone()).await;
-    sleep(Duration::from_secs(1)).await;
-
-    // Mock user2 get filehandle and seek
-    let handle2 = cache.get_file(file_path.clone()).await.unwrap();
-    debug_log!("Attempting to seek to position 2000...");
-    let seek_result2 = timeout(Duration::from_secs(5), async {
-        let mut file = handle2.write().await;
-        file.seek(SeekFrom::Start(2000)).await
-    }).await;
-    match seek_result2 {
-        Ok(Ok(position)) => {
-            debug_log!("User2: Successfully seeked to position: {}", position);
-        }
-        Ok(Err(e)) => {
-            debug_log!("User2: Failed to seek to position 2000: {}", e);
-        }
-        Err(_) => {
-            debug_log!("User2: Seek operation timed out after 5 seconds");
-        }
-    }
-
-    // Mock user3 get filehandle and seek
-    let handle3 = cache.get_file(file_path.clone()).await.unwrap();
-    debug_log!("Attempting to seek to position 3000...");
-    let seek_result3 = timeout(Duration::from_secs(5), async {
-        let mut file = handle3.write().await;
-        file.seek(SeekFrom::Start(3000)).await
-    }).await;
-    match seek_result3 {
-        Ok(Ok(position)) => {
-            debug_log!("User2: Successfully seeked to position: {}", position);
-        }
-        Ok(Err(e)) => {
-            debug_log!("User2: Failed to seek to position 3000: {}", e);
-        }
-        Err(_) => {
-            debug_log!("User2: Seek operation timed out after 5 seconds");
-        }
-    }
-
-    for index in 0..5 {
-        let metadata = cache.get_metadata(&file_path).await;
-        debug_log!("metadata-{}: {:?}", index, metadata);
-        sleep(Duration::from_millis(100)).await;
-    }
-    */
-
-    Ok(())
+    cache.release_entry(&entry).await;
 }
+ */

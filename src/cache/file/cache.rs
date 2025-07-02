@@ -1,25 +1,29 @@
 use std::{
+    collections::HashSet,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
 
 use dashmap::DashMap;
-use lru::LruCache;
 use tokio::{
     fs::{File as TokioFile, metadata as TokioMetadata},
     sync::RwLock as TokioRwLock,
 };
 
 use super::builder::CacheBuilder;
-use crate::cache::file::{Cached as CachedFile, Metadata as FileMetadata};
+use crate::cache::file::{
+    CacheInner as FileCacheInner, Entry as FileEntry, Error as FileCacheError,
+    Metadata as FileMetadata, Metadata,
+};
 use crate::{FILE_CACHE_LOGGER_DOMAIN, debug_log};
 
+#[derive(Clone, Debug)]
 pub struct Cache {
-    pub(crate) cache: Arc<DashMap<PathBuf, CachedFile>>,
-    pub(crate) lru: Arc<TokioRwLock<LruCache<PathBuf, ()>>>,
-    pub(crate) capacity: usize,
-    pub(crate) metadata_expiry: u64,
+    pub(crate) cache: Arc<DashMap<PathBuf, FileCacheInner>>,
+    pub(crate) default_ttl: Duration,
+    pub(crate) clean_interval: Duration,
+    pub(crate) last_cleaned: Arc<TokioRwLock<Instant>>,
 }
 
 impl Cache {
@@ -27,125 +31,299 @@ impl Cache {
         CacheBuilder::new()
     }
 
-    pub async fn get_file(&self, path: PathBuf) -> Option<Arc<TokioRwLock<TokioFile>>> {
-        let start_total = Instant::now();
+    /// Atomically gets a file handle for the given path.
+    pub async fn fetch_entry(&self, path: PathBuf) -> Result<FileEntry, FileCacheError> {
+        self.check_and_clean_expired().await;
+        if let Some(file) = self.retrieve_entry(path.clone()).await {
+            return Ok(file);
+        }
+        self.fetch_new_entry(path.clone()).await
+    }
 
-        let mut lru = self.lru.write().await;
-        lru.put(path.clone(), ());
+    /// Atomically releases a file handle, marking it as available.
+    pub async fn release_entry(&self, entry: &FileEntry) {
+        let mut state = entry.state.write().await;
+        state.in_use = false;
+        state.last_accessed = SystemTime::now();
+    }
 
-        if let Some(mut cached) = self.cache.get_mut(&path) {
-            let file_handle = cached.get_available_handle(&path).await;
-            let duration_total = start_total.elapsed().as_millis();
-            debug_log!(
-                FILE_CACHE_LOGGER_DOMAIN,
-                "Cache hit: Returned handle for path={:?}, total_duration={}ms",
-                path,
-                duration_total
-            );
-            return file_handle;
+    /// Atomically gets metadata for the given path.
+    pub async fn fetch_metadata(&self, path: &PathBuf) -> Result<FileMetadata, FileCacheError> {
+        if let Some(metadata) = self.retrieve_metadata(path).await {
+            return Ok(metadata);
         }
 
-        let metadata = self
-            .get_metadata(&path)
-            .await
-            .unwrap_or(FileMetadata::default());
-        let mut new_cached = CachedFile::new(metadata);
-        let file_handle = new_cached.get_available_handle(&path).await;
+        let fetch_result = self.fetch_new_metadata(path).await;
+        match fetch_result {
+            Ok(metadata) => {
+                self.update_metadata(path.clone(), metadata.clone()).await;
+                Ok(metadata)
+            }
+            Err(error) => Err(error),
+        }
+    }
 
-        self.cache.insert(path.clone(), new_cached);
-        self.evict_if_needed(&mut lru).await;
+    async fn update_metadata(&self, path: PathBuf, metadata: Metadata) {
+        let cache_inner = self
+            .cache
+            .entry(path.clone())
+            .or_insert(FileCacheInner::new(None));
+        let mut meta_lock = cache_inner.metadata.write().await;
+        *meta_lock = Some(metadata.clone());
 
-        let duration_total = start_total.elapsed().as_millis();
         debug_log!(
             FILE_CACHE_LOGGER_DOMAIN,
-            "Cache miss and new handle: Returned handle for path={:?}, total_duration={}ms",
+            "Update metatdata to cache：path={:?}，fileSize={}，format={}",
             path,
-            duration_total
+            metadata.file_size,
+            metadata.format
+        );
+    }
+
+    /// Atomically retrieve a file.
+    async fn retrieve_entry(&self, path: PathBuf) -> Option<FileEntry> {
+        let system_now = SystemTime::now();
+        let retrieve_start = Instant::now();
+
+        if let Some(cache_inner) = self.cache.get(&path) {
+            let mut entries = cache_inner.entries.write().await;
+
+            for entry in entries.iter_mut() {
+                let mut state = entry.state.write().await;
+                if !state.in_use && !state.is_expired(system_now, self.default_ttl) {
+                    state.in_use = true;
+                    state.last_accessed = system_now;
+                    debug_log!(
+                        FILE_CACHE_LOGGER_DOMAIN,
+                        "Reusing cached file entry: path={:?}, last_accessed={:?}, elapsed={:?}",
+                        path,
+                        system_now,
+                        Instant::now().duration_since(retrieve_start)
+                    );
+                    return Some(entry.clone());
+                }
+            }
+        }
+
+        debug_log!(
+            FILE_CACHE_LOGGER_DOMAIN,
+            "No available cached file: path={:?}, elapsed={:?}",
+            path,
+            Instant::now().duration_since(retrieve_start)
+        );
+        None
+    }
+
+    /// Atomically fetch a file entry.
+    async fn fetch_new_entry(&self, path: PathBuf) -> Result<FileEntry, FileCacheError> {
+        let fetch_start = Instant::now();
+
+        let file = TokioFile::open(&path)
+            .await
+            .map_err(FileCacheError::IoError)?;
+
+        let last_accessed = SystemTime::now();
+        let new_entry = FileEntry::new(file, path.clone());
+
+        let cache_inner = self
+            .cache
+            .entry(path.clone())
+            .or_insert_with(|| FileCacheInner::new(None));
+
+        {
+            let mut entries = cache_inner.entries.write().await;
+            let mut order = cache_inner.order.write().await;
+            entries.push(new_entry.clone());
+            order.push_back(path.clone());
+        }
+
+        debug_log!(
+            FILE_CACHE_LOGGER_DOMAIN,
+            "Cached new file entry: path={:?}, last_accessed={:?}, elapsed={:?}",
+            path,
+            last_accessed,
+            Instant::now().duration_since(fetch_start)
         );
 
-        file_handle
+        Ok(new_entry)
     }
 
-    pub async fn release_file(&self, path: PathBuf) {
-        if let Some(mut cached) = self.cache.get_mut(&path) {
-            for entry in &mut cached.file_handles {
-                if entry.in_use {
-                    entry.in_use = false;
-                    entry.last_accessed = SystemTime::now();
-                    break;
-                }
-            }
-            debug_log!(
-                FILE_CACHE_LOGGER_DOMAIN,
-                "Released handle for path={:?}, pool_size={}",
-                path,
-                cached.file_handles.len()
-            );
-            cached.evict_if_needed(&path);
-        }
+    /// Atomically fetches or retrieves metadata.
+    async fn retrieve_metadata(&self, path: &PathBuf) -> Option<FileMetadata> {
+        let system_now = SystemTime::now();
+        let retrieve_start = Instant::now();
 
-        let mut lru = self.lru.write().await;
-        lru.put(path, ());
-    }
-
-    async fn evict_if_needed(&self, lru: &mut LruCache<PathBuf, ()>) {
-        while lru.len() > self.capacity {
-            if let Some((path, _)) = lru.pop_lru() {
-                if let Some(cached) = self.cache.get(&path) {
-                    if cached.file_handles.iter().all(|entry| !entry.in_use) {
-                        self.cache.remove(&path);
-                        debug_log!(
-                            FILE_CACHE_LOGGER_DOMAIN,
-                            "Evicted file entry from cache due to capacity: {:?}",
-                            path
-                        );
-                    } else {
-                        lru.put(path, ());
-                    }
+        if let Some(cache_inner) = self.cache.get(path) {
+            let metadata = cache_inner.metadata.read().await;
+            if let Some(meta) = metadata.as_ref() {
+                let elapsed = system_now
+                    .duration_since(meta.updated_at)
+                    .unwrap_or(Duration::from_secs(0));
+                if meta.is_valid() && elapsed <= self.default_ttl {
+                    debug_log!(
+                        FILE_CACHE_LOGGER_DOMAIN,
+                        "Found metadata in cache：path={:?}, elapsed={:?}",
+                        path,
+                        Instant::now().duration_since(retrieve_start)
+                    );
+                    return Some(meta.clone());
                 }
             }
         }
+
+        debug_log!(
+            FILE_CACHE_LOGGER_DOMAIN,
+            "Unable to find valid metadata in cache, path={:?}, elapsed={:?}",
+            path,
+            Instant::now().duration_since(retrieve_start)
+        );
+        None
     }
 
-    pub async fn get_metadata(&self, path: &PathBuf) -> Option<FileMetadata> {
-        let start_metadata = Instant::now();
+    async fn fetch_new_metadata(&self, path: &PathBuf) -> Result<FileMetadata, FileCacheError> {
+        let system_now = SystemTime::now();
+        let retrieve_start = Instant::now();
 
-        if let Some(cached) = self.cache.get(path) {
-            let elapsed = SystemTime::now()
-                .duration_since(cached.metadata.updated_at)
-                .unwrap_or(Duration::from_secs(0));
-            if elapsed < Duration::from_secs(self.metadata_expiry) && cached.metadata.is_valid() {
-                let duration_metadata = start_metadata.elapsed().as_millis();
-                debug_log!(
-                    FILE_CACHE_LOGGER_DOMAIN,
-                    "Metadata cache hit: path={:?}, duration={}ms (returned from cache)",
-                    path,
-                    duration_metadata
-                );
-                return Some(cached.metadata.clone());
-            }
-        }
+        let meta = TokioMetadata(path).await.map_err(FileCacheError::IoError)?;
 
-        let file = TokioMetadata(path).await.ok()?;
-        let metadata = Some(FileMetadata {
-            file_size: file.len(),
+        let metadata = FileMetadata {
+            file_size: meta.len(),
             format: path
                 .extension()
-                .and_then(|ext| ext.to_str())
-                .unwrap_or("unknown")
-                .to_string(),
-            last_modified: file.modified().ok(),
-            updated_at: SystemTime::now(),
-        });
+                .map(|ext| ext.to_string_lossy().into_owned())
+                .unwrap_or("unknown".to_string()),
+            last_modified: meta.modified().ok(),
+            updated_at: system_now,
+        };
 
-        let duration_metadata = start_metadata.elapsed().as_millis();
         debug_log!(
             FILE_CACHE_LOGGER_DOMAIN,
-            "Metadata fetched: path={:?}, duration={}ms",
+            "Caching metadata：path={:?}，fileSize={}，format={}, elapsed={:?}",
             path,
-            duration_metadata
+            metadata.file_size,
+            metadata.format,
+            Instant::now().duration_since(retrieve_start)
         );
 
-        metadata
+        Ok(metadata)
+    }
+
+    pub async fn len(&self) -> usize {
+        let mut total = 0;
+        for entry in self.cache.iter() {
+            let cache_inner = entry.value();
+            let entries = cache_inner.entries.read().await;
+            total += entries.len();
+        }
+        total
+    }
+
+    /// Checks if cleanup is needed and performs it atomically.
+    pub async fn check_and_clean_expired(&self) {
+        let check_start = Instant::now();
+
+        {
+            let last_cleaned = self.last_cleaned.read().await;
+            if check_start.duration_since(*last_cleaned) <= self.clean_interval {
+                return;
+            }
+        }
+
+        let mut last_cleaned_guard = self.last_cleaned.write().await;
+
+        if check_start.duration_since(*last_cleaned_guard) > self.clean_interval {
+            let clean_start = Instant::now();
+            self.clean_expired().await;
+            *last_cleaned_guard = clean_start;
+            debug_log!(
+                FILE_CACHE_LOGGER_DOMAIN,
+                "Performed cache cleanup at time={:?}, elapsed={:?}",
+                clean_start,
+                Instant::now().duration_since(clean_start)
+            );
+        }
+    }
+
+    /// Atomically cleans expired entries, respecting in_use entries.
+    async fn clean_expired(&self) {
+        let mut expired_paths = Vec::new();
+        let system_now = SystemTime::now();
+        let clean_start = Instant::now();
+
+        debug_log!(
+            FILE_CACHE_LOGGER_DOMAIN,
+            "Ready for clean expired cache entry at time={:?}",
+            clean_start
+        );
+
+        for entry in self.cache.iter() {
+            let path = entry.key();
+            let cache_inner = entry.value();
+
+            let (all_expired, need_clean) = {
+                let entries = cache_inner.entries.read().await;
+                let mut all_expired = !entries.is_empty();
+                let mut need_clean = false;
+
+                for e in entries.iter() {
+                    let state = e.state.read().await;
+                    let is_expired = state.is_expired(system_now, self.default_ttl);
+                    debug_log!(
+                        FILE_CACHE_LOGGER_DOMAIN,
+                        "Entry last accessed time: {:?}, now: {:?}",
+                        state.last_accessed,
+                        system_now,
+                    );
+                    if state.in_use || !is_expired {
+                        all_expired = false;
+                    }
+                    if !state.in_use && is_expired {
+                        need_clean = true;
+                    }
+                }
+
+                (all_expired, need_clean)
+            };
+
+            if need_clean {
+                let mut entries = cache_inner.entries.write().await;
+                let mut order = cache_inner.order.write().await;
+
+                let mut valid_entries = Vec::new();
+                let mut valid_paths = HashSet::new();
+
+                for e in entries.drain(..) {
+                    let state = e.state.read().await;
+                    if state.in_use || !state.is_expired(system_now, self.default_ttl) {
+                        valid_paths.insert(e.path.clone());
+                        valid_entries.push(e.clone());
+                    }
+                }
+                *entries = valid_entries;
+                order.retain(|k| valid_paths.contains(k));
+
+                if entries.is_empty() || all_expired {
+                    expired_paths.push(path.clone());
+                }
+            }
+        }
+
+        for path in expired_paths {
+            self.cache.remove(&path);
+            debug_log!(
+                FILE_CACHE_LOGGER_DOMAIN,
+                "Removed expired cache entry: path={:?}",
+                path
+            );
+        }
+
+        debug_log!(
+            FILE_CACHE_LOGGER_DOMAIN,
+            "Removed expired cache entries, elapsed={:?}",
+            Instant::now().duration_since(clean_start)
+        );
     }
 }
+
+unsafe impl Send for Cache {}
+unsafe impl Sync for Cache {}
