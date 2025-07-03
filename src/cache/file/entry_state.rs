@@ -2,7 +2,6 @@ use std::time::{Duration, SystemTime};
 
 #[derive(Clone, Debug)]
 pub struct EntryState {
-    pub in_use: bool,
     pub last_accessed: SystemTime,
 }
 
@@ -18,7 +17,6 @@ impl EntryState {
 impl Default for EntryState {
     fn default() -> Self {
         EntryState {
-            in_use: true,
             last_accessed: SystemTime::now(),
         }
     }

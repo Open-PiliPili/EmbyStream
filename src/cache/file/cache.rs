@@ -43,7 +43,6 @@ impl Cache {
     /// Atomically releases a file handle, marking it as available.
     pub async fn release_entry(&self, entry: &FileEntry) {
         let mut state = entry.state.write().await;
-        state.in_use = false;
         state.last_accessed = SystemTime::now();
     }
 
@@ -90,8 +89,8 @@ impl Cache {
 
             for entry in entries.iter_mut() {
                 let mut state = entry.state.write().await;
-                if !state.in_use && !state.is_expired(system_now, self.default_ttl) {
-                    state.in_use = true;
+                let is_referenced = Arc::strong_count(&entry.handle) > 1;
+                if !is_referenced && !state.is_expired(system_now, self.default_ttl) {
                     state.last_accessed = system_now;
                     debug_log!(
                         FILE_CACHE_LOGGER_DOMAIN,
@@ -268,16 +267,17 @@ impl Cache {
                 for e in entries.iter() {
                     let state = e.state.read().await;
                     let is_expired = state.is_expired(system_now, self.default_ttl);
+                    let is_referenced = Arc::strong_count(&e.handle) > 1;
                     debug_log!(
                         FILE_CACHE_LOGGER_DOMAIN,
                         "Entry last accessed time: {:?}, now: {:?}",
                         state.last_accessed,
                         system_now,
                     );
-                    if state.in_use || !is_expired {
+                    if is_referenced || !is_expired {
                         all_expired = false;
                     }
-                    if !state.in_use && is_expired {
+                    if !is_referenced && is_expired {
                         need_clean = true;
                     }
                 }
@@ -294,7 +294,8 @@ impl Cache {
 
                 for e in entries.drain(..) {
                     let state = e.state.read().await;
-                    if state.in_use || !state.is_expired(system_now, self.default_ttl) {
+                    let is_referenced = Arc::strong_count(&e.handle) > 1;
+                    if is_referenced || !state.is_expired(system_now, self.default_ttl) {
                         valid_paths.insert(e.path.clone());
                         valid_entries.push(e.clone());
                     }

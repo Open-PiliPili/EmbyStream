@@ -120,35 +120,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get::<HashMap<String, String>>(&base64_key);
 
     let cache = FileCache::builder()
-        .with_max_alive_seconds(5)
+        .with_max_alive_seconds(10)
         .with_clean_interval(1)
         .build()
         .await;
-    let file_path = PathBuf::from("/Users/***/Downloads/test.mov");
+    let file_path = PathBuf::from("/Users/**/Downloads/test.mov");
 
     {
-        file_cache_test(&cache, file_path.clone(), 1).await;
+        file_cache_test(&cache, file_path.clone()).await;
+    }
 
-        sleep(Duration::from_secs(1)).await;
-        file_cache_test(&cache, file_path.clone(), 2).await;
+    sleep(Duration::from_secs(1)).await;
+    {
+        file_cache_test(&cache, file_path.clone()).await;
+    }
 
-        sleep(Duration::from_secs(1)).await;
-        file_cache_test(&cache, file_path.clone(), 3).await;
+    sleep(Duration::from_secs(1)).await;
+    {
+        file_cache_test(&cache, file_path.clone()).await;
     }
 
     sleep(Duration::from_secs(5)).await;
-    cache.check_and_clean_expired().await;
-    let items_count = cache.len().await;
-    debug_log!("all cache items: -----------------> {}", items_count);
-    */
+    {
+        cache.check_and_clean_expired().await;
+        let items_count = cache.len().await;
+        debug_log!("all cache items: -----------------> {}", items_count);
+    }
+     */
 
     Ok(())
 }
 
 /*
-async fn file_cache_test(cache: &FileCache, file_path: PathBuf, count: u16) {
+async fn file_cache_test(cache: &FileCache, file_path: PathBuf) {
     let entry = cache.fetch_entry(file_path.clone()).await.unwrap();
-    let metadata = cache.fetch_metadata(&file_path).await.unwrap();
+    let _ = cache.fetch_metadata(&file_path).await.unwrap();
 
     let items_count = cache.len().await;
     debug_log!("all cache items: {}", items_count);
@@ -172,4 +178,4 @@ async fn file_cache_test(cache: &FileCache, file_path: PathBuf, count: u16) {
     }
     cache.release_entry(&entry).await;
 }
- */
+*/
