@@ -9,13 +9,18 @@ description = "Another Emby streaming application (frontend/backend separation) 
 
 [dependencies]
 anyhow = "1.0.98"
+async-trait = "0.1.88"
 aes = "0.8.4"
 base64 = "0.22.1"
+bytes = "1.10.1"
 cbc = "0.1.2"
 cipher = "0.4.4"
 dashmap = "6.1.0"
 generic-array = "1.2.0"
-lru = "0.15.0"
+hyper = { version = "1.6.0", features = ["http1", "http2", "server"] }
+hyper-util = { version = "0.1.14", features = ["http1", "http2", "server", "tokio"] }
+http-body-util = "0.1.3"
+lru = "0.16.0"
 once_cell = "1.21.3"
 percent-encoding = "2.3.1"
 reqwest = { version = "0.12.19", default-features = false, features = [
