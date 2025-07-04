@@ -10,7 +10,7 @@ use super::{
     logger::LoggerHandler,
     options::OptionsHandler,
 };
-use crate::middleware::{
+use crate::gateway::{
     context::Context,
     response::{BoxBodyType, ResponseBuilder},
 };
@@ -40,7 +40,7 @@ impl Gateway {
         self.handler = Some(handler);
     }
 
-    pub async fn start(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn listen(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let addr: SocketAddr = self.addr.parse()?;
         let listener = TcpListener::bind(&addr).await?;
 

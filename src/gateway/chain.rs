@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use hyper::{Request, Response, body};
 
-use crate::middleware::{context::Context, response::BoxBodyType};
+use crate::gateway::{context::Context, response::BoxBodyType};
 
 pub type Handler = Arc<dyn Fn(Context) -> Response<BoxBodyType> + Send + Sync>;
 

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use hyper::Response;
 
-use crate::middleware::context::Context;
+use crate::gateway::context::Context;
 use super::{
     chain::{Next, Middleware},
     response::BoxBodyType

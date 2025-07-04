@@ -5,7 +5,7 @@ use super::{
     chain::{Middleware, Next},
     response::BoxBodyType,
 };
-use crate::middleware::context::Context;
+use crate::gateway::context::Context;
 use crate::{MIDDLEWARE_LOGGER_DOMAIN, info_log};
 
 #[derive(Clone)]
