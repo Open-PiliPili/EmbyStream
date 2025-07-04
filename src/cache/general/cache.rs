@@ -16,11 +16,11 @@ impl Cache {
     /// # Arguments
     ///
     /// * `max_capacity` - The maximum number of items to store in the cache.
-    /// * `default_ttl` - The default time-to-live for each item.
-    pub fn new(max_capacity: u64, default_ttl: u64) -> Self {
+    /// * `time_to_live` - The default time-to-live for each item.
+    pub fn new(max_capacity: u64, time_to_live: u64) -> Self {
         let inner = MokaCache::builder()
             .max_capacity(max_capacity)
-            .time_to_live(Duration::from_secs(default_ttl))
+            .time_to_live(Duration::from_secs(time_to_live))
             .build();
 
         Self { inner }

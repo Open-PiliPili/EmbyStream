@@ -16,7 +16,7 @@ impl AppState {
     pub async fn get_file_cache(&self) -> &FileCache {
         self.file_cache
             .get_or_init(|| async {
-                let cache = FileCache::new(60 * 60);
+                let cache = FileCache::new(256, 60 * 60);
                 cache
             })
             .await

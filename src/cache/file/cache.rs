@@ -16,13 +16,15 @@ pub struct FileCache {
 }
 
 impl FileCache {
-    pub fn new(ttl_seconds: u64) -> Self {
+    pub fn new(max_capacity: u64, time_to_live: u64) -> Self {
         let entry_pools = Cache::builder()
-            .time_to_live(Duration::from_secs(ttl_seconds))
+            .max_capacity(max_capacity)
+            .time_to_live(Duration::from_secs(time_to_live))
             .build();
 
         let metadata = Cache::builder()
-            .time_to_live(Duration::from_secs(ttl_seconds))
+            .max_capacity(max_capacity)
+            .time_to_live(Duration::from_secs(time_to_live))
             .build();
 
         Self {
