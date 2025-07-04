@@ -1,13 +1,12 @@
-pub mod crypto;
+pub mod general;
 pub mod file;
 
-pub use crypto::{
-    Cache as CryptoCache,
-    CacheManager as CryptoCacheManager
+pub use general::{
+    Cache as GeneralCache
 };
 
 pub use file::{
-    Cache as FileCache,
+    FileCache,
     Entry as FileEntry,
     Metadata as FileMetadata,
     Error as FileCacheError

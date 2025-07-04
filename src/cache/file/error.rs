@@ -1,10 +1,12 @@
-use std::io::Error as IoError;
+use std::{
+    sync::Arc,
+    io::Error as IoError
+};
 
 use thiserror::Error;
 
-/// Custom error type for configuration operations.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum Error {
     #[error("IO error: {0}")]
-    IoError(IoError),
+    IoError(#[from] Arc<IoError>),
 }

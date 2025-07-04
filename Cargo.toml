@@ -15,16 +15,14 @@ base64 = "0.22.1"
 bytes = "1.10.1"
 cbc = "0.1.2"
 cipher = "0.4.4"
-dashmap = "6.1.0"
 futures-util = "0.3.31"
 generic-array = "1.2.0"
 hyper = { version = "1.6.0", features = ["http1", "http2", "server"] }
 hyper-util = { version = "0.1.14", features = ["http1", "http2", "server", "tokio"] }
 http-body-util = "0.1.3"
 http-serde = "2.1.1"
-lru = "0.16.0"
+moka = { version = "0.12.10", features = ["future", "sync"] }
 once_cell = "1.21.3"
-percent-encoding = "2.3.1"
 reqwest = { version = "0.12.19", default-features = false, features = [
     "gzip",
     "http2",

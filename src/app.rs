@@ -1,20 +1,24 @@
-use tokio::sync::RwLock as TokioRwLock;
+use tokio::sync::OnceCell;
 
 use crate::cache::FileCache;
 
 pub struct AppState {
-    pub file_cache: TokioRwLock<FileCache>,
+    file_cache: OnceCell<FileCache>,
 }
 
 impl AppState {
     pub async fn new() -> Self {
-        let file_cache = FileCache::builder()
-            .with_max_alive_seconds(60 * 60)
-            .with_clean_interval(30 * 60)
-            .build()
-            .await;
         Self {
-            file_cache: TokioRwLock::new(file_cache),
+            file_cache: OnceCell::new()
         }
+    }
+
+    pub async fn get_file_cache(&self) -> &FileCache {
+        self.file_cache
+            .get_or_init(|| async {
+                let cache = FileCache::new(60 * 60);
+                cache
+            })
+            .await
     }
 }

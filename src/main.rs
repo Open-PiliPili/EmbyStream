@@ -21,14 +21,14 @@ use embystream::{
     info_log,
     logger::*,
     AlistClient,
-    CryptoCacheManager,
     EmbyClient,
     ClientBuilder,
     CurlPlugin,
     MarkdownV2Builder,
     TelegramClient,
     TextMessage,
-    FileCache
+    FileCache,
+    GeneralCache
 };
 
 fn setup_logger() {
@@ -90,81 +90,109 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).await?;
     info_log!("user: {:?}", user_result.name);
 
-    let cache_manager = CryptoCacheManager::new(
-        5000,
-        60 * 60,
-        5000,
-        60 * 60
-    );
 
-    cache_manager
-        .encrypted_cache()
-        .insert("item123_source456".to_string(), "base64_encoded_json_string".to_string());
-    cache_manager
-        .encrypted_cache()
-        .insert("item123_source456".to_string(), "base641_encoded_json_string".to_string());
-    cache_manager
-        .encrypted_cache()
-        .insert("item456_source456".to_string(), "base642_encoded_json_string".to_string());
+    crypto_cache_test().await;
 
-    let base64_key = "base64_encoded_json_string".to_string();
-    let mut decrypted_value: HashMap<String, String> = HashMap::new();
-    decrypted_value.insert("key1".to_string(), "value1".to_string());
-    decrypted_value.insert("key2".to_string(), "value2".to_string());
-    decrypted_value.insert("key3".to_string(), "value3".to_string());
-    cache_manager
-        .decrypted_cache()
-        .insert(base64_key.clone(), decrypted_value);
-    cache_manager
-        .decrypted_cache()
-        .get::<HashMap<String, String>>(&base64_key);
-
-    let cache = FileCache::builder()
-        .with_max_alive_seconds(10)
-        .with_clean_interval(1)
-        .build()
-        .await;
-    let file_path = PathBuf::from("/Users/**/Downloads/test.mov");
+    let cache = FileCache::new(100);
+    let file_path = PathBuf::from("/Users/***/Downloads/test.mov");
 
     {
-        file_cache_test(&cache, file_path.clone()).await;
+        file_cache_test(&cache, file_path.clone(), 2000).await;
+        file_cache_test(&cache, file_path.clone(), 1000).await;
+        let pool_count = cache.entry_pools.entry_count();
+        debug_log!("all cache items: {} pools", pool_count);
     }
 
     sleep(Duration::from_secs(1)).await;
     {
-        file_cache_test(&cache, file_path.clone()).await;
+        file_cache_test(&cache, file_path.clone(), 3000).await;
     }
 
-    sleep(Duration::from_secs(1)).await;
-    {
-        file_cache_test(&cache, file_path.clone()).await;
-    }
-
-    sleep(Duration::from_secs(5)).await;
-    {
-        cache.check_and_clean_expired().await;
-        let items_count = cache.len().await;
-        debug_log!("all cache items: -----------------> {}", items_count);
-    }
+    sleep(Duration::from_secs(20)).await;
+    let pool_count = cache.entry_pools.entry_count();
+    debug_log!("all cache items: {} pools", pool_count);
      */
 
     Ok(())
 }
 
 /*
-async fn file_cache_test(cache: &FileCache, file_path: PathBuf) {
-    let entry = cache.fetch_entry(file_path.clone()).await.unwrap();
-    let _ = cache.fetch_metadata(&file_path).await.unwrap();
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+struct User {
+    id: u32,
+    username: String,
+}
 
-    let items_count = cache.len().await;
-    debug_log!("all cache items: {}", items_count);
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+struct ApiKey {
+    key: String,
+    permissions: Vec<String>,
+}
+
+async fn crypto_cache_test() {
+    let cache = GeneralCache::new(3, 2);
+    let user1 = User { id: 1, username: "alice".to_string() };
+    let api_key1 = ApiKey { key: "secret123".to_string(), permissions: vec!["read".to_string()] };
+    cache.insert("my_string".to_string(), "Hello, Moka!".to_string());
+    cache.insert("user:1".to_string(), user1.clone());
+    cache.insert("api_key:1".to_string(), api_key1.clone());
+
+    debug_log!("Current cache size: {}", cache.len()); // 应为 3
+
+    let retrieved_string: Option<String> = cache.get("my_string");
+    debug_log!("Got String? {:?}", retrieved_string);
+
+    let retrieved_user: Option<User> = cache.get("user:1");
+    debug_log!("Got User? {:?}", retrieved_user);
+
+    let wrong_type: Option<User> = cache.get("my_string");
+    debug_log!("Got User from a String key? {:?}", wrong_type);
+
+    let non_existent: Option<String> = cache.get("non_existent_key");
+    debug_log!("Got non-existent key? {:?}", non_existent);
+
+    let _ = cache.get::<String>("my_string");
+
+    let user2 = User { id: 2, username: "bob".to_string() };
+    debug_log!("Inserting a 4th item ('user:2')...");
+    cache.insert("user:2".to_string(), user2);
+
+    let evicted_user: Option<User> = cache.get("user:1");
+    debug_log!("Is 'user:1' still in cache? {:?}", evicted_user);
+
+    sleep(Duration::from_secs(3)).await;
+    let expired_string: Option<String> = cache.get("my_string");
+    debug_log!("Attempting to get 'my_string' after 3s: {:?}", expired_string);
+
+    let expired_apikey: Option<ApiKey> = cache.get("api_key:1");
+    debug_log!("Attempting to get 'api_key:1' after 3s: {:?}", expired_apikey);
+}
+
+async fn file_cache_test(cache: &FileCache, file_path: PathBuf, seek_start: u64) {
+    let entry_result = cache.fetch_entry(&file_path).await;
+    if entry_result.is_err() {
+        debug_log!("Failed to fetch entry, cannot proceed.");
+        return;
+    }
+    let entry = entry_result.unwrap();
+
+    let metadata = cache.fetch_metadata(&file_path).await.unwrap();
+    debug_log!("Successfully fetched metadata: {:?}", metadata);
+
+    let pool_count = cache.get_pool_count();
+    let metadata_count = cache.get_metadata_count();
+    debug_log!("all cache items: {} pools, {} metadata entries", pool_count, metadata_count);
 
     debug_log!("Attempting to seek to position 1000...");
+
     let seek_result = timeout(Duration::from_secs(5), async {
-        let binding = entry.clone();
-        let mut file = binding.handle.write().await;
-        file.seek(SeekFrom::Start(1000)).await
+        let handle_arc = entry.handle.clone();
+        let mut file_guard = handle_arc.write().await;
+        file_guard.seek(SeekFrom::Start(seek_start)).await
     }).await;
+
     match seek_result {
         Ok(Ok(position)) => {
             debug_log!("User1: Successfully seeked to position: {}", position);
@@ -176,6 +204,7 @@ async fn file_cache_test(cache: &FileCache, file_path: PathBuf) {
             debug_log!("User1: Seek operation timed out after 5 seconds");
         }
     }
-    cache.release_entry(&entry).await;
+
+    debug_log!("Entry goes out of scope. No manual release needed.");
 }
 */

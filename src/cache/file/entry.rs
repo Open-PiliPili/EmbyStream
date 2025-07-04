@@ -1,26 +1,24 @@
-use std::path::PathBuf;
-use std::sync::Arc;
-use uuid::Uuid;
+use std::{
+    path::PathBuf,
+    sync::Arc
+};
 
-use tokio::{fs::File as TokioFile, sync::RwLock as TokioRwLock};
-
-use crate::cache::file::EntryState as CacheEntryState;
+use tokio::{
+    fs::File as TokioFile,
+    sync::RwLock
+};
 
 #[derive(Clone, Debug)]
 pub struct Entry {
-    pub handle: Arc<TokioRwLock<TokioFile>>,
+    pub handle: Arc<RwLock<TokioFile>>,
     pub path: PathBuf,
-    pub identifier: Uuid,
-    pub state: Arc<TokioRwLock<CacheEntryState>>,
 }
 
 impl Entry {
     pub fn new(handle: TokioFile, path: PathBuf) -> Self {
-        Entry {
-            handle: Arc::new(TokioRwLock::new(handle)),
+        Self {
+            handle: Arc::new(RwLock::new(handle)),
             path,
-            identifier: Uuid::new_v4(),
-            state: Arc::new(TokioRwLock::new(CacheEntryState::default())),
         }
     }
 }

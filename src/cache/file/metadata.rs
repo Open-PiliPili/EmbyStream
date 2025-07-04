@@ -13,14 +13,3 @@ impl Metadata {
         self.file_size > 0
     }
 }
-
-impl Default for Metadata {
-    fn default() -> Self {
-        Metadata {
-            file_size: 0,
-            format: "unknown".to_string(),
-            last_modified: None,
-            updated_at: SystemTime::now(),
-        }
-    }
-}
