@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use hyper::{HeaderMap, StatusCode, header};
 use reqwest::Url;
@@ -7,7 +9,7 @@ use super::{
     redirect_info::RedirectInfo, remote_streamer::RemoteStreamer,
     request::Request as AppStreamRequest, result::Result as AppStreamResult, source::Source,
 };
-use crate::{STREAM_LOGGER_DOMAIN, info_log};
+use crate::{AppState, STREAM_LOGGER_DOMAIN, info_log};
 
 #[async_trait]
 pub trait StreamService: Send + Sync {
@@ -18,12 +20,13 @@ pub trait StreamService: Send + Sync {
 }
 
 pub struct AppStreamService {
+    pub state: Arc<AppState>,
     pub user_agent: Option<String>,
 }
 
 impl AppStreamService {
-    pub fn new(user_agent: Option<String>) -> Self {
-        Self { user_agent }
+    pub fn new(state: Arc<AppState>, user_agent: Option<String>) -> Self {
+        Self { state, user_agent }
     }
 
     fn decrypt_and_route(&self, sign: &str) -> Result<Source, AppStreamError> {
@@ -63,15 +66,22 @@ impl StreamService for AppStreamService {
 
         match source {
             Source::Local(path) => {
-                LocalStreamer::stream(path, request.content_range(), request.request_start_time)
-                    .await
+                LocalStreamer::stream(
+                    self.state.clone(),
+                    path,
+                    request.content_range(),
+                    request.request_start_time,
+                )
+                .await
             }
             Source::Remote { url, mode } => match mode {
                 ProxyMode::Redirect => {
                     let redirect_info = self.build_redirect_info(url, &request.original_headers);
                     Ok(AppStreamResult::Redirect(redirect_info))
                 }
-                ProxyMode::Proxy => RemoteStreamer::stream(url, &request.original_headers).await,
+                ProxyMode::Proxy => {
+                    RemoteStreamer::stream(self.state.clone(), url, &request.original_headers).await
+                }
             },
         }
     }

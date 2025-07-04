@@ -18,7 +18,7 @@ impl ResponseBuilder {
         }
         let mut response = Response::new(Self::empty());
 
-        *response.status_mut() = StatusCode::FOUND;
+        *response.status_mut() = status;
         response.headers_mut().insert(
             header::LOCATION,
             location.as_ref().parse().expect("Invalid location URI"),

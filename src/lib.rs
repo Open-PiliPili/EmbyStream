@@ -12,6 +12,7 @@ pub mod network;
 pub mod system;
 pub mod util;
 pub mod core;
+pub mod app;
 
 pub use api::{AlistAPI, EmbyAPI, PhotoMessage, TelegramAPI, TextMessage};
 pub use cache::{CryptoCache, CryptoCacheManager, FileCache};
@@ -24,3 +25,4 @@ pub use network::*;
 pub use system::*;
 pub use util::*;
 pub use core::*;
+pub use app::*;

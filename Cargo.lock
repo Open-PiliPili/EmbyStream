@@ -278,6 +278,7 @@ dependencies = [
  "cbc",
  "cipher",
  "dashmap",
+ "futures-util",
  "generic-array 1.2.0",
  "http-body-util",
  "http-serde",

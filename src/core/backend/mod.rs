@@ -9,5 +9,6 @@ pub mod response;
 pub mod result;
 pub mod service;
 pub mod source;
+mod chunk_stream;
 
 pub use error::Error as AppStreamError;
