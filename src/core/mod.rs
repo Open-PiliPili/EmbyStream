@@ -2,6 +2,6 @@ pub mod backend;
 pub mod frontened;
 
 pub use backend::{
-    handler::StreamHandler,
+    stream::StreamMiddleware,
     service::{AppStreamService, StreamService},
 };

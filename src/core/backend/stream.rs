@@ -14,11 +14,11 @@ use crate::gateway::{
 };
 
 #[derive(Clone)]
-pub struct StreamHandler {
+pub struct StreamMiddleware {
     path: Arc<String>,
     stream_service: Arc<dyn StreamService>,
 }
-impl StreamHandler {
+impl StreamMiddleware {
     pub fn new(path: &str, stream_service: Arc<dyn StreamService>) -> Self {
         Self {
             path: Arc::new(path.to_string()),
@@ -28,7 +28,7 @@ impl StreamHandler {
 }
 
 #[async_trait]
-impl Middleware for StreamHandler {
+impl Middleware for StreamMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
         if ctx.path != *self.path {
             return next.run(ctx).await;
@@ -68,15 +68,10 @@ impl Middleware for StreamHandler {
                     response
                 }
                 AppStreamResult::Redirect(redirect_info) => {
-                    let json_body = match serde_json::to_string(&redirect_info) {
-                        Ok(json) => json,
-                        Err(_) => {
-                            return ResponseBuilder::with_status_code(
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                            );
-                        }
-                    };
-                    ResponseBuilder::with_json(StatusCode::OK, json_body)
+                    ResponseBuilder::with_redirect(
+                        redirect_info.target_url.as_str(),
+                        StatusCode::FOUND
+                    )
                 }
             },
             Err(status_code) => ResponseBuilder::with_status_code(status_code),

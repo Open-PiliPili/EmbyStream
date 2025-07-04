@@ -9,10 +9,10 @@ use crate::gateway::context::Context;
 use crate::{GATEWAY_LOGGER_DOMAIN, info_log};
 
 #[derive(Clone)]
-pub struct LoggerHandler;
+pub struct LoggerMiddleware;
 
 #[async_trait]
-impl Middleware for LoggerHandler {
+impl Middleware for LoggerMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
         info_log!(GATEWAY_LOGGER_DOMAIN, "Incoming request details:");
         info_log!(GATEWAY_LOGGER_DOMAIN, "Request Headers: {:?}", ctx.headers);

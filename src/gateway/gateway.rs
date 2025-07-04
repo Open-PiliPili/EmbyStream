@@ -4,12 +4,7 @@ use hyper::{Request, Response, StatusCode, body, server::conn::http1, service::s
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
-use super::{
-    chain::{Chain, Handler, Middleware},
-    cors::Cors,
-    logger::LoggerHandler,
-    options::OptionsHandler,
-};
+use super::chain::{Chain, Handler, Middleware};
 use crate::gateway::{
     context::Context,
     response::{BoxBodyType, ResponseBuilder},
@@ -43,10 +38,6 @@ impl Gateway {
     pub async fn listen(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let addr: SocketAddr = self.addr.parse()?;
         let listener = TcpListener::bind(&addr).await?;
-
-        self.middlewares.push(Box::new(LoggerHandler));
-        self.middlewares.push(Box::new(OptionsHandler));
-        self.middlewares.push(Box::new(Cors));
 
         let handler = self.handler.clone().unwrap_or_else(|| {
             Arc::new(|_ctx: Context| -> Response<BoxBodyType> {

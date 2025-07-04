@@ -8,10 +8,10 @@ use super::{
 use crate::gateway::context::Context;
 
 #[derive(Clone)]
-pub struct Cors;
+pub struct CorsMiddleware;
 
 #[async_trait]
-impl Middleware for Cors {
+impl Middleware for CorsMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
         let mut response = next.run(ctx).await;
 

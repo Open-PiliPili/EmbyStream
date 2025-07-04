@@ -13,7 +13,13 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(uri: Uri, method: Method, headers: HeaderMap, body: Incoming) -> Self {
+    pub fn new(
+        uri: Uri,
+        method: Method,
+        headers: HeaderMap,
+        body: Option<Incoming>,
+        start_time: Instant
+    ) -> Self {
         let path = uri.path().to_string();
         let uri_str = uri.to_string();
         Self {
@@ -21,8 +27,8 @@ impl Context {
             path,
             method,
             headers,
-            body: Some(body),
-            start_time: Instant::now(),
+            body,
+            start_time,
         }
     }
 

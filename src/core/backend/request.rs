@@ -19,13 +19,6 @@ impl Request {
         }
     }
 
-    pub(crate) fn use_agent(&self) -> Option<String> {
-        self.original_headers
-            .get(header::USER_AGENT)
-            .and_then(|v| v.to_str().ok())
-            .map(String::from)
-    }
-
     pub(crate) fn content_range(&self) -> Option<String> {
         self.original_headers
             .get(header::RANGE)

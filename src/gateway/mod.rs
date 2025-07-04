@@ -8,5 +8,8 @@ pub mod response;
 
 pub use chain::{Handler as MiddlewareHandler, Middleware, Next};
 pub use context::Context as MiddlewareContext;
+pub use cors::CorsMiddleware;
 pub use gateway::Gateway as MiddlewareServer;
+pub use logger::LoggerMiddleware;
+pub use options::OptionsMiddleware;
 pub use response::{BoxBodyType, ResponseBuilder};

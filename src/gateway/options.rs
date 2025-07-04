@@ -9,10 +9,10 @@ use crate::gateway::context::Context;
 use crate::{GATEWAY_LOGGER_DOMAIN, error_log};
 
 #[derive(Clone)]
-pub struct OptionsHandler;
+pub struct OptionsMiddleware;
 
 #[async_trait]
-impl Middleware for OptionsHandler {
+impl Middleware for OptionsMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
         if ctx.method == hyper::Method::OPTIONS {
             error_log!(

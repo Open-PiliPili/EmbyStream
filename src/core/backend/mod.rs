@@ -1,5 +1,5 @@
 pub mod error;
-pub mod handler;
+pub mod stream;
 pub mod local_streamer;
 pub mod proxy_mode;
 pub mod redirect_info;

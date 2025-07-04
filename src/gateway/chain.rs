@@ -1,5 +1,5 @@
 use std::sync::Arc;
-
+use std::time::Instant;
 use async_trait::async_trait;
 use hyper::{Request, Response, body};
 
@@ -58,7 +58,13 @@ impl Chain {
 
     pub async fn run(self, req: Request<body::Incoming>) -> Response<BoxBodyType> {
         let (parts, body) = req.into_parts();
-        let ctx = Context::new(parts.uri, parts.method, parts.headers, body);
+        let ctx = Context::new(
+            parts.uri,
+            parts.method,
+            parts.headers,
+            Some(body),
+            Instant::now()
+        );
 
         let next = Next {
             chain: &self.middlewares,
