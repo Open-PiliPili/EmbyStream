@@ -1,5 +1,6 @@
-use reqwest::Url;
 use std::path::PathBuf;
+
+use reqwest::Url;
 
 use super::proxy_mode::ProxyMode;
 
