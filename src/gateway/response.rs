@@ -2,13 +2,23 @@ use std::convert::Infallible;
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
-use hyper::{Error as HyperError, Response, StatusCode, header};
+use hyper::{Response, StatusCode, header};
 
-pub type BoxBodyType = BoxBody<Bytes, HyperError>;
+use super::error::Error;
+
+pub type BoxBodyType = BoxBody<Bytes, Error>;
 
 pub struct ResponseBuilder;
 
 impl ResponseBuilder {
+    pub fn from_error(err: &Error) -> Response<BoxBodyType> {
+        Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(Self::from_bytes(err.to_string()))
+            .unwrap()
+    }
+
     pub fn with_redirect(
         location: impl AsRef<str>,
         mut status: StatusCode

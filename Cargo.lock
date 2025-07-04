@@ -289,9 +289,11 @@ dependencies = [
  "futures-util",
  "generic-array 1.2.0",
  "http-body-util",
+ "http-range-header",
  "http-serde",
  "hyper",
  "hyper-util",
+ "lazy_static",
  "moka",
  "once_cell",
  "reqwest",
@@ -544,6 +546,12 @@ dependencies = [
  "http-body",
  "pin-project-lite",
 ]
+
+[[package]]
+name = "http-range-header"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "http-serde"

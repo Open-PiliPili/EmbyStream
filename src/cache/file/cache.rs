@@ -54,6 +54,11 @@ impl FileCache {
 
                 let metadata = Metadata {
                     file_size: meta.len(),
+                    file_name: path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .map_or_else(|| "unknown".to_string(), |s| s.to_string())
+                    ,
                     format: path
                         .extension()
                         .and_then(|s| s.to_str())
