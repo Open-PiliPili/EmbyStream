@@ -34,8 +34,10 @@ impl AppStreamService {
         let mut final_headers = original_headers.clone();
 
         if let Some(user_agent) = &self.user_agent {
-            if let Ok(parsed_header) = user_agent.parse() {
-                final_headers.insert(header::USER_AGENT, parsed_header);
+            if !user_agent.is_empty() {
+                if let Ok(parsed_header) = user_agent.parse() {
+                    final_headers.insert(header::USER_AGENT, parsed_header);
+                }
             }
         }
 
