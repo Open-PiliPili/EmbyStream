@@ -28,7 +28,9 @@ impl ResponseBuilder {
             .expect("Failed to build text response");
         response.headers_mut().insert(
             hyper::header::CONTENT_TYPE,
-            "text/plain; charset=utf-8".parse().unwrap(),
+            "text/plain; charset=utf-8"
+                .parse()
+                .expect("Failed to parse mime type"),
         );
         response
     }
@@ -42,7 +44,9 @@ impl ResponseBuilder {
             .expect("Failed to build JSON response");
         response.headers_mut().insert(
             hyper::header::CONTENT_TYPE,
-            "application/json".parse().unwrap(),
+            "application/json"
+                .parse()
+                .expect("Failed to parse mime type"),
         );
         response
     }

@@ -6,7 +6,7 @@ use super::{
     response::{BoxBodyType, ResponseBuilder},
 };
 use crate::gateway::context::Context;
-use crate::{MIDDLEWARE_LOGGER_DOMAIN, error_log};
+use crate::{GATEWAY_LOGGER_DOMAIN, error_log};
 
 #[derive(Clone)]
 pub struct OptionsHandler;
@@ -16,7 +16,7 @@ impl Middleware for OptionsHandler {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
         if ctx.method == hyper::Method::OPTIONS {
             error_log!(
-                MIDDLEWARE_LOGGER_DOMAIN,
+                GATEWAY_LOGGER_DOMAIN,
                 "OPTIONS request received, aborting with status 204"
             );
             return ResponseBuilder::with_status_code(StatusCode::NO_CONTENT);

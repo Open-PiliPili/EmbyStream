@@ -14,7 +14,7 @@ use crate::gateway::{
     context::Context,
     response::{BoxBodyType, ResponseBuilder},
 };
-use crate::{MIDDLEWARE_LOGGER_DOMAIN, error_log};
+use crate::{GATEWAY_LOGGER_DOMAIN, error_log};
 
 pub struct Gateway {
     addr: String,
@@ -78,11 +78,7 @@ impl Gateway {
 
                 if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
                     if !is_ignorable_connection_error(&err) {
-                        error_log!(
-                            MIDDLEWARE_LOGGER_DOMAIN,
-                            "Server connection error: {:?}",
-                            err
-                        );
+                        error_log!(GATEWAY_LOGGER_DOMAIN, "Server connection error: {:?}", err);
                     }
                 }
             });

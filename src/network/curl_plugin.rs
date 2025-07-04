@@ -51,12 +51,13 @@ impl CurlPlugin {
         curl_command.push_str(&format!(" '{}' ", request.url()));
 
         for (name, value) in request.headers() {
-            let escaped_value = value
-                .to_str()
-                .unwrap()
-                .replace('"', "\\\"")
-                .replace("'", "\\'");
-            curl_command.push_str(&format!("-H \"{}: {}\" ", name, escaped_value));
+            if let Ok(valid_str) = value.to_str() {
+                let escaped_value = valid_str
+                    .replace('"', "\\\"")
+                    .replace("'", "\\'");
+                curl_command
+                    .push_str(&format!("-H \"{}: {}\" ", name, escaped_value));
+            }
         }
 
         if let Some(body) = request.body() {

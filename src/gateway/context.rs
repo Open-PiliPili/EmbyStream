@@ -1,6 +1,7 @@
 use std::str;
 
 use hyper::{HeaderMap, Method, Uri, body::Incoming};
+use std::time::Instant;
 
 pub struct Context {
     pub uri: String,
@@ -8,6 +9,7 @@ pub struct Context {
     pub method: Method,
     pub headers: HeaderMap,
     pub body: Option<Incoming>,
+    pub start_time: Instant,
 }
 
 impl Context {
@@ -20,6 +22,7 @@ impl Context {
             method,
             headers,
             body: Some(body),
+            start_time: Instant::now(),
         }
     }
 

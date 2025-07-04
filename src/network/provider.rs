@@ -92,7 +92,9 @@ impl NetworkProvider {
         if let Some(headers) = target.headers() {
             let mut header_map = reqwest::header::HeaderMap::new();
             for (key, value) in headers {
-                header_map.insert(key, value.parse().unwrap());
+                if let Ok(value) = value.parse() {
+                    header_map.insert(key, value);
+                }
             }
             request = request.headers(header_map);
         }
