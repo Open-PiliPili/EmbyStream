@@ -1,10 +1,9 @@
-use std::str;
+use std::{str, time::Instant};
 
 use hyper::{HeaderMap, Method, Uri, body::Incoming};
-use std::time::Instant;
 
 pub struct Context {
-    pub uri: String,
+    pub uri: Uri,
     pub path: String,
     pub method: Method,
     pub headers: HeaderMap,
@@ -21,9 +20,8 @@ impl Context {
         start_time: Instant
     ) -> Self {
         let path = uri.path().to_string();
-        let uri_str = uri.to_string();
         Self {
-            uri: uri_str,
+            uri,
             path,
             method,
             headers,

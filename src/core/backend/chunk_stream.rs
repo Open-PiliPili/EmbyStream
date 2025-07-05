@@ -20,7 +20,6 @@ pub struct AdaptiveChunkStream<R: AsyncRead + Unpin> {
 }
 
 impl<R: AsyncRead + Unpin> AdaptiveChunkStream<R> {
-    #[allow(dead_code)]
     pub fn new(reader: R, request_start_time: Instant) -> Self {
         Self {
             reader,

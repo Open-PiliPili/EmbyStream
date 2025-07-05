@@ -1,19 +1,21 @@
 use std::time::Instant;
 
-use hyper::{HeaderMap, header};
+use hyper::{HeaderMap, header, Uri};
 
-#[allow(dead_code)]
 pub struct Request {
-    pub sign: String,
+    pub uri: Uri,
     pub original_headers: HeaderMap,
     pub request_start_time: Instant,
 }
 
 impl Request {
-    #[allow(unused_variables)]
-    pub fn new(sign: String, original_headers: HeaderMap, request_start_time: Instant) -> Self {
+    pub fn new(
+        uri: Uri,
+        original_headers: HeaderMap,
+        request_start_time: Instant,
+    ) -> Self {
         Self {
-            sign,
+            uri,
             original_headers,
             request_start_time,
         }
@@ -24,5 +26,21 @@ impl Request {
             .get(header::RANGE)
             .and_then(|v| v.to_str().ok())
             .map(String::from)
+    }
+
+    pub fn is_local(&self) -> bool {
+        if let Some(scheme) = self.uri.scheme_str() {
+            return scheme == "file";
+        }
+
+        self.uri.host().is_none() && self.uri.path().starts_with('/')
+    }
+
+    pub fn is_remote(&self) -> bool {
+        if let Some(scheme) = self.uri.scheme_str() {
+            return matches!(scheme, "http" | "https" | "ftp" | "ws" | "wss");
+        }
+
+        self.uri.host().is_some()
     }
 }

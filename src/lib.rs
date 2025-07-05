@@ -14,9 +14,9 @@ pub mod util;
 pub mod core;
 pub mod app;
 
-pub use api::{AlistAPI, EmbyAPI, PhotoMessage, TelegramAPI, TextMessage};
+pub use api::{OpenListAPI, EmbyAPI, PhotoMessage, TelegramAPI, TextMessage};
 pub use cache::{GeneralCache, FileCache};
-pub use client::{AlistClient, ClientBuilder, EmbyClient, TelegramClient};
+pub use client::{OpenListClient, ClientBuilder, EmbyClient, TelegramClient};
 pub use crypto::*;
 pub use domain::*;
 pub use error::*;

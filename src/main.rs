@@ -20,7 +20,7 @@ use embystream::{
     debug_log,
     info_log,
     logger::*,
-    AlistClient,
+    OpenListClient,
     EmbyClient,
     ClientBuilder,
     CurlPlugin,
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_plugin(CurlPlugin)
         .build();
 
-    let alist_token = "alist-XXXXXXXXX";
+    let alist_token = "openlist-XXXXXXXXX";
     let file_link = alist_client
         .fetch_file_link(
             "http://XXXXXXXXXXXXX:5244/",

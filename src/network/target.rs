@@ -13,7 +13,7 @@ use super::{http_method::HttpMethod, task::NetworkTask};
 /// - HTTP method
 /// - Request task (body/parameters)
 /// - Optional headers
-pub trait NetworkTarget {
+pub trait NetworkTarget: Send + Sync {
     /// Returns the base URL of the API.
     fn base_url(&self) -> String;
 
@@ -30,7 +30,5 @@ pub trait NetworkTarget {
     ///
     /// By default, returns `None`. Implementors can override this method
     /// to provide custom headers.
-    fn headers(&self) -> Option<Vec<(&'static str, String)>> {
-        None
-    }
+    fn headers(&self) -> Vec<(String, String)>;
 }

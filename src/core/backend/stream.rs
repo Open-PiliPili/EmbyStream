@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use hyper::{Response, StatusCode};
-use reqwest::Url;
 
 use super::{
     request::Request as AppStreamRequest, result::Result as AppStreamResult, service::StreamService,
@@ -34,23 +33,8 @@ impl Middleware for StreamMiddleware {
             return next.run(ctx).await;
         }
 
-        let full_uri = match Url::parse(&format!("http://localhost{}", ctx.uri)) {
-            Ok(uri) => uri,
-            Err(_) => return ResponseBuilder::with_text(StatusCode::BAD_REQUEST, "Invalid URI"),
-        };
-
-        let sign = match full_uri.query_pairs().find(|(key, _)| key == "sign") {
-            Some((_, value)) => value.into_owned(),
-            None => {
-                return ResponseBuilder::with_text(
-                    StatusCode::BAD_REQUEST,
-                    "Missing 'sign' parameter",
-                );
-            }
-        };
-
         let stream_request = AppStreamRequest {
-            sign,
+            uri: ctx.uri,
             original_headers: ctx.headers,
             request_start_time: ctx.start_time,
         };
@@ -69,7 +53,7 @@ impl Middleware for StreamMiddleware {
                 }
                 AppStreamResult::Redirect(redirect_info) => {
                     ResponseBuilder::with_redirect(
-                        redirect_info.target_url.as_str(),
+                        redirect_info.target_url.to_string().as_str(),
                         StatusCode::FOUND
                     )
                 }

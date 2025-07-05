@@ -89,12 +89,12 @@ impl NetworkTarget for API {
     /// Includes:
     /// - Standard JSON content type headers
     /// - User agent string
-    fn headers(&self) -> Option<Vec<(&'static str, String)>> {
+    fn headers(&self) -> Vec<(String, String)> {
         let sys_info = SystemInfo::new();
-        Some(vec![
-            ("Content-Type", "application/json".to_string()),
-            ("Accept", "application/json".to_string()),
-            ("user-agent", sys_info.get_user_agent()),
-        ])
+        vec![
+            ("Content-Type".into(), "application/json".into()),
+            ("Accept".into(), "application/json".into()),
+            ("user-agent".into(), sys_info.get_user_agent()),
+        ]
     }
 }

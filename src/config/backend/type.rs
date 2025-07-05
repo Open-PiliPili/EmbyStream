@@ -9,7 +9,7 @@ pub enum BackendType {
     Disk,
     #[serde(rename = "direct_link")]
     DirectLink,
-    #[serde(rename = "alist")]
+    #[serde(rename = "openlist")]
     AList,
 }
 
@@ -18,7 +18,7 @@ impl fmt::Display for BackendType {
         match self {
             BackendType::Disk => write!(f, "disk"),
             BackendType::DirectLink => write!(f, "direct_link"),
-            BackendType::AList => write!(f, "alist"),
+            BackendType::AList => write!(f, "openlist"),
         }
     }
 }

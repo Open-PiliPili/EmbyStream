@@ -11,7 +11,7 @@ use reqwest::{Error, Request, Response};
 /// - Before the request is sent
 /// - After a response is received
 /// - When an error occurs
-pub trait NetworkPlugin {
+pub trait NetworkPlugin: Send + Sync {
     /// Called before a request is sent.
     ///
     /// This method allows plugins to inspect or modify the request before it is sent.

@@ -11,7 +11,7 @@ use super::{
     chunk_stream::AdaptiveChunkStream, response::Response, result::Result as AppStreamResult,
 };
 use crate::cache::FileMetadata;
-use crate::{AppState, cache::FileEntry, error_log};
+use crate::{AppState, cache::FileEntry, error_log, LOCAL_STREAMER_LOGGER_DOMAIN};
 
 pub(crate) struct LocalStreamer;
 
@@ -29,12 +29,20 @@ impl LocalStreamer {
         let cache = state.get_file_cache().await;
 
         let Ok(file_entry) = cache.fetch_entry(&path).await else {
-            error_log!("Failed to obtain cache entry for the route: {:?}", &path);
+            error_log!(
+                LOCAL_STREAMER_LOGGER_DOMAIN,
+                "Failed to obtain cache entry for the route: {:?}",
+                &path
+            );
             return Err(StatusCode::NOT_FOUND);
         };
 
         let Ok(metadata) = cache.fetch_metadata(&path).await else {
-            error_log!("Failed to obtain cache metadata for the route: {:?}", &path);
+            error_log!(
+                LOCAL_STREAMER_LOGGER_DOMAIN,
+                "Failed to obtain cache metadata for the route: {:?}",
+                &path
+            );
             return Err(StatusCode::NOT_FOUND);
         };
 
@@ -120,7 +128,7 @@ impl LocalStreamer {
             .map(|res| res.map(Frame::data))
             .map_err(|e| e.into());
 
-        let mut headers = hyper::HeaderMap::new();
+        let mut headers = HeaderMap::new();
         let content_type = get_content_type(file_metadata.format.as_str());
 
         headers.insert(header::CONTENT_LENGTH, file_metadata.file_size.into());

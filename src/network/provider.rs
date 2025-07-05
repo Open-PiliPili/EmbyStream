@@ -4,7 +4,13 @@
 //! including request building, sending, and plugin integration.
 
 use once_cell::sync::Lazy;
-use reqwest::{Client, Method};
+use reqwest::{
+    Client,
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Method,
+    Response,
+    Error
+};
 
 use crate::{
     network::{
@@ -72,7 +78,7 @@ impl NetworkProvider {
     pub async fn send_request<T: NetworkTarget>(
         &self,
         target: &T,
-    ) -> Result<reqwest::Response, reqwest::Error> {
+    ) -> Result<Response, Error> {
         let url = format!(
             "{}/{}",
             target.base_url().trim_end_matches('/'),
@@ -89,11 +95,14 @@ impl NetworkProvider {
             &url,
         );
 
-        if let Some(headers) = target.headers() {
-            let mut header_map = reqwest::header::HeaderMap::new();
+        if !target.headers().is_empty() {
+            let headers = target.headers();
+            let mut header_map = HeaderMap::new();
             for (key, value) in headers {
-                if let Ok(value) = value.parse() {
-                    header_map.insert(key, value);
+                if let Ok(header_name) = key.parse::<HeaderName>() {
+                    if let Ok(header_value) = value.parse::<HeaderValue>() {
+                        header_map.insert(header_name, header_value);
+                    }
                 }
             }
             request = request.headers(header_map);

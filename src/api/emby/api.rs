@@ -80,14 +80,14 @@ impl NetworkTarget for API {
         }
     }
 
-    fn headers(&self) -> Option<Vec<(&'static str, String)>> {
+    fn headers(&self) -> Vec<(String, String)> {
         let sys_info = SystemInfo::new();
         let base_url = StringUtil::trim_trailing_slashes(&self.base_url).to_string();
-        Some(vec![
-            ("accept", "application/json".to_string()),
-            ("origin", base_url.clone()),
-            ("referer", format!("{}/", base_url)),
-            ("user-agent", sys_info.get_user_agent()),
-        ])
+        vec![
+            ("accept".into(), "application/json".into()),
+            ("origin".into(), base_url.clone()),
+            ("referer".into(), format!("{}/", base_url)),
+            ("user-agent".into(), sys_info.get_user_agent()),
+        ]
     }
 }

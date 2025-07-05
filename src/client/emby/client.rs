@@ -5,7 +5,6 @@ use crate::{
 };
 
 pub struct Client {
-    #[allow(dead_code)]
     provider: NetworkProvider,
 }
 

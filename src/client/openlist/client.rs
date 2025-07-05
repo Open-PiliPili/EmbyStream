@@ -1,5 +1,5 @@
 use crate::{
-    api::alist::{API, LinkResponse, FileResponse, LinkData},
+    api::openlist::{API, LinkResponse, FileResponse, LinkData},
     client::BuildableClient,
     network::{NetworkPlugin, NetworkProvider},
 };

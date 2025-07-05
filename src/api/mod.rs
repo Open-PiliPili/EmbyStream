@@ -1,6 +1,7 @@
-pub mod alist;
+pub mod openlist;
 pub mod emby;
 pub mod telegram;
+pub mod download;
 
 pub use emby::{
     API as EmbyAPI, Operation as EmbyOperation,
@@ -13,7 +14,9 @@ pub use telegram::{
     response::{MessageResult, Response},
 };
 
-pub use alist::{
-    API as AlistAPI, Operation as AlistOperation,
+pub use openlist::{
+    API as OpenListAPI, Operation as OpenListOperation,
     response::{FileData, FileResponse, LinkData, LinkResponse},
 };
+
+pub use download::API as DownloadAPI;

@@ -1,5 +1,5 @@
 use crate::{
-    api::alist::Operation,
+    api::openlist::Operation,
     network::{HttpMethod, NetworkTarget, NetworkTask},
     system::SystemInfo
 };
@@ -95,14 +95,14 @@ impl NetworkTarget for API {
     /// - Standard JSON content type headers
     /// - Authentication token
     /// - User agent string
-    fn headers(&self) -> Option<Vec<(&'static str, String)>> {
+    fn headers(&self) -> Vec<(String, String)> {
         let sys_info = SystemInfo::new();
-        Some(vec![
-            ("accept", "application/json, text/plain, */*".to_string()),
-            ("authorization", self.token.clone()),
-            ("cache-control", "no-cache".to_string()),
-            ("content-type", "application/json;charset=UTF-8".to_string()),
-            ("user-agent", sys_info.get_user_agent()),
-        ])
+        vec![
+            ("accept".into(), "application/json, text/plain, */*".into()),
+            ("authorization".into(), self.token.clone()),
+            ("cache-control".into(), "no-cache".into()),
+            ("content-type".into(), "application/json;charset=UTF-8".into()),
+            ("user-agent".into(), sys_info.get_user_agent()),
+        ]
     }
 }

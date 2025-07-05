@@ -1,6 +1,7 @@
 use std::io::Error as IoError;
 
 use hyper::http::{Error as HttpError, uri::InvalidUri};
+use reqwest::Error as ReqwestError;
 use thiserror::Error;
 
 /// Custom error type for configuration operations.
@@ -14,4 +15,7 @@ pub enum Error {
 
     #[error("Failed to build HTTP response: {0}")]
     HttpError(#[from] HttpError),
+
+    #[error("Remote request failed: {0}")]
+    ReqwestError(#[from] ReqwestError),
 }
