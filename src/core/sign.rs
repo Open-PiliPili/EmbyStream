@@ -1,22 +1,24 @@
 use std::{
     collections::HashMap,
-    time::Instant,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
-use serde::Deserialize;
+use hyper::Uri;
+use serde::{Deserialize, Serialize};
 
-use crate::crypto::{
-    Crypto,
-    CryptoInput,
-    CryptoOutput,
-};
-use crate::{STREAM_LOGGER_DOMAIN, info_log};
 use crate::backend::proxy_mode::ProxyMode;
+use crate::uri_serde;
 
 #[derive(Debug, Deserialize)]
 pub struct SignParams {
     #[serde(default)]
     pub(crate) sign: String,
+
+    #[serde(default)]
+    pub(crate) item_id: String,
+
+    #[serde(default)]
+    pub(crate) media_source_id: String,
 
     #[serde(default)]
     pub(crate) proxy_mode: ProxyMode,
@@ -25,54 +27,66 @@ pub struct SignParams {
 impl Default for SignParams {
     fn default() -> Self {
         Self {
-            sign: "".to_string(),
+            sign: "".into(),
+            item_id: "".into(),
+            media_source_id: "".into(),
             proxy_mode: ProxyMode::default(),
         }
     }
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Sign {
-    item_id: Option<String>,
-    media_source_id: Option<String>,
-    expired_at: Option<u64>,
-}
-
-impl Default for Sign {
-    fn default() -> Self {
-        Self::new(None, None, None)
-    }
+    #[serde(with = "uri_serde", default)]
+    pub uri: Option<Uri>,
+    #[serde(default)]
+    pub expired_at: Option<u64>,
 }
 
 impl Sign {
-    pub fn new(
-        item_id: Option<String>,
-        media_source_id: Option<String>,
-        expired_at: Option<u64>,
-    ) -> Self {
-        Self {
-            item_id,
-            media_source_id,
-            expired_at,
+    pub fn new(uri: Option<Uri>, expired_at: Option<u64>) -> Self {
+        Self { uri, expired_at }
+    }
+
+    pub fn from_map(map: &HashMap<String, String>) -> Self {
+        serde_json::from_value(serde_json::json!(map)).unwrap_or_default()
+    }
+
+    pub fn to_map(&self) -> HashMap<String, String> {
+        let value = serde_json::to_value(self).unwrap_or_default();
+        serde_json::from_value(value).unwrap_or_default()
+    }
+
+    pub fn is_valid(&self) -> bool {
+        let Some(expired_at) = self.expired_at else {
+            return false;
+        };
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        if now >= expired_at + 300 {
+            return false;
         }
+
+        let Some(uri) = &self.uri else {
+            return false;
+        };
+
+        !uri.to_string().is_empty()
     }
 
-    pub fn decrypt_with(string: impl Into<String>) -> Self {
-        // TODO: implement this function later
-        info_log!(
-            STREAM_LOGGER_DOMAIN,
-            "Ready decrypt with {}",
-            string.into()
-        );
-        Self::default()
-    }
+    pub fn is_local(&self) -> bool {
+        let Some(uri) = &self.uri else {
+            return false;
+        };
 
-    pub fn encrypt_self() -> String {
-        // TODO: implement this function later
-        "".to_string()
-    }
+        if let Some(scheme) = uri.scheme_str() {
+            return scheme == "file";
+        }
 
-    pub fn convert_to_dict() -> HashMap<String, String> {
-        // TODO: implement this function later
-        HashMap::new()
+        uri.host().is_none() && uri.path().starts_with('/')
     }
 }

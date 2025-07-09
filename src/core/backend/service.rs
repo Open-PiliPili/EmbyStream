@@ -1,19 +1,19 @@
-use std::{
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
-use hyper::{HeaderMap, StatusCode, header, Uri};
-use serde_urlencoded as urlencoded;
+use hyper::{HeaderMap, StatusCode, Uri, header};
 
 use super::{
     error::Error as AppStreamError, local_streamer::LocalStreamer, proxy_mode::ProxyMode,
     redirect_info::RedirectInfo, remote_streamer::RemoteStreamer,
     request::Request as AppStreamRequest, result::Result as AppStreamResult, source::Source,
 };
-use crate::sign::{SignParams, Sign};
 use crate::{AppState, STREAM_LOGGER_DOMAIN, info_log};
+use crate::{
+    CryptoInput, CryptoOperation, CryptoOutput,
+    crypto::Crypto,
+    sign::{Sign, SignParams},
+};
 
 #[async_trait]
 pub trait StreamService: Send + Sync {
@@ -33,25 +33,67 @@ impl AppStreamService {
         Self { state, user_agent }
     }
 
-    fn decrypt_and_route(&self, request: &AppStreamRequest) -> Result<Source, AppStreamError> {
-        let params = request.uri.query()
+    async fn decrypt_and_route(
+        &self,
+        request: &AppStreamRequest,
+    ) -> Result<Source, AppStreamError> {
+        let params = request
+            .uri
+            .query()
             .and_then(|query| serde_urlencoded::from_str::<SignParams>(query).ok())
             .unwrap_or_default();
 
         if params.sign.is_empty() {
-            return Err(AppStreamError::InvalidSignature);
+            return Err(AppStreamError::EmptySignature);
         }
 
-        // TODO: parse sign later
-        let _ = Sign::decrypt_with(params.sign);
+        let sign = self.decrypt(params.sign.as_str(), &params).await?;
 
-        if request.is_local() {
-            Ok(Source::Local(PathBuf::from(request.uri.to_string())))
+        if !sign.is_valid() {
+            return Err(AppStreamError::ExpiredStream);
+        }
+
+        let uri = sign.uri.clone().ok_or(AppStreamError::InvalidUri)?;
+
+        if sign.is_local() {
+            Ok(Source::Local(PathBuf::from(uri.to_string())))
         } else {
             Ok(Source::Remote {
-                url: request.uri.clone(),
+                url: uri,
                 mode: params.proxy_mode,
             })
+        }
+    }
+
+    fn decrypt_key(&self, params: &SignParams) -> Result<String, AppStreamError> {
+        if params.item_id.is_empty() || params.media_source_id.is_empty() {
+            return Err(AppStreamError::InvalidMediaSource);
+        }
+
+        let key = format!("{}:{}", params.item_id, params.media_source_id);
+        Ok(key)
+    }
+
+    async fn decrypt(&self, sign: &str, params: &SignParams) -> Result<Sign, AppStreamError> {
+        let decrypt_cache = self.state.get_decrypt_cache().await;
+
+        let cache_key = self.decrypt_key(params)?;
+
+        if let Some(sign) = decrypt_cache.get(&cache_key) {
+            return Ok(sign);
+        }
+
+        let crypto_result = Crypto::execute(
+            CryptoOperation::Decrypt,
+            CryptoInput::Encrypted(sign.to_string()),
+            "key", // TODO: Replace with real key
+            "iv",  // TODO: Replace with real IV
+        )
+        .map_err(AppStreamError::CommonError)?;
+
+        match crypto_result {
+            CryptoOutput::Encrypted(_) => Err(AppStreamError::InvalidEncryptedSignature),
+            CryptoOutput::Dictionary(sign_map) => Ok(Sign::from_map(&sign_map)),
         }
     }
 
@@ -83,7 +125,8 @@ impl StreamService for AppStreamService {
     ) -> Result<AppStreamResult, StatusCode> {
         let source = self
             .decrypt_and_route(&request)
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
+            .await
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
         info_log!(STREAM_LOGGER_DOMAIN, "Routing stream source: {:?}", source);
 
         match source {
@@ -94,7 +137,7 @@ impl StreamService for AppStreamService {
                     request.content_range(),
                     request.request_start_time,
                 )
-                    .await
+                .await
             }
             Source::Remote { url, mode } => match mode {
                 ProxyMode::Redirect => {
@@ -107,7 +150,8 @@ impl StreamService for AppStreamService {
                         url,
                         self.user_agent.clone(),
                         &request.original_headers,
-                    ).await
+                    )
+                    .await
                 }
             },
         }
