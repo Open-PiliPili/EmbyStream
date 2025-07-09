@@ -4,19 +4,19 @@ use crate::{
     system::SystemInfo
 };
 
-/// Represents Alist API endpoints with their respective parameters.
+/// Represents OpenList API endpoints with their respective parameters.
 #[derive(Debug, Clone)]
 pub struct API {
-    /// The base URL for the Alist server (e.g., "http://127.0.0.1:5244").
+    /// The base URL for the OpenList server (e.g., "http://127.0.0.1:5244").
     url: String,
-    /// The token for authenticating with the Alist server.
+    /// The token for authenticating with the OpenList server.
     token: String,
     /// The specific API operation (e.g., FsGet).
     operation: Operation,
 }
 
 impl API {
-    /// Constructs a new `AlistAPI` instance for fetching file information.
+    /// Constructs a new `OpenListAPI` instance for fetching file information.
     pub fn fs_get(
         url: impl Into<String>,
         token: impl Into<String>,
@@ -43,7 +43,7 @@ impl API {
 }
 
 impl NetworkTarget for API {
-    /// Gets the base URL for Alist API requests.
+    /// Gets the base URL for OpenList API requests.
     ///
     /// Ensures the URL ends with a trailing slash, if not already present.
     fn base_url(&self) -> String {
@@ -62,7 +62,7 @@ impl NetworkTarget for API {
         }
     }
 
-    /// Gets the HTTP method for the request (always POST for Alist fs/get).
+    /// Gets the HTTP method for the request (always POST for OpenList fs/get).
     fn method(&self) -> HttpMethod {
         HttpMethod::Post
     }
@@ -89,7 +89,7 @@ impl NetworkTarget for API {
         }
     }
 
-    /// Gets the default headers for Alist API requests.
+    /// Gets the default headers for OpenList API requests.
     ///
     /// Includes:
     /// - Standard JSON content type headers

@@ -2,7 +2,7 @@
 # Log level for the application (e.g., "info", "debug", "error")
 log_level = "info"
 
-# Backend type for media streaming: "disk", "direct_link", or "alist"
+# Backend type for media streaming: "disk", "direct_link", or "openlist"
 backend_type = "disk"
 
 # At least 6-byte key for AES-128 encryption
@@ -46,12 +46,12 @@ storage_base_path = ""
 # Example: /mnt/media/ -> /mnt2/media/
 path_replace_rule_regex = ""
 
-[AList]
-# AList server base URL
-base_url = "https://your.alist.server"
+[OpenList]
+# OpenList server base URL
+base_url = "https://your.openlist.server"
 
-# AList authentication token
-token = "your_alist_token"
+# OpenList authentication token
+token = "your_openlist_token"
 
 # Path replace rule (regex, optional, default: "")
 # Example: /d/dc3zoccczdbjyx5da -> ''

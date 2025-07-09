@@ -56,7 +56,7 @@ impl fmt::Display for LinkData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "AlistLinkData {{ url: {}, header: {:?} }}",
+            "OpenListLinkData {{ url: {}, header: {:?} }}",
             self.url, self.header
         )
     }

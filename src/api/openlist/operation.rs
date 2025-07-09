@@ -1,4 +1,4 @@
-/// Alist API operation enum.
+/// OpenList API operation enum.
 #[derive(Debug, Clone)]
 pub enum Operation {
     /// Fetch file information for a given path.

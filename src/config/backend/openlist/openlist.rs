@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::util::privacy::Privacy;
 
-/// Configuration for the AList backend.
+/// Configuration for the OpenList backend.
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
     pub base_url: String,
@@ -18,7 +18,7 @@ impl fmt::Display for Config {
         let privacy = Privacy::new();
         write!(
             f,
-            "AListConfig {{ base_url: {}, token: {}, path_replace_rule_regex: {} }}",
+            "OpenListConfig {{ base_url: {}, token: {}, path_replace_rule_regex: {} }}",
             self.base_url,
             privacy.desensitize(&self.token),
             self.path_replace_rule_regex

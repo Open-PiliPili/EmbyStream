@@ -90,7 +90,7 @@ impl Config {
         // Validate backend configuration
         match (&config.backend, &config.general.backend_type) {
             (Some(BackendConfig::Disk(_)), BackendType::Disk)
-            | (Some(BackendConfig::AList(_)), BackendType::AList)
+            | (Some(BackendConfig::OpenList(_)), BackendType::OpenList)
             | (Some(BackendConfig::DirectLink(_)), BackendType::DirectLink) => {
                 // Valid configuration
             }

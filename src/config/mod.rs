@@ -4,7 +4,7 @@ pub mod frontened;
 pub mod general;
 
 pub use backend::{
-    BackendConfig, BackendType, alist::Config as AlistConfig, direct::Config as DirectLinkConfig,
+    BackendConfig, BackendType, openlist::Config as OpenListConfig, direct::Config as DirectLinkConfig,
     disk::Config as DiskConfig,
 };
 pub use frontened::FrontendConfig;
