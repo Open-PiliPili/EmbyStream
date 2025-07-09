@@ -1,4 +1,3 @@
-pub mod error;
 pub mod stream;
 pub mod local_streamer;
 pub mod proxy_mode;
@@ -11,4 +10,4 @@ pub mod service;
 pub mod source;
 mod chunk_stream;
 
-pub use error::Error as AppStreamError;
+pub use crate::core::error::Error as AppStreamError;

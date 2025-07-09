@@ -296,6 +296,7 @@ dependencies = [
  "lazy_static",
  "moka",
  "once_cell",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

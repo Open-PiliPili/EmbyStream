@@ -4,13 +4,14 @@ use async_trait::async_trait;
 use hyper::{HeaderMap, StatusCode, Uri, header};
 
 use super::{
-    error::Error as AppStreamError, local_streamer::LocalStreamer, proxy_mode::ProxyMode,
-    redirect_info::RedirectInfo, remote_streamer::RemoteStreamer,
-    request::Request as AppStreamRequest, result::Result as AppStreamResult, source::Source,
+    local_streamer::LocalStreamer, proxy_mode::ProxyMode, redirect_info::RedirectInfo,
+    remote_streamer::RemoteStreamer, request::Request as AppStreamRequest,
+    result::Result as AppStreamResult, source::Source,
 };
 use crate::{AppState, STREAM_LOGGER_DOMAIN, info_log};
 use crate::{
     CryptoInput, CryptoOperation, CryptoOutput,
+    core::error::Error as AppStreamError,
     crypto::Crypto,
     sign::{Sign, SignParams},
 };

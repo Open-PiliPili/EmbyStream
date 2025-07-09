@@ -16,4 +16,8 @@ pub enum Error {
     InvalidUri,
     #[error("Expired stream")]
     ExpiredStream,
+    #[error("Encrypted signature failed")]
+    EncryptSignatureFailed,
+    #[error("System time error: {0}")]
+    SystemTimeError(#[from] std::time::SystemTimeError),
 }
