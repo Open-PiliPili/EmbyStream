@@ -84,7 +84,7 @@ impl Sign {
         };
 
         if let Some(scheme) = uri.scheme_str() {
-            return scheme == "file";
+            return scheme.to_lowercase() == "file";
         }
 
         uri.host().is_none() && uri.path().starts_with('/')
