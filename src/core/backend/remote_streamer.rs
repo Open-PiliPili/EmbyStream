@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use futures_util::StreamExt;
+use futures_util::TryStreamExt;
 use http_body_util::{BodyExt, StreamBody};
 use hyper::{body::Frame, header, HeaderMap, StatusCode, Uri};
 
@@ -34,7 +34,8 @@ impl RemoteStreamer {
         let mut headers_to_forward = headers.clone();
         headers_to_forward.remove(header::HOST);
 
-        let forwarded_headers = Self::header_map_to_option_hashmap(headers);
+        let forwarded_headers = Self::header_map_to_option_hashmap(&headers_to_forward)
+            .filter(|h| !h.is_empty());
         let remote_response = client
             .download(url.to_string(), user_agent, forwarded_headers)
             .await
@@ -52,10 +53,8 @@ impl RemoteStreamer {
 
         let stream = remote_response
             .bytes_stream()
-            .map(|res| {
-                res.map(Frame::data)
-                    .map_err(|e| e.into())
-            });
+            .map_ok(Frame::data)
+            .map_err(Into::into);
 
         Ok(AppStreamResult::Stream(Response {
             status: response_status,

@@ -86,8 +86,8 @@ impl LocalStreamer {
 
         let limited_reader = file.take(len);
         let stream = AdaptiveChunkStream::new(limited_reader, start_time)
-            .map(|res| res.map(Frame::data))
-            .map_err(|e| e.into());
+            .map_ok(Frame::data)
+            .map_err(Into::into);
 
         let mut headers = HeaderMap::new();
         let content_type = get_content_type(file_metadata.format.as_str());
@@ -125,8 +125,8 @@ impl LocalStreamer {
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         let stream = AdaptiveChunkStream::new(file, start_time)
-            .map(|res| res.map(Frame::data))
-            .map_err(|e| e.into());
+            .map_ok(Frame::data)
+            .map_err(Into::into);
 
         let mut headers = HeaderMap::new();
         let content_type = get_content_type(file_metadata.format.as_str());
