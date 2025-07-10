@@ -36,11 +36,9 @@ impl AppForwardService {
     }
 
     pub async fn get_signed_url(&self, forward_info: &ForwardInfo) -> Result<Uri, AppForwardError> {
-        let sign_value = self.encrypt_sign(forward_info).await?;
+        let sign_value = self.get_encrypt_sign(forward_info).await?;
         let proxy_mode = self.get_proxy_mode();
-
         let query_params = [("sign", sign_value), ("proxy_mode", proxy_mode.into())];
-
         let backend_base_url = self.get_backend_base_url();
         let backend_forward_path = self.get_backend_forward_path();
 
@@ -58,7 +56,7 @@ impl AppForwardService {
         url_str.parse().map_err(|_| AppForwardError::InvalidUri)
     }
 
-    async fn encrypt_sign(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
+    async fn get_encrypt_sign(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
         let encrypt_map = self.get_sign(params).await?.to_map();
         let crypto_result = Crypto::execute(
             CryptoOperation::Encrypt,
@@ -86,11 +84,13 @@ impl AppForwardService {
         let uri = path.parse().map_err(|_| AppForwardError::InvalidUri)?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         let expired_at = now + self.get_expired_seconds();
-
-        Ok(Sign {
+        let sign = Sign {
             uri: Some(uri),
             expired_at: Some(expired_at),
-        })
+        };
+        encrypt_cache.insert(cache_key, sign.clone());
+
+        Ok(sign)
     }
 
     fn reparse_if_strm(&self, path: &str) -> Result<String, AppForwardError> {
