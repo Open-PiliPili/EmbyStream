@@ -1,20 +1,25 @@
 use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
-use hyper::{HeaderMap, StatusCode, Uri, header};
+use hyper::{header, HeaderMap, StatusCode, Uri};
 
 use super::{
     local_streamer::LocalStreamer, proxy_mode::ProxyMode, redirect_info::RedirectInfo,
-    remote_streamer::RemoteStreamer, request::Request as AppStreamRequest,
+    remote_streamer::RemoteStreamer,
     result::Result as AppStreamResult, source::Source,
 };
-use crate::{AppState, STREAM_LOGGER_DOMAIN, info_log};
+use crate::{error_log, info_log, AppState, STREAM_LOGGER_DOMAIN};
 use crate::{
-    CryptoInput, CryptoOperation, CryptoOutput,
-    core::error::Error as AppStreamError,
+    core::{
+        error::Error as AppStreamError,
+        request::Request as AppStreamRequest
+    },
     crypto::Crypto,
     sign::{Sign, SignParams},
     util::StringUtil,
+    CryptoInput,
+    CryptoOperation,
+    CryptoOutput,
 };
 
 #[async_trait]
@@ -72,8 +77,8 @@ impl AppStreamService {
             return Err(AppStreamError::InvalidEncryptedSignature);
         }
 
-        let key = StringUtil::md5(params.sign.to_lowercase().as_str());
-        Ok(key)
+        let input = params.sign.to_lowercase();
+        Ok(StringUtil::md5(&input))
     }
 
     async fn decrypt(&self, sign: &str, params: &SignParams) -> Result<Sign, AppStreamError> {
@@ -128,7 +133,10 @@ impl StreamService for AppStreamService {
         let source = self
             .decrypt_and_route(&request)
             .await
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
+            .map_err(|e| {
+                error_log!("Routing stream error: {:?}", e);
+                StatusCode::BAD_REQUEST
+            })?;
         info_log!(STREAM_LOGGER_DOMAIN, "Routing stream source: {:?}", source);
 
         match source {

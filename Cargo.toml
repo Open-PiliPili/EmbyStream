@@ -55,3 +55,4 @@ tracing-subscriber = { version = "0.3.19", features = [
     "json"
 ] }
 uuid = { version = "1.17.0", features = ["v4"] }
+url = "2.5.4"

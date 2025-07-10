@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use hyper::{Response, StatusCode};
-
+use crate::core::request::Request as AppStreamRequest;
 use super::{
-    request::Request as AppStreamRequest, result::Result as AppStreamResult, service::StreamService,
+    result::Result as AppStreamResult, service::StreamService,
 };
 use crate::gateway::{
     chain::{Middleware, Next},

@@ -3,44 +3,61 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use reqwest::Url;
+use async_trait::async_trait;
+use http_serde::http::StatusCode;
+use hyper::Uri;
 
 use super::types::ForwardInfo;
-use crate::{AppState, core::error::Error as AppForwardError};
-use crate::{CryptoInput, CryptoOperation, CryptoOutput, crypto::Crypto, sign::Sign};
+use crate::{
+    core::{
+        error::Error as AppForwardError,
+        request::Request as AppForwardRequest,
+    },
+    util::StringUtil
+};
+use crate::{AppState, CryptoInput, CryptoOperation, CryptoOutput, crypto::Crypto, sign::Sign};
 
-pub struct ForwardService {
+#[async_trait]
+pub trait ForwardService: Send + Sync {
+    async fn handle_request(
+        &self,
+        request: AppForwardRequest,
+    ) -> Result<Uri, StatusCode>;
+}
+
+pub struct AppForwardService {
     state: Arc<AppState>,
 }
 
-impl ForwardService {
+impl AppForwardService {
     pub fn new(state: Arc<AppState>) -> Self {
         Self { state }
     }
 
-    pub async fn get_signed_url(&self, forward_info: &ForwardInfo) -> Result<Url, AppForwardError> {
+    pub async fn get_signed_url(&self, forward_info: &ForwardInfo) -> Result<Uri, AppForwardError> {
         let sign_value = self.encrypt_sign(forward_info).await?;
         let proxy_mode = self.get_proxy_mode();
-        let item_id = forward_info.clone().item_id;
-        let media_source_id = forward_info.clone().media_source_id;
 
         let query_params = [
             ("sign", sign_value),
-            ("item_id", item_id.into()),
-            ("media_source_id", media_source_id.into()),
             ("proxy_mode", proxy_mode.into()),
         ];
 
         let backend_base_url = self.get_backend_base_url();
         let backend_forward_path = self.get_backend_forward_path();
 
-        let final_url = Url::parse_with_params(
-            &format!("{}/{}", backend_base_url, backend_forward_path),
-            &query_params,
-        )
-        .map_err(|_| AppForwardError::InvalidUri)?;
+        let url_str = format!(
+            "{}/{}?{}",
+            backend_base_url,
+            backend_forward_path,
+            query_params.iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<_>>()
+                .join("&")
+        );
 
-        Ok(final_url)
+        url_str.parse()
+            .map_err(|_| AppForwardError::InvalidUri)
     }
 
     async fn encrypt_sign(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
@@ -88,8 +105,10 @@ impl ForwardService {
             return Err(AppForwardError::InvalidMediaSource);
         }
 
-        let key = format!("{}:{}", params.item_id, params.media_source_id);
-        Ok(key)
+        let input = format!("{}:{}", params.item_id, params.media_source_id)
+            .to_lowercase();
+
+        Ok(StringUtil::md5(&input))
     }
 
     fn get_expired_seconds(&self) -> u64 {
@@ -110,5 +129,12 @@ impl ForwardService {
     fn get_proxy_mode(&self) -> &str {
         // TODO: implement by state config later
         "proxy"
+    }
+}
+
+#[async_trait]
+impl ForwardService for AppForwardService {
+    async fn handle_request(&self, request: AppForwardRequest) -> Result<Uri, StatusCode> {
+        todo!("implement forward service later")
     }
 }
