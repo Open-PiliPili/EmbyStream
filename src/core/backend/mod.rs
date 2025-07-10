@@ -7,3 +7,4 @@ pub mod result;
 pub mod service;
 pub mod source;
 pub mod stream;
+pub mod types;

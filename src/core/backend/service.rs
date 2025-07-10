@@ -2,10 +2,11 @@ use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use hyper::{HeaderMap, StatusCode, Uri, header};
-
+use once_cell::sync::OnceCell;
 use super::{
     local_streamer::LocalStreamer, proxy_mode::ProxyMode, remote_streamer::RemoteStreamer,
     result::Result as AppStreamResult, source::Source,
+    types::BackendConfig
 };
 use crate::core::redirect_info::RedirectInfo;
 use crate::{AppState, STREAM_LOGGER_DOMAIN, error_log, info_log};
@@ -27,12 +28,17 @@ pub trait StreamService: Send + Sync {
 
 pub struct AppStreamService {
     pub state: Arc<AppState>,
+    pub config: OnceCell<BackendConfig>,
     pub user_agent: Option<String>,
 }
 
 impl AppStreamService {
     pub fn new(state: Arc<AppState>, user_agent: Option<String>) -> Self {
-        Self { state, user_agent }
+        Self {
+            state,
+            config: OnceCell::new(),
+            user_agent
+        }
     }
 
     async fn decrypt_and_route(
@@ -61,7 +67,7 @@ impl AppStreamService {
             Ok(Source::Local(PathBuf::from(uri.to_string())))
         } else {
             Ok(Source::Remote {
-                url: uri,
+                uri,
                 mode: params.proxy_mode,
             })
         }
@@ -97,6 +103,10 @@ impl AppStreamService {
             CryptoOutput::Encrypted(_) => Err(AppStreamError::InvalidEncryptedSignature),
             CryptoOutput::Dictionary(sign_map) => Ok(Sign::from_map(&sign_map)),
         }
+    }
+
+    fn get_backend_config(&self) -> &BackendConfig {
+        todo!("implement by app state later")
     }
 
     fn build_redirect_info(&self, url: Uri, original_headers: &HeaderMap) -> RedirectInfo {
@@ -141,15 +151,15 @@ impl StreamService for AppStreamService {
                 )
                 .await
             }
-            Source::Remote { url, mode } => match mode {
+            Source::Remote { uri, mode } => match mode {
                 ProxyMode::Redirect => {
-                    let redirect_info = self.build_redirect_info(url, &request.original_headers);
+                    let redirect_info = self.build_redirect_info(uri, &request.original_headers);
                     Ok(AppStreamResult::Redirect(redirect_info))
                 }
                 ProxyMode::Proxy => {
                     RemoteStreamer::stream(
                         self.state.clone(),
-                        url,
+                        uri,
                         self.user_agent.clone(),
                         &request.original_headers,
                     )

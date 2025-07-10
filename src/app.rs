@@ -8,6 +8,7 @@ pub struct AppState {
     file_cache: OnceCell<FileCache>,
     encrypt_cache: OnceCell<GeneralCache>,
     decrypt_cache: OnceCell<GeneralCache>,
+    strm_file_cache: OnceCell<GeneralCache>,
 }
 
 impl AppState {
@@ -16,6 +17,7 @@ impl AppState {
             file_cache: OnceCell::new(),
             encrypt_cache: OnceCell::new(),
             decrypt_cache: OnceCell::new(),
+            strm_file_cache: OnceCell::new(),
         }
     }
 
@@ -39,6 +41,15 @@ impl AppState {
 
     pub async fn get_decrypt_cache(&self) -> &GeneralCache {
         self.decrypt_cache
+            .get_or_init(|| async {
+                let cache = GeneralCache::new(256, 60 * 60);
+                cache
+            })
+            .await
+    }
+
+    pub async fn get_strm_file_cache(&self) -> &GeneralCache {
+        self.strm_file_cache
             .get_or_init(|| async {
                 let cache = GeneralCache::new(256, 60 * 60);
                 cache

@@ -20,4 +20,12 @@ pub enum Error {
     EncryptSignatureFailed,
     #[error("System time error: {0}")]
     SystemTimeError(#[from] std::time::SystemTimeError),
+    #[error("Invalid strm file")]
+    InvalidStrmFile,
+    #[error("Empty strm file")]
+    EmptyStrmFile,
+    #[error("Strm file too large")]
+    StrmFileTooLarge,
+    #[error("Strm file IO error: {0}")]
+    StrmFileIoError(String),
 }

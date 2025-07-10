@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use hyper::{Response, StatusCode};
 
 use super::{path_parser, service::ForwardService};
-use crate::{FORWARD_STREAMER_LOGGER_DOMAIN, info_log, debug_log};
+use crate::{FORWARD_LOGGER_DOMAIN, info_log, debug_log};
 use crate::{
     core::request::Request as AppForwardRequest,
     gateway::{
@@ -50,12 +50,12 @@ impl Middleware for ForwardMiddleware {
         match result {
             Ok(redirect_info) => {
                 info_log!(
-                    FORWARD_STREAMER_LOGGER_DOMAIN,
+                    FORWARD_LOGGER_DOMAIN,
                     "Redirecting forward to {:?}",
                     redirect_info.target_url
                 );
                 debug_log!(
-                    FORWARD_STREAMER_LOGGER_DOMAIN,
+                    FORWARD_LOGGER_DOMAIN,
                     "Redirecting forward headers {:?}",
                     redirect_info.final_headers.clone()
                 );
