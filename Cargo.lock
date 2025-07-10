@@ -294,6 +294,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "lazy_static",
+ "log",
  "md5",
  "moka",
  "once_cell",

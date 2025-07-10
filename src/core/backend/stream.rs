@@ -2,14 +2,16 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use hyper::{Response, StatusCode};
-use crate::core::request::Request as AppStreamRequest;
-use super::{
-    result::Result as AppStreamResult, service::StreamService,
-};
-use crate::gateway::{
-    chain::{Middleware, Next},
-    context::Context,
-    response::{BoxBodyType, ResponseBuilder},
+
+use super::{result::Result as AppStreamResult, service::StreamService};
+use crate::{REMOTE_STREAMER_LOGGER_DOMAIN, info_log, debug_log};
+use crate::{
+    core::request::Request as AppStreamRequest,
+    gateway::{
+        chain::{Middleware, Next},
+        context::Context,
+        response::{BoxBodyType, ResponseBuilder},
+    },
 };
 
 #[derive(Clone)]
@@ -52,9 +54,20 @@ impl Middleware for StreamMiddleware {
                     response
                 }
                 AppStreamResult::Redirect(redirect_info) => {
+                    info_log!(
+                        REMOTE_STREAMER_LOGGER_DOMAIN,
+                        "Redirecting backend to {:?}",
+                        redirect_info.target_url
+                    );
+                    debug_log!(
+                        REMOTE_STREAMER_LOGGER_DOMAIN,
+                        "Redirecting backend headers {:?}",
+                        redirect_info.final_headers.clone()
+                    );
                     ResponseBuilder::with_redirect(
                         redirect_info.target_url.to_string().as_str(),
-                        StatusCode::FOUND
+                        StatusCode::FOUND,
+                        Some(redirect_info.final_headers),
                     )
                 }
             },

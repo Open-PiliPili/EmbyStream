@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io, path::PathBuf, sync::Arc, time::Instant};
 
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::TryStreamExt;
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::{HeaderMap, StatusCode, header};
@@ -11,7 +11,7 @@ use super::{
     chunk_stream::AdaptiveChunkStream, response::Response, result::Result as AppStreamResult,
 };
 use crate::cache::FileMetadata;
-use crate::{AppState, cache::FileEntry, error_log, LOCAL_STREAMER_LOGGER_DOMAIN};
+use crate::{AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, error_log};
 
 pub(crate) struct LocalStreamer;
 

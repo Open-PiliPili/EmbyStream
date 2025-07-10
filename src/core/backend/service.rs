@@ -1,25 +1,20 @@
 use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
-use hyper::{header, HeaderMap, StatusCode, Uri};
+use hyper::{HeaderMap, StatusCode, Uri, header};
 
 use super::{
-    local_streamer::LocalStreamer, proxy_mode::ProxyMode, redirect_info::RedirectInfo,
-    remote_streamer::RemoteStreamer,
+    local_streamer::LocalStreamer, proxy_mode::ProxyMode, remote_streamer::RemoteStreamer,
     result::Result as AppStreamResult, source::Source,
 };
-use crate::{error_log, info_log, AppState, STREAM_LOGGER_DOMAIN};
+use crate::core::redirect_info::RedirectInfo;
+use crate::{AppState, STREAM_LOGGER_DOMAIN, error_log, info_log};
 use crate::{
-    core::{
-        error::Error as AppStreamError,
-        request::Request as AppStreamRequest
-    },
+    CryptoInput, CryptoOperation, CryptoOutput,
+    core::{error::Error as AppStreamError, request::Request as AppStreamRequest},
     crypto::Crypto,
     sign::{Sign, SignParams},
     util::StringUtil,
-    CryptoInput,
-    CryptoOperation,
-    CryptoOutput,
 };
 
 #[async_trait]
@@ -130,13 +125,10 @@ impl StreamService for AppStreamService {
         &self,
         request: AppStreamRequest,
     ) -> Result<AppStreamResult, StatusCode> {
-        let source = self
-            .decrypt_and_route(&request)
-            .await
-            .map_err(|e| {
-                error_log!("Routing stream error: {:?}", e);
-                StatusCode::BAD_REQUEST
-            })?;
+        let source = self.decrypt_and_route(&request).await.map_err(|e| {
+            error_log!("Routing stream error: {:?}", e);
+            StatusCode::BAD_REQUEST
+        })?;
         info_log!(STREAM_LOGGER_DOMAIN, "Routing stream source: {:?}", source);
 
         match source {

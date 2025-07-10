@@ -7,22 +7,23 @@ use async_trait::async_trait;
 use http_serde::http::StatusCode;
 use hyper::Uri;
 
-use super::types::ForwardInfo;
+use super::types::{ForwardInfo, PathParams};
+use crate::{AppState, CryptoInput, CryptoOperation, CryptoOutput, crypto::Crypto, sign::Sign};
 use crate::{
     core::{
-        error::Error as AppForwardError,
+        error::Error as AppForwardError, redirect_info::RedirectInfo,
         request::Request as AppForwardRequest,
     },
-    util::StringUtil
+    util::StringUtil,
 };
-use crate::{AppState, CryptoInput, CryptoOperation, CryptoOutput, crypto::Crypto, sign::Sign};
 
 #[async_trait]
 pub trait ForwardService: Send + Sync {
     async fn handle_request(
         &self,
         request: AppForwardRequest,
-    ) -> Result<Uri, StatusCode>;
+        path_params: PathParams,
+    ) -> Result<RedirectInfo, StatusCode>;
 }
 
 pub struct AppForwardService {
@@ -38,10 +39,7 @@ impl AppForwardService {
         let sign_value = self.encrypt_sign(forward_info).await?;
         let proxy_mode = self.get_proxy_mode();
 
-        let query_params = [
-            ("sign", sign_value),
-            ("proxy_mode", proxy_mode.into()),
-        ];
+        let query_params = [("sign", sign_value), ("proxy_mode", proxy_mode.into())];
 
         let backend_base_url = self.get_backend_base_url();
         let backend_forward_path = self.get_backend_forward_path();
@@ -50,14 +48,14 @@ impl AppForwardService {
             "{}/{}?{}",
             backend_base_url,
             backend_forward_path,
-            query_params.iter()
+            query_params
+                .iter()
                 .map(|(k, v)| format!("{}={}", k, v))
                 .collect::<Vec<_>>()
                 .join("&")
         );
 
-        url_str.parse()
-            .map_err(|_| AppForwardError::InvalidUri)
+        url_str.parse().map_err(|_| AppForwardError::InvalidUri)
     }
 
     async fn encrypt_sign(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
@@ -105,8 +103,7 @@ impl AppForwardService {
             return Err(AppForwardError::InvalidMediaSource);
         }
 
-        let input = format!("{}:{}", params.item_id, params.media_source_id)
-            .to_lowercase();
+        let input = format!("{}:{}", params.item_id, params.media_source_id).to_lowercase();
 
         Ok(StringUtil::md5(&input))
     }
@@ -134,7 +131,11 @@ impl AppForwardService {
 
 #[async_trait]
 impl ForwardService for AppForwardService {
-    async fn handle_request(&self, request: AppForwardRequest) -> Result<Uri, StatusCode> {
+    async fn handle_request(
+        &self,
+        request: AppForwardRequest,
+        path_params: PathParams,
+    ) -> Result<RedirectInfo, StatusCode> {
         todo!("implement forward service later")
     }
 }
