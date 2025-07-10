@@ -14,6 +14,7 @@ use crate::{
     core::error::Error as AppStreamError,
     crypto::Crypto,
     sign::{Sign, SignParams},
+    util::StringUtil,
 };
 
 #[async_trait]
@@ -67,11 +68,11 @@ impl AppStreamService {
     }
 
     fn decrypt_key(&self, params: &SignParams) -> Result<String, AppStreamError> {
-        if params.item_id.is_empty() || params.media_source_id.is_empty() {
-            return Err(AppStreamError::InvalidMediaSource);
+        if params.sign.is_empty() {
+            return Err(AppStreamError::InvalidEncryptedSignature);
         }
 
-        let key = format!("{}:{}", params.item_id, params.media_source_id);
+        let key = StringUtil::md5(params.sign.to_lowercase().as_str());
         Ok(key)
     }
 
