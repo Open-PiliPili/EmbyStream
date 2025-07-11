@@ -52,24 +52,24 @@ impl AppForwardService {
     }
 
     fn get_emby_api_token(&self, request: &AppForwardRequest) -> String {
-        if let Some(q) = request.uri.query() {
-            for (k, v) in form_urlencoded::parse(q.as_bytes()) {
-                if ["api_key", "x-emby-token"]
-                    .iter()
-                    .any(|&s| k.eq_ignore_ascii_case(s))
-                {
-                    return v.into_owned();
-                }
-            }
+        if let Some(token) = request.uri.query().and_then(|q| {
+            form_urlencoded::parse(q.as_bytes())
+                .find(|(k, _)| {
+                    ["api_key", "X-Emby-Token"]
+                        .iter()
+                        .any(|&s| k.eq_ignore_ascii_case(s))
+                })
+                .map(|(_, v)| v.into_owned())
+        }) {
+            return token;
         }
 
         if let Some(token) = request
             .original_headers
-            .iter()
-            .find(|(name, _)| name.as_str().eq_ignore_ascii_case("x-emby-token"))
-            .and_then(|(_, value)| value.to_str().ok())
+            .get("X-Emby-Token")
+            .and_then(|v| v.to_str().ok())
         {
-            return token.to_string();
+            return token.to_owned();
         }
 
         self.get_forward_config().emby_api_key.clone()
