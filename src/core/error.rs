@@ -28,4 +28,10 @@ pub enum Error {
     StrmFileTooLarge,
     #[error("Strm file IO error: {0}")]
     StrmFileIoError(String),
+    #[error("Empty emby token")]
+    EmptyEmbyToken,
+    #[error("Emby path request error")]
+    EmbyPathRequestError,
+    #[error("Emby path parser error")]
+    EmbyPathParserError,
 }

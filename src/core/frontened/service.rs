@@ -18,10 +18,12 @@ use super::types::{ForwardConfig, ForwardInfo, PathParams};
 use crate::{AppState, CryptoInput, CryptoOperation, CryptoOutput, crypto::Crypto, sign::Sign};
 use crate::{FORWARD_LOGGER_DOMAIN, error_log, info_log};
 use crate::{
+    client::{ClientBuilder, EmbyClient},
     core::{
         error::Error as AppForwardError, redirect_info::RedirectInfo,
         request::Request as AppForwardRequest,
     },
+    network::CurlPlugin,
     util::StringUtil,
 };
 
@@ -45,14 +47,17 @@ impl AppForwardService {
     pub fn new(state: Arc<AppState>) -> Self {
         Self {
             state,
-            config: OnceCell::new()
+            config: OnceCell::new(),
         }
     }
 
     fn get_emby_api_token(&self, request: &AppForwardRequest) -> String {
         if let Some(q) = request.uri.query() {
             for (k, v) in form_urlencoded::parse(q.as_bytes()) {
-                if ["api_key", "x-emby-token"].iter().any(|&s| k.eq_ignore_ascii_case(s)) {
+                if ["api_key", "x-emby-token"]
+                    .iter()
+                    .any(|&s| k.eq_ignore_ascii_case(s))
+                {
                     return v.into_owned();
                 }
             }
@@ -73,8 +78,50 @@ impl AppForwardService {
     async fn get_forward_info(
         &self,
         path_params: &PathParams,
+        request: &AppForwardRequest,
     ) -> Result<ForwardInfo, AppForwardError> {
-        todo!("implement by emby api later")
+        let config = self.get_forward_config();
+        let emby_token = self.get_emby_api_token(request);
+        if emby_token.is_empty() {
+            return Err(AppForwardError::EmptyEmbyToken);
+        }
+
+        let emby_client = ClientBuilder::<EmbyClient>::new()
+            .with_plugin(CurlPlugin)
+            .build();
+
+        let playback_info = emby_client
+            .playback_info(
+                &config.emby_server_url,
+                &emby_token,
+                &path_params.item_id,
+                &path_params.media_source_id,
+            )
+            .await
+            .map_err(|e| {
+                error_log!(
+                    FORWARD_LOGGER_DOMAIN,
+                    "Failed to fetch playback info: {:?}",
+                    e
+                );
+                AppForwardError::EmbyPathRequestError
+            })?;
+
+        playback_info
+            .find_media_source_path_by_id(&path_params.media_source_id)
+            .map(|path| ForwardInfo {
+                item_id: path_params.item_id.clone(),
+                media_source_id: path_params.media_source_id.clone(),
+                path: path.to_string(),
+            })
+            .ok_or_else(|| {
+                error_log!(
+                    FORWARD_LOGGER_DOMAIN,
+                    "Media source not found: {}",
+                    path_params.media_source_id
+                );
+                AppForwardError::EmbyPathParserError
+            })
     }
 
     async fn get_signed_uri(&self, forward_info: &ForwardInfo) -> Result<Uri, AppForwardError> {
@@ -233,10 +280,13 @@ impl ForwardService for AppForwardService {
         request: AppForwardRequest,
         path_params: PathParams,
     ) -> Result<RedirectInfo, StatusCode> {
-        let forward_info = self.get_forward_info(&path_params).await.map_err(|e| {
-            error_log!(FORWARD_LOGGER_DOMAIN, "Routing forward info error: {:?}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+        let forward_info = self
+            .get_forward_info(&path_params, &request)
+            .await
+            .map_err(|e| {
+                error_log!(FORWARD_LOGGER_DOMAIN, "Routing forward info error: {:?}", e);
+                StatusCode::BAD_REQUEST
+            })?;
 
         let remote_uri = self.get_signed_uri(&forward_info).await.map_err(|e| {
             error_log!(

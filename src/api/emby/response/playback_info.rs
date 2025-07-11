@@ -9,6 +9,15 @@ pub struct PlaybackInfo {
     pub play_session_id: Option<String>,
 }
 
+impl PlaybackInfo {
+    pub fn find_media_source_path_by_id(&self, target_id: &str) -> Option<&str> {
+        self.media_sources
+            .iter()
+            .find(|source| source.id.as_deref() == Some(target_id))
+            .and_then(|source| source.path.as_deref())
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct MediaSource {
     #[serde(rename = "Protocol", default)]

@@ -91,11 +91,12 @@ impl AppStreamService {
             return Ok(sign);
         }
 
+        let config = self.get_backend_config();
         let crypto_result = Crypto::execute(
             CryptoOperation::Decrypt,
             CryptoInput::Encrypted(sign.to_string()),
-            "key", // TODO: Replace with real key
-            "iv",  // TODO: Replace with real IV
+            &config.crypto_key,
+            &config.crypto_iv,
         )
         .map_err(AppStreamError::CommonError)?;
 

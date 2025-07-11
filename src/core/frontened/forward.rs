@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hyper::{Response, StatusCode};
+use hyper::{Response, StatusCode, Uri};
+use once_cell::sync::Lazy;
+use regex::Regex;
+use url::form_urlencoded;
 
-use super::{path_parser, service::ForwardService};
-use crate::{FORWARD_LOGGER_DOMAIN, info_log, debug_log};
+use super::{service::ForwardService};
+use crate::frontened::types::PathParams;
+use crate::{FORWARD_LOGGER_DOMAIN, debug_log, info_log};
 use crate::{
     core::request::Request as AppForwardRequest,
     gateway::{
@@ -13,6 +17,11 @@ use crate::{
         response::{BoxBodyType, ResponseBuilder},
     },
 };
+
+static ITEM_ID_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^/(?:emby/)?videos/([a-zA-Z0-9_-]+)/(?:original|stream)(?:\.[a-zA-Z0-9]+)?$")
+        .expect("Invalid regex pattern")
+});
 
 #[derive(Clone)]
 pub struct ForwardMiddleware {
@@ -27,13 +36,35 @@ impl ForwardMiddleware {
             forward_service,
         }
     }
+
+    fn get_item_id(&self, path: &str) -> Option<String> {
+        ITEM_ID_REGEX
+            .captures(path)
+            .and_then(|caps| caps.get(2))
+            .map(|m| m.as_str().to_owned())
+    }
+
+    fn get_media_source_id(&self, uri: &Uri) -> String {
+        uri.query()
+            .and_then(|q| {
+                form_urlencoded::parse(q.as_bytes())
+                    .find(|(k, _)| k.eq_ignore_ascii_case("MediaSourceId"))
+                    .map(|(_, v)| v.into_owned())
+            })
+            .unwrap_or_default()
+    }
 }
 
 #[async_trait]
 impl Middleware for ForwardMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
-        let Some(path_params) = path_parser::parse_video_path(&ctx.path) else {
+        let Some(item_id) = self.get_item_id(&ctx.path) else {
             return next.run(ctx).await;
+        };
+
+        let path_params = PathParams {
+            item_id,
+            media_source_id: self.get_media_source_id(&ctx.uri),
         };
 
         let forward_request = AppForwardRequest {
