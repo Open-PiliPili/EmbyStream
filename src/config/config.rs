@@ -9,15 +9,14 @@ use directories::BaseDirs;
 use libc;
 use serde::Deserialize;
 
-use super::{cli::Cli, error::ConfigError};
+use super::error::ConfigError;
 use crate::config::{
-    backend::BackendConfig,
+    backend::{Backend, BackendConfig},
     frontend::Frontend,
     general::{General, UserAgent},
-    r#types::RawConfig,
+    types::RawConfig,
 };
-use crate::{CONFIG_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log};
-use crate::config::backend::Backend;
+use crate::{CONFIG_LOGGER_DOMAIN, cli::Cli, debug_log, error_log, info_log, warn_log};
 
 const CONFIG_DIR_NAME: &str = "embystream";
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -33,7 +32,7 @@ pub struct Config {
     pub user_agent: UserAgent,
     pub frontend: Frontend,
     pub backend: Backend,
-    pub backend_config: BackendConfig
+    pub backend_config: BackendConfig,
 }
 
 impl Config {
@@ -83,9 +82,14 @@ impl Config {
             "openlist" => BackendConfig::OpenList(raw_config.open_list.ok_or_else(|| {
                 ConfigError::InvalidBackendType(format!("{} backend not configured", "openlist"))
             })?),
-            "direct_link" => BackendConfig::DirectLink(raw_config.direct_link.ok_or_else(|| {
-                ConfigError::InvalidBackendType(format!("{} backend not configured", "direct_link"))
-            })?),
+            "direct_link" => {
+                BackendConfig::DirectLink(raw_config.direct_link.ok_or_else(|| {
+                    ConfigError::InvalidBackendType(format!(
+                        "{} backend not configured",
+                        "direct_link"
+                    ))
+                })?)
+            }
             other => return Err(ConfigError::InvalidBackendType(other.to_string())),
         };
 
