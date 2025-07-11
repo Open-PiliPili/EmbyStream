@@ -16,7 +16,11 @@ use crate::config::{
     general::{General, UserAgent},
     types::RawConfig,
 };
-use crate::{CONFIG_LOGGER_DOMAIN, cli::Cli, debug_log, error_log, info_log, warn_log};
+use crate::{
+    CONFIG_LOGGER_DOMAIN,
+    cli::{Cli, Commands},
+    debug_log, error_log, info_log, warn_log,
+};
 
 const CONFIG_DIR_NAME: &str = "embystream";
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -39,13 +43,19 @@ impl Config {
     pub fn load_or_init() -> Result<Self, ConfigError> {
         let cli = Cli::parse();
 
-        if let Some(path) = Self::find_config_path(cli.config)? {
-            info_log!(
-                CONFIG_LOGGER_DOMAIN,
-                "Loading config file at {}",
-                path.display()
-            );
-            return Self::load_from_path(&path);
+        if let Some(command) = cli.command {
+            match command {
+                Commands::Run(run_args) => {
+                    if let Some(path) = Self::find_config_path(run_args.config)? {
+                        info_log!(
+                            CONFIG_LOGGER_DOMAIN,
+                            "Loading config file at {}",
+                            path.display()
+                        );
+                        return Self::load_from_path(&path);
+                    }
+                }
+            }
         }
 
         let default_path = Self::get_default_config_path()?.join(CONFIG_FILE_NAME);

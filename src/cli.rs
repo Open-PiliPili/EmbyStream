@@ -1,11 +1,22 @@
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
+#[command(propagate_version = true)]
 pub struct Cli {
-    /// 指定配置文件的路径
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    Run(RunArgs),
+}
+
+#[derive(Parser, Debug)]
+pub struct RunArgs {
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<PathBuf>,
 }
