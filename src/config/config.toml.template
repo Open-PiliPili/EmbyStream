@@ -1,69 +1,78 @@
+# Application Configuration File
+# All values in this file are case-sensitive
+
 [General]
-# Log level for the application (e.g., "info", "debug", "error")
+# Application log level (options: "trace", "debug", "info", "warn", "error")
 log_level = "info"
 
-# Backend type for media streaming: "disk", "direct_link", or "openlist"
+# Memory usage profile (options: "low", "middle", "high")
+# - low: Minimal memory usage, reduced performance
+# - middle: Balanced memory and performance (recommended)
+# - high: Maximum performance, higher memory usage
+memory_mode = "middle"
+
+# Cache expiration time in seconds
+# - Default: 3600 (1 hour)
+# - Set to 0 to disable caching
+# - Recommended range: 300-86400 (5 minutes to 1 day)
+expired_seconds = 3600
+
+# Backend type for media streaming (options: "disk", "direct_link", "openlist")
 backend_type = "disk"
 
-# At least 6-byte key for AES-128 encryption
-encipher_key = "123456"
+# Encryption key for secure communications (6-16 bytes)
+# WARNING: Change this from the default value in production
+encipher_key = "change_this_to_a_secure_key"
 
-# Cache TTL in seconds for URL parsing results
-cache_ttl_seconds = 1800
+# Encryption iv for secure communications (6-16 bytes)
+# WARNING: Change this from the default value in production
+encipher_iv = "change_this_to_a_secure_iv"
 
-# API key for Swagger API authentication (auto-generated on first run if empty)
-api_key = ""
+# Emby server configuration
+emby_url = "http://127.0.0.1"  # Base URL of your Emby server
+emby_port = "8096"             # Port for Emby server
+emby_api_key = ""              # API key for Emby (leave empty if not using)
+
+[UserAgent]
+# UserAgent filtering mode (options: "allow", "deny", "none")
+mode = "allow"
+
+# List of allowed User-Agents (used when mode = "allow")
+# Example: allow_ua = ["Mozilla/5.0", "AppleWebKit"]
+allow_ua = []
+
+# List of denied User-Agents (used when mode = "deny")
+# Example: deny_ua = ["curl/7.68.0", "wget"]
+deny_ua = []
 
 [Frontend]
-# Port for the frontend server
-server_port = 60001
+# Frontend web server configuration
+listen_port = 60001  # Port for the frontend web interface
 
-# Emby server URL
-emby_url = "http://127.0.0.1:8096"
+# Backend-specific configurations
+# Only configure the section matching your chosen backend_type
 
-# Emby API key (optional)
-# emby_api_key = "your_emby_api_key"
-
-# Base path for local files (optional)
-# Example: /mnt/media/
-storage_base_path = ""
+[Backend]
+# Backend server configuration
+listen_port = 60002            # Port for the stream service
+base_url = "https://example.com" # Base URL for stream service
+path = "stream"                # Path component for stream URLs
+port = "443"                   # HTTPS port for stream service
+proxy_mode = "proxy"           # Backend proxy mode for media streaming (options: "proxy", "redirect")
 
 [Disk]
-# Port for the disk backend server
-listen_port = 60002
-
-# Stream service URL for disk backend
-stream_url = "https://your.stream.server"
-
-# Stream port for disk backend (default: "443")
-stream_port = "443"
-
-# Base path for local files (optional)
-# Example: /mnt/media/
-storage_base_path = ""
-
-# Path replace rule (regex, optional, default: "")
-# Example: /mnt/media/ -> /mnt2/media/
-path_replace_rule_regex = ""
+# Disk backend configuration - for local or mounted storage
+path_replace_rule_regex = ""   # Regex pattern for path rewriting (optional)
 
 [OpenList]
-# OpenList server base URL
-base_url = "https://your.openlist.server"
-
-# OpenList authentication token
-token = "your_openlist_token"
-
-# Path replace rule (regex, optional, default: "")
-# Example: /d/dc3zoccczdbjyx5da -> ''
-path_replace_rule_regex = ""
+# OpenList backend configuration
+base_url = "https://openlist.example.com" # OpenList server URL
+port = "443"                             # OpenList server port
+token = ""                               # Authentication token for OpenList
+user_agent = ""                          # Custom User-Agent for requests
+path_replace_rule_regex = ""             # Regex pattern for path rewriting (optional)
 
 [DirectLink]
-# Base URL for CDN direct links
-base_url = "https://your.directlink.server"
-
-# Stream port for direct links (default: "443")
-stream_port = "443"
-
-# Path replace rule (regex, optional, default: "")
-# Example: /d/dc3zoccczdbjyx5da -> ''
-path_replace_rule_regex = ""
+# DirectLink backend configuration - for CDN or direct streaming
+user_agent = ""                         # Custom User-Agent for requests
+path_replace_rule_regex = ""            # Regex pattern for path rewriting (optional)

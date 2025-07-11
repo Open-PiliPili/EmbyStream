@@ -14,8 +14,7 @@ pub struct PathParams {
 #[derive(Clone, Debug)]
 pub struct ForwardConfig {
     pub expired_seconds: u64,
-    pub backend_base_url: String,
-    pub backend_forward_path: String,
+    pub backend_url: String,
     pub proxy_mode: String,
     pub crypto_key: String,
     pub crypto_iv: String,

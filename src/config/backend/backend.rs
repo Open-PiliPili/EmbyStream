@@ -1,26 +1,41 @@
-use std::fmt;
-
+use hyper::Uri;
 use serde::Deserialize;
 
-use crate::config::backend::{
-    openlist::Config as OpenListConfig, direct::Config as DirectLinkConfig, disk::Config as DiskConfig,
-};
-
-/// Unified backend configuration.
-#[derive(Deserialize, Clone, Debug)]
-#[serde(tag = "type", content = "config")]
-pub enum BackendConfig {
-    Disk(DiskConfig),
-    OpenList(OpenListConfig),
-    DirectLink(DirectLinkConfig),
+#[derive(Clone, Debug, Deserialize)]
+pub struct Backend {
+    pub listen_port: u16,
+    pub base_url: String,
+    pub path: String,
+    pub port: String,
+    pub proxy_mode: String,
 }
 
-impl fmt::Display for BackendConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BackendConfig::Disk(config) => write!(f, "Disk({})", config),
-            BackendConfig::OpenList(config) => write!(f, "OpenList({})", config),
-            BackendConfig::DirectLink(config) => write!(f, "DirectLink({})", config),
-        }
+impl Backend {
+
+    pub fn uri(&self) -> Uri {
+        let scheme = if self.port == "443" { "https" } else { "http" };
+        let should_show_port = !(self.port == "443" || self.port == "80");
+        let clean_url = self.base_url
+            .trim_start_matches("//")
+            .trim_end_matches('/');
+
+        let uri_str = if should_show_port {
+            format!(
+                "{}://{}:{}/{}",
+                scheme,
+                clean_url,
+                self.port,
+                self.path.trim_start_matches('/')
+            )
+        } else {
+            format!(
+                "{}://{}/{}",
+                scheme,
+                clean_url,
+                self.path.trim_start_matches('/')
+            )
+        };
+
+        uri_str.parse().expect("Failed to parse backend URI")
     }
 }

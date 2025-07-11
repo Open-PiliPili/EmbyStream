@@ -1,3 +1,3 @@
 pub mod direct;
 
-pub use direct::Config;
+pub use direct::DirectLink;

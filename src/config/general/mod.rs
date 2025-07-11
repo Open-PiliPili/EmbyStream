@@ -1,3 +1,3 @@
 pub mod general;
 
-pub use general::GeneralConfig;
+pub use general::{General, UserAgent};

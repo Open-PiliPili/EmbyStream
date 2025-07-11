@@ -1,3 +1,3 @@
 pub mod openlist;
 
-pub use openlist::Config;
+pub use openlist::OpenList;

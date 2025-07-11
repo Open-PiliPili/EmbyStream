@@ -2,16 +2,17 @@ use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use hyper::{HeaderMap, StatusCode, Uri, header};
-use once_cell::sync::OnceCell;
+use tokio::sync::OnceCell;
+
 use super::{
     local_streamer::LocalStreamer, proxy_mode::ProxyMode, remote_streamer::RemoteStreamer,
-    result::Result as AppStreamResult, source::Source,
-    types::BackendConfig
+    result::Result as AppStreamResult, source::Source, types::BackendConfig,
 };
 use crate::core::redirect_info::RedirectInfo;
 use crate::{AppState, STREAM_LOGGER_DOMAIN, error_log, info_log};
 use crate::{
     CryptoInput, CryptoOperation, CryptoOutput,
+    config::backend::types::BackendConfig as StreamBackendConfig,
     core::{error::Error as AppStreamError, request::Request as AppStreamRequest},
     crypto::Crypto,
     sign::{Sign, SignParams},
@@ -28,16 +29,14 @@ pub trait StreamService: Send + Sync {
 
 pub struct AppStreamService {
     pub state: Arc<AppState>,
-    pub config: OnceCell<BackendConfig>,
-    pub user_agent: Option<String>,
+    pub config: OnceCell<Arc<BackendConfig>>,
 }
 
 impl AppStreamService {
-    pub fn new(state: Arc<AppState>, user_agent: Option<String>) -> Self {
+    pub fn new(state: Arc<AppState>) -> Self {
         Self {
             state,
             config: OnceCell::new(),
-            user_agent
         }
     }
 
@@ -84,14 +83,13 @@ impl AppStreamService {
 
     async fn decrypt(&self, sign: &str, params: &SignParams) -> Result<Sign, AppStreamError> {
         let decrypt_cache = self.state.get_decrypt_cache().await;
-
         let cache_key = self.decrypt_key(params)?;
 
         if let Some(sign) = decrypt_cache.get(&cache_key) {
             return Ok(sign);
         }
 
-        let config = self.get_backend_config();
+        let config = self.get_backend_config().await;
         let crypto_result = Crypto::execute(
             CryptoOperation::Decrypt,
             CryptoInput::Encrypted(sign.to_string()),
@@ -106,14 +104,34 @@ impl AppStreamService {
         }
     }
 
-    fn get_backend_config(&self) -> &BackendConfig {
-        todo!("implement by app state later")
+    async fn get_backend_config(&self) -> Arc<BackendConfig> {
+        let config_arc = self
+            .config
+            .get_or_init(|| async {
+                let config = self.state.get_config().await;
+                let user_agent =
+                    if let StreamBackendConfig::OpenList(open_list) = &config.backend_config {
+                        Some(open_list.user_agent.clone())
+                    } else {
+                        None
+                    };
+                Arc::new(BackendConfig {
+                    crypto_key: config.general.encipher_key.clone(),
+                    crypto_iv: config.general.encipher_iv.clone(),
+                    user_agent,
+                })
+            })
+            .await;
+
+        config_arc.clone()
     }
 
-    fn build_redirect_info(&self, url: Uri, original_headers: &HeaderMap) -> RedirectInfo {
+    async fn build_redirect_info(&self, url: Uri, original_headers: &HeaderMap) -> RedirectInfo {
         let mut final_headers = original_headers.clone();
+        let config = self.get_backend_config().await;
+        let user_agent = config.user_agent.clone();
 
-        if let Some(user_agent) = &self.user_agent {
+        if let Some(user_agent) = user_agent {
             if !user_agent.is_empty() {
                 if let Ok(parsed_header) = user_agent.parse() {
                     final_headers.insert(header::USER_AGENT, parsed_header);
@@ -154,14 +172,18 @@ impl StreamService for AppStreamService {
             }
             Source::Remote { uri, mode } => match mode {
                 ProxyMode::Redirect => {
-                    let redirect_info = self.build_redirect_info(uri, &request.original_headers);
+                    let redirect_info = self
+                        .build_redirect_info(uri, &request.original_headers)
+                        .await;
                     Ok(AppStreamResult::Redirect(redirect_info))
                 }
                 ProxyMode::Proxy => {
+                    let config = self.get_backend_config().await;
+                    let user_agent = config.user_agent.clone();
                     RemoteStreamer::stream(
                         self.state.clone(),
                         uri,
-                        self.user_agent.clone(),
+                        user_agent,
                         &request.original_headers,
                     )
                     .await

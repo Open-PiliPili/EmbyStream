@@ -9,7 +9,7 @@ use hyper::{
     StatusCode, Uri,
     header::{self, HeaderMap},
 };
-use once_cell::sync::OnceCell;
+use tokio::sync::OnceCell;
 use reqwest::Url;
 use tokio::fs::{self as TokioFS, metadata as TokioMetadata};
 use url::form_urlencoded;
@@ -40,7 +40,7 @@ pub trait ForwardService: Send + Sync {
 
 pub struct AppForwardService {
     state: Arc<AppState>,
-    config: OnceCell<ForwardConfig>,
+    config: OnceCell<Arc<ForwardConfig>>,
 }
 
 impl AppForwardService {
@@ -51,7 +51,7 @@ impl AppForwardService {
         }
     }
 
-    fn get_emby_api_token(&self, request: &AppForwardRequest) -> String {
+    async fn get_emby_api_token(&self, request: &AppForwardRequest) -> String {
         if let Some(token) = request.uri.query().and_then(|q| {
             form_urlencoded::parse(q.as_bytes())
                 .find(|(k, _)| {
@@ -72,7 +72,10 @@ impl AppForwardService {
             return token.to_owned();
         }
 
-        self.get_forward_config().emby_api_key.clone()
+        self.get_forward_config()
+            .await
+            .emby_api_key
+            .clone()
     }
 
     async fn get_forward_info(
@@ -80,8 +83,14 @@ impl AppForwardService {
         path_params: &PathParams,
         request: &AppForwardRequest,
     ) -> Result<ForwardInfo, AppForwardError> {
-        let config = self.get_forward_config();
-        let emby_token = self.get_emby_api_token(request);
+        let forward_info_cache = self.state.get_forward_info_cache().await;
+        let cache_key = self.forward_info_key(&path_params)?;
+        if let Some(cached_forward_info) = forward_info_cache.get(&cache_key) {
+            return Ok(cached_forward_info);
+        }
+
+        let config = self.get_forward_config().await;
+        let emby_token = self.get_emby_api_token(request).await;
         if emby_token.is_empty() {
             return Err(AppForwardError::EmptyEmbyToken);
         }
@@ -107,7 +116,7 @@ impl AppForwardService {
                 AppForwardError::EmbyPathRequestError
             })?;
 
-        playback_info
+        let forward_info = playback_info
             .find_media_source_path_by_id(&path_params.media_source_id)
             .map(|path| ForwardInfo {
                 item_id: path_params.item_id.clone(),
@@ -115,25 +124,20 @@ impl AppForwardService {
                 path: path.to_string(),
             })
             .ok_or_else(|| {
-                error_log!(
-                    FORWARD_LOGGER_DOMAIN,
-                    "Media source not found: {}",
-                    path_params.media_source_id
-                );
+                error_log!("Media source not found: {}", path_params.media_source_id);
                 AppForwardError::EmbyPathParserError
-            })
+            })?;
+
+        forward_info_cache.insert(cache_key, forward_info.clone());
+        Ok(forward_info)
     }
 
     async fn get_signed_uri(&self, forward_info: &ForwardInfo) -> Result<Uri, AppForwardError> {
         let sign_value = self.get_encrypt_sign(forward_info).await?;
-        let config = self.get_forward_config();
+        let config = self.get_forward_config().await;
 
         let mut url =
-            Url::parse(&config.backend_base_url).map_err(|_| AppForwardError::InvalidUri)?;
-
-        url.path_segments_mut()
-            .map_err(|_| AppForwardError::InvalidUri)?
-            .push(&config.backend_forward_path);
+            Url::parse(&config.backend_url).map_err(|_| AppForwardError::InvalidUri)?;
 
         url.query_pairs_mut()
             .append_pair("sign", &sign_value)
@@ -146,7 +150,7 @@ impl AppForwardService {
 
     async fn get_encrypt_sign(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
         let encrypt_map = self.get_sign(params).await?.to_map();
-        let config = self.get_forward_config();
+        let config = self.get_forward_config().await;
         let crypto_result = Crypto::execute(
             CryptoOperation::Encrypt,
             CryptoInput::Dictionary(encrypt_map),
@@ -173,7 +177,7 @@ impl AppForwardService {
         let uri = path.parse().map_err(|_| AppForwardError::InvalidUri)?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
-        let expired_at = now + self.get_forward_config().expired_seconds;
+        let expired_at = now + self.get_forward_config().await.expired_seconds;
         let sign = Sign {
             uri: Some(uri),
             expired_at: Some(expired_at),
@@ -253,10 +257,18 @@ impl AppForwardService {
     }
 
     fn encrypt_key(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
-        if params.item_id.is_empty() || params.media_source_id.is_empty() {
+        self.md5_key(&params.item_id, &params.media_source_id)
+    }
+
+    fn forward_info_key(&self, params: &PathParams) -> Result<String, AppForwardError> {
+        self.md5_key(&params.item_id, &params.media_source_id)
+    }
+
+    fn md5_key(&self, item_id: &str, media_source_id: &str) -> Result<String, AppForwardError> {
+        if item_id.is_empty() || media_source_id.is_empty() {
             return Err(AppForwardError::InvalidMediaSource);
         }
-        let input = format!("{}:{}", params.item_id, params.media_source_id).to_lowercase();
+        let input = format!("{}:{}", item_id, media_source_id).to_lowercase();
         Ok(StringUtil::md5(&input))
     }
 
@@ -268,8 +280,24 @@ impl AppForwardService {
         Ok(StringUtil::md5(&input))
     }
 
-    fn get_forward_config(&self) -> &ForwardConfig {
-        todo!("implement by app state later")
+    async fn get_forward_config(&self) -> Arc<ForwardConfig> {
+        let config_arc = self
+            .config
+            .get_or_init(|| async {
+                let config = self.state.get_config().await;
+                Arc::new(ForwardConfig {
+                    expired_seconds: config.general.expired_seconds,
+                    proxy_mode: config.backend.proxy_mode.clone(),
+                    backend_url: config.backend.uri().to_string(),
+                    crypto_key: config.general.encipher_key.clone(),
+                    crypto_iv: config.general.encipher_iv.clone(),
+                    emby_server_url: config.general.emby_uri().to_string(),
+                    emby_api_key: config.general.emby_api_key.to_string(),
+                })
+            })
+            .await;
+
+        config_arc.clone()
     }
 }
 
@@ -297,6 +325,11 @@ impl ForwardService for AppForwardService {
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+        info_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Routing forward request to {:?}",
+            remote_uri
+        );
         Ok(self.build_redirect_info(remote_uri, &request.original_headers))
     }
 }

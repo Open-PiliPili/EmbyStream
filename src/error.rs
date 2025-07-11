@@ -38,4 +38,7 @@ pub enum Error {
     /// Decryption error.
     #[error("Decryption error: {0}")]
     DecryptionError(String),
+
+    #[error("Load config error: {0}")]
+    LoadConfigError(String),
 }

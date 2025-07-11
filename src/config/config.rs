@@ -1,290 +1,196 @@
 use std::{
-    fmt::{Display, Formatter, Result as FmtResult},
     fs,
-    path::Path,
+    path::{Path, PathBuf},
+    process,
 };
 
+use clap::Parser;
+use directories::BaseDirs;
+use libc;
 use serde::Deserialize;
-use toml;
-use uuid::Uuid;
 
+use super::{cli::Cli, error::ConfigError};
 use crate::config::{
-    backend::{BackendConfig, r#type::BackendType},
-    frontened::FrontendConfig,
-    general::GeneralConfig,
+    backend::BackendConfig,
+    frontend::Frontend,
+    general::{General, UserAgent},
+    r#types::RawConfig,
 };
-use crate::{CONFIG_LOGGER_DOMAIN, Error, error_log, info_log};
+use crate::{CONFIG_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log};
+use crate::config::backend::Backend;
 
-/// Top-level configuration structure.
-#[derive(Deserialize, Clone, Debug)]
+const CONFIG_DIR_NAME: &str = "embystream";
+const CONFIG_FILE_NAME: &str = "config.toml";
+const DOCKER_CONFIG_PATH: &str = "/config/embystream/config.toml";
+const TEMPLATE_CONFIG_PATH: &str = "src/config.toml.template";
+const ROOT_CONFIG_PATH: &str = "/root/.config/embystream";
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
-    #[serde(rename = "General")]
-    general: GeneralConfig,
-    #[serde(rename = "Frontend")]
-    frontend: Option<FrontendConfig>,
-    #[serde(flatten)]
-    backend: Option<BackendConfig>,
+    #[serde(skip)]
+    pub path: PathBuf,
+    pub general: General,
+    pub user_agent: UserAgent,
+    pub frontend: Frontend,
+    pub backend: Backend,
+    pub backend_config: BackendConfig
 }
 
 impl Config {
-    /// Checks if the provided TOML content has a valid format.
-    ///
-    /// # Arguments
-    ///
-    /// * `content` - The TOML content to check.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` if the TOML format is valid.
-    /// * `Err(Error)` if the TOML is invalid.
-    fn check_toml_format(content: &str) -> Result<(), Error> {
-        // Attempt to parse TOML
-        let _: Config = toml::from_str(content).map_err(|e| {
-            error_log!(CONFIG_LOGGER_DOMAIN, "Invalid TOML format: {}", e);
-            Error::TomlParseError(e)
-        })?;
+    pub fn load_or_init() -> Result<Self, ConfigError> {
+        let cli = Cli::parse();
 
-        info_log!(CONFIG_LOGGER_DOMAIN, "TOML format is valid!");
-        Ok(())
-    }
-
-    /// Loads configuration from the specified file.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - Path to the config.toml file.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` if the configuration is loaded successfully.
-    /// * `Err(Error)` if the file cannot be read, parsed, or validated.
-    pub fn load_from_file(path: &str) -> Result<(), Error> {
-        info_log!(CONFIG_LOGGER_DOMAIN, "Loading config from file: {}", path);
-
-        // Read config file
-        let content = fs::read_to_string(path).map_err(|e| {
-            error_log!(CONFIG_LOGGER_DOMAIN, "Error reading config file: {}", e);
-            Error::IoError(e)
-        })?;
-
-        // Check TOML format
-        Self::check_toml_format(&content)?;
-
-        // Parse config
-        let mut config: Config = toml::from_str(&content).map_err(|e| {
-            error_log!(CONFIG_LOGGER_DOMAIN, "Error parsing config file: {}", e);
-            Error::TomlParseError(e)
-        })?;
-
-        // Validate encipher_key length
-        let encipher_key_len = config.general.encipher_key.len();
-        if encipher_key_len < 6 {
-            error_log!(
-                CONFIG_LOGGER_DOMAIN,
-                "Encipher key must be at least 6 bytes, got {} bytes",
-                encipher_key_len
-            );
-            return Err(Error::InvalidEncipherKey(encipher_key_len));
-        }
-
-        // Validate backend configuration
-        match (&config.backend, &config.general.backend_type) {
-            (Some(BackendConfig::Disk(_)), BackendType::Disk)
-            | (Some(BackendConfig::OpenList(_)), BackendType::OpenList)
-            | (Some(BackendConfig::DirectLink(_)), BackendType::DirectLink) => {
-                // Valid configuration
-            }
-            (None, _) => {
-                error_log!(
-                    CONFIG_LOGGER_DOMAIN,
-                    "No backend configuration provided for backend type: {:?}",
-                    config.general.backend_type
-                );
-                return Err(Error::InvalidBackendConfig(format!(
-                    "{:?}",
-                    config.general.backend_type
-                )));
-            }
-            (Some(_), _) => {
-                error_log!(
-                    CONFIG_LOGGER_DOMAIN,
-                    "Backend configuration does not match backend type: {:?}",
-                    config.general.backend_type
-                );
-                return Err(Error::InvalidBackendConfig(format!(
-                    "{:?}",
-                    config.general.backend_type
-                )));
-            }
-        }
-
-        // Generate and save api_key if empty
-        if config.general.api_key.is_empty() {
+        if let Some(path) = Self::find_config_path(cli.config)? {
             info_log!(
                 CONFIG_LOGGER_DOMAIN,
-                "No api_key found, generating new UUID"
+                "Loading config file at {}",
+                path.display()
             );
-            config.save_api_key(path)?;
+            return Self::load_from_path(&path);
         }
 
-        info_log!(CONFIG_LOGGER_DOMAIN, "Configuration loaded successfully");
+        let default_path = Self::get_default_config_path()?.join(CONFIG_FILE_NAME);
+        Self::handle_missing_config(&default_path)?;
+        unreachable!();
+    }
+
+    pub fn reload(&mut self) -> Result<(), ConfigError> {
+        info_log!(
+            CONFIG_LOGGER_DOMAIN,
+            "Reloading config file at {}",
+            self.path.display()
+        );
+        let new_config = Self::load_from_path(&self.path)?;
+
+        *self = new_config;
+
+        info_log!(
+            CONFIG_LOGGER_DOMAIN,
+            "Successfully reloaded config file at {}",
+            self.path.display()
+        );
         Ok(())
     }
 
-    /// Saves a new api_key to the config file and updates the in-memory config.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - Path to the config.toml file.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` if the api_key is saved successfully.
-    /// * `Err(Error)` if the file cannot be read or written.
-    fn save_api_key(&mut self, path: &str) -> Result<(), Error> {
-        info_log!(
-            CONFIG_LOGGER_DOMAIN,
-            "Saving new api_key to config file: {}",
-            path
-        );
+    fn load_from_path(path: &Path) -> Result<Self, ConfigError> {
+        let content = fs::read_to_string(path)?;
+        let raw_config: RawConfig = toml::from_str(&content)?;
 
-        // Generate new api_key
-        let new_api_key = Uuid::new_v4().to_string();
-        self.general.api_key = new_api_key.clone();
+        let backend_config = match raw_config.general.backend_type.as_str() {
+            "disk" => BackendConfig::Disk(raw_config.disk.ok_or_else(|| {
+                ConfigError::InvalidBackendType(format!("{} backend not configured", "disk"))
+            })?),
+            "openlist" => BackendConfig::OpenList(raw_config.open_list.ok_or_else(|| {
+                ConfigError::InvalidBackendType(format!("{} backend not configured", "openlist"))
+            })?),
+            "direct_link" => BackendConfig::DirectLink(raw_config.direct_link.ok_or_else(|| {
+                ConfigError::InvalidBackendType(format!("{} backend not configured", "direct_link"))
+            })?),
+            other => return Err(ConfigError::InvalidBackendType(other.to_string())),
+        };
 
-        // Read existing config content
-        let content = fs::read_to_string(path).map_err(|e| {
-            error_log!(
-                CONFIG_LOGGER_DOMAIN,
-                "Failed to read config file for saving api_key: {}",
-                e
-            );
-            Error::IoError(e)
-        })?;
+        Ok(Config {
+            path: path.to_path_buf(),
+            general: raw_config.general,
+            user_agent: raw_config.user_agent,
+            frontend: raw_config.frontend,
+            backend: raw_config.backend,
+            backend_config,
+        })
+    }
 
-        let mut lines: Vec<String> = content.lines().map(String::from).collect();
-        let mut found = false;
-
-        // Update api_key line
-        for line in lines.iter_mut() {
-            if line.trim().starts_with("api_key") {
-                *line = format!("api_key = \"{}\"", new_api_key);
-                found = true;
-                break;
-            }
-        }
-
-        // Append api_key to [General] section if not found
-        if !found {
-            let general_index = lines.iter().position(|line| line.trim() == "[General]");
-            if let Some(index) = general_index {
-                lines.insert(index + 1, format!("api_key = \"{}\"", new_api_key));
-            } else {
-                error_log!(
+    fn find_config_path(cli_path: Option<PathBuf>) -> Result<Option<PathBuf>, ConfigError> {
+        // Check CLI-provided path first
+        if let Some(path) = cli_path {
+            if path.exists() {
+                debug_log!(
                     CONFIG_LOGGER_DOMAIN,
-                    "No [General] section found in config file"
+                    "Found config file at {} from command line arguments",
+                    path.display()
                 );
-                return Err(Error::MissingGeneralSection);
+                return Ok(Some(path));
             }
+            warn_log!(
+                CONFIG_LOGGER_DOMAIN,
+                "Specified config file at {} does not exist",
+                path.display()
+            );
         }
 
-        // Write back to file
-        fs::write(path, lines.join("\n")).map_err(|e| {
-            error_log!(CONFIG_LOGGER_DOMAIN, "Failed to write config file: {}", e);
-            Error::IoError(e)
-        })?;
+        // Check Docker path
+        let docker_path = Path::new(DOCKER_CONFIG_PATH);
+        if docker_path.exists() {
+            debug_log!(
+                CONFIG_LOGGER_DOMAIN,
+                "Found config file at Docker default location: {}",
+                docker_path.display()
+            );
+            return Ok(Some(docker_path.to_path_buf()));
+        }
 
-        info_log!(CONFIG_LOGGER_DOMAIN, "api_key saved successfully");
-        Ok(())
+        // Check default config path
+        let default_path = Self::get_default_config_path()?.join(CONFIG_FILE_NAME);
+        if default_path.exists() {
+            debug_log!(
+                CONFIG_LOGGER_DOMAIN,
+                "Found config file at default location: {}",
+                default_path.display()
+            );
+            return Ok(Some(default_path));
+        }
+
+        Ok(None)
     }
 
-    /// Initializes the target config file from a template if it does not exist.
-    ///
-    /// If the target path already exists, no action is taken. Otherwise, the template
-    /// file is copied to the target path after validating its TOML format.
-    ///
-    /// # Arguments
-    ///
-    /// * `template_path` - Path to the template config.toml file.
-    /// * `target_path` - Path where the config.toml file should be created.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` if the operation is successful or the target file already exists.
-    /// * `Err(Error)` if the template cannot be read, is invalid, or the target cannot be written.
-    pub fn init_from_template(template_path: &str, target_path: &str) -> Result<(), Error> {
-        info_log!(
-            CONFIG_LOGGER_DOMAIN,
-            "Initializing config from template: {} to {}",
-            template_path,
-            target_path
-        );
+    fn get_default_config_path() -> Result<PathBuf, ConfigError> {
+        let base_dirs = BaseDirs::new().ok_or(ConfigError::NoHomeDir)?;
 
-        // Check if target path exists
-        if Path::new(target_path).exists() {
-            info_log!(
-                CONFIG_LOGGER_DOMAIN,
-                "Target config file already exists: {}",
-                target_path
-            );
-            return Ok(());
-        }
+        let path = if cfg!(target_os = "linux") && unsafe { libc::getuid() } == 0 {
+            PathBuf::from(ROOT_CONFIG_PATH)
+        } else if cfg!(target_os = "windows") {
+            base_dirs.config_dir().join(CONFIG_DIR_NAME)
+        } else {
+            // macOS and other Unix-like systems
+            base_dirs.home_dir().join(".config").join(CONFIG_DIR_NAME)
+        };
 
-        // Read template file
-        let content = fs::read_to_string(template_path).map_err(|e| {
-            error_log!(CONFIG_LOGGER_DOMAIN, "Failed to read template file: {}", e);
-            Error::IoError(e)
-        })?;
+        Ok(path)
+    }
 
-        // Check TOML format of template
-        Self::check_toml_format(&content)?;
+    fn handle_missing_config(target_path: &Path) -> Result<(), ConfigError> {
+        let template_path = Path::new(TEMPLATE_CONFIG_PATH);
 
-        // Copy template to target
-        fs::copy(template_path, target_path).map_err(|e| {
+        if !template_path.exists() {
             error_log!(
                 CONFIG_LOGGER_DOMAIN,
-                "Failed to copy template to target: {}",
-                e
+                "Missing template config file at {}",
+                template_path.display()
             );
-            Error::IoError(e)
-        })?;
+            return Err(ConfigError::CopyTemplate(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Template file not found at {}", template_path.display()),
+            )));
+        }
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| ConfigError::CreateDir {
+                path: parent.display().to_string(),
+                source: e,
+            })?;
+        }
+
+        fs::copy(template_path, target_path).map_err(ConfigError::CopyTemplate)?;
 
         info_log!(
             CONFIG_LOGGER_DOMAIN,
-            "Config template copied successfully to {}",
-            target_path
+            "Created new config file at {} from template",
+            target_path.display()
         );
-        Ok(())
-    }
 
-    /// Gets the General configuration.
-    pub fn general(&self) -> &GeneralConfig {
-        &self.general
-    }
-
-    /// Gets the Frontend configuration.
-    pub fn frontend(&self) -> Option<&FrontendConfig> {
-        self.frontend.as_ref()
-    }
-
-    /// Gets the backend configuration, if present and matches the backend type.
-    pub fn backend(&self) -> Option<&BackendConfig> {
-        self.backend.as_ref()
-    }
-}
-
-impl Display for Config {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(
-            f,
-            "Config {{ general: {}, frontend: {}, backend: {} }}",
-            self.general,
-            self.frontend
-                .as_ref()
-                .map_or("None".to_string(), |b| b.to_string()),
-            self.backend
-                .as_ref()
-                .map_or("None".to_string(), |b| b.to_string())
-        )
+        error_log!(
+            CONFIG_LOGGER_DOMAIN,
+            "Please configure the new file and restart the application"
+        );
+        process::exit(0);
     }
 }

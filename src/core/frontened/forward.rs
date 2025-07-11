@@ -25,14 +25,12 @@ static ITEM_ID_REGEX: Lazy<Regex> = Lazy::new(|| {
 
 #[derive(Clone)]
 pub struct ForwardMiddleware {
-    path: Arc<String>,
     forward_service: Arc<dyn ForwardService>,
 }
 
 impl ForwardMiddleware {
-    pub fn new(path: &str, forward_service: Arc<dyn ForwardService>) -> Self {
+    pub fn new(forward_service: Arc<dyn ForwardService>) -> Self {
         Self {
-            path: Arc::new(path.to_string()),
             forward_service,
         }
     }

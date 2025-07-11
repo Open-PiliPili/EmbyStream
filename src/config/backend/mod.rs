@@ -1,11 +1,11 @@
 pub mod openlist;
-pub mod backend;
 pub mod direct;
 pub mod disk;
-pub mod r#type;
+pub mod types;
+mod backend;
 
-pub use openlist::Config as OpenListConfig;
-pub use backend::*;
-pub use direct::Config as DirectLinkConfig;
-pub use disk::Config as DiskConfig;
-pub use r#type::*;
+pub use direct::DirectLink;
+pub use disk::Disk;
+pub use openlist::OpenList;
+pub use types::BackendConfig;
+pub use backend::Backend;

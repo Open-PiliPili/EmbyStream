@@ -1,33 +1,43 @@
-use std::fmt;
-
+use hyper::Uri;
 use serde::Deserialize;
 
-use crate::{
-    config::backend::r#type::BackendType,
-    util::privacy::Privacy
-};
-
-/// Configuration for the General section of the config file.
-#[derive(Deserialize, Clone, Debug)]
-pub struct GeneralConfig {
+#[derive(Clone, Debug, Deserialize)]
+pub struct General {
     pub log_level: String,
-    pub backend_type: BackendType,
+    pub mermory_mode: String,
+    pub expired_seconds: u64,
+    pub backend_type: String,
     pub encipher_key: String,
-    pub cache_ttl_seconds: u64,
-    pub api_key: String,
+    pub encipher_iv: String,
+    pub emby_url: String,
+    pub emby_port: String,
+    pub emby_api_key: String,
 }
 
-impl fmt::Display for GeneralConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let privacy = Privacy::new();
-        write!(
-            f,
-            "GeneralConfig {{ log_level: {}, backend_type: {}, encipher_key: {}, cache_ttl_seconds: {}, api_key: {} }}",
-            self.log_level,
-            self.backend_type,
-            privacy.desensitize(&self.encipher_key),
-            self.cache_ttl_seconds,
-            privacy.desensitize(&self.api_key)
-        )
+impl General {
+
+    pub fn emby_uri(&self) -> Uri {
+        let scheme = self.get_port_scheme();
+        let should_show_port = !(self.emby_port == "443" || self.emby_port == "80");
+        let clean_url = self.emby_url.trim_start_matches("//");
+
+        let uri_str = if should_show_port {
+            format!("{}://{}:{}", scheme, clean_url, self.emby_port)
+        } else {
+            format!("{}://{}", scheme, clean_url)
+        };
+
+        uri_str.parse().expect("Failed to parse backend URI")
     }
+
+    fn get_port_scheme(&self) -> &str {
+        if self.emby_port == "443" { "https" } else { "http" }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct UserAgent {
+    pub mode: String,
+    pub allow_ua: Vec<String>,
+    pub deny_ua: Vec<String>,
 }

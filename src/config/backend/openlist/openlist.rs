@@ -1,27 +1,10 @@
-use std::fmt;
-
 use serde::Deserialize;
 
-use crate::util::privacy::Privacy;
-
-/// Configuration for the OpenList backend.
-#[derive(Deserialize, Clone, Debug)]
-pub struct Config {
+#[derive(Clone, Debug, Deserialize)]
+pub struct OpenList {
     pub base_url: String,
+    pub port: String,
     pub token: String,
-    #[serde(default)]
+    pub user_agent: String,
     pub path_replace_rule_regex: String,
-}
-
-impl fmt::Display for Config {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let privacy = Privacy::new();
-        write!(
-            f,
-            "OpenListConfig {{ base_url: {}, token: {}, path_replace_rule_regex: {} }}",
-            self.base_url,
-            privacy.desensitize(&self.token),
-            self.path_replace_rule_regex
-        )
-    }
 }
