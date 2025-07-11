@@ -1,11 +1,12 @@
 pub mod chain;
 pub mod context;
 pub mod cors;
+pub mod error;
 pub mod gateway;
 pub mod logger;
 pub mod options;
 pub mod response;
-pub mod error;
+pub mod ua_filter;
 
 pub use chain::{Handler as MiddlewareHandler, Middleware, Next};
 pub use context::Context as MiddlewareContext;

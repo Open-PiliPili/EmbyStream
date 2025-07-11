@@ -41,3 +41,9 @@ pub struct UserAgent {
     pub allow_ua: Vec<String>,
     pub deny_ua: Vec<String>,
 }
+
+impl UserAgent {
+    pub fn is_allow_mode(&self) -> bool {
+        self.mode == "allow"
+    }
+}
