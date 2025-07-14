@@ -1,9 +1,12 @@
-use crate::config::types::PathRewriteConfig;
+use crate::config::backend::{
+    Backend,
+    types::BackendConfig as StreamBackendConfig
+};
 
 #[derive(Clone, Debug)]
 pub struct BackendConfig {
     pub crypto_key: String,
     pub crypto_iv: String,
-    pub user_agent: Option<String>,
-    pub path_rewrite: PathRewriteConfig,
+    pub backend: Backend,
+    pub backend_config: StreamBackendConfig,
 }

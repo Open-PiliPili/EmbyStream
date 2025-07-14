@@ -9,14 +9,17 @@ use super::{
     result::Result as AppStreamResult, source::Source, types::BackendConfig,
 };
 use crate::core::redirect_info::RedirectInfo;
-use crate::{AppState, PathRewriter, STREAM_LOGGER_DOMAIN, error_log, info_log};
+use crate::{AppState, STREAM_LOGGER_DOMAIN, error_log, info_log};
 use crate::{
     CryptoInput, CryptoOperation, CryptoOutput,
+    client::{ClientBuilder, OpenListClient},
     config::backend::types::BackendConfig as StreamBackendConfig,
     core::{error::Error as AppStreamError, request::Request as AppStreamRequest},
     crypto::Crypto,
+    network::CurlPlugin,
     sign::{Sign, SignParams},
-    util::StringUtil,
+    system::SystemInfo,
+    util::{PathRewriter, StringUtil},
 };
 
 #[async_trait]
@@ -62,6 +65,7 @@ impl AppStreamService {
 
         let mut uri = sign.uri.clone().ok_or(AppStreamError::InvalidUri)?;
         uri = self.rewrite_uri_if_needed(uri).await;
+        uri = self.fetch_remote_uri_if_openlist(&uri).await?;
 
         if sign.is_local() {
             Ok(Source::Local(PathBuf::from(uri.to_string())))
@@ -71,15 +75,6 @@ impl AppStreamService {
                 mode: params.proxy_mode,
             })
         }
-    }
-
-    fn decrypt_key(&self, params: &SignParams) -> Result<String, AppStreamError> {
-        if params.sign.is_empty() {
-            return Err(AppStreamError::InvalidEncryptedSignature);
-        }
-
-        let input = params.sign.to_lowercase();
-        Ok(StringUtil::md5(&input))
     }
 
     async fn decrypt(&self, sign: &str, params: &SignParams) -> Result<Sign, AppStreamError> {
@@ -108,43 +103,75 @@ impl AppStreamService {
     async fn rewrite_uri_if_needed(&self, uri: Uri) -> Uri {
         let config = self.get_backend_config().await;
         let uri_str = uri.to_string();
+        let path_rewrite = config.backend.path_rewrite.clone();
 
-        if !config.path_rewrite.is_need_rewrite(&uri_str) {
+        if !path_rewrite.is_need_rewrite(&uri_str) {
             return uri;
         }
 
-        let rewriter = PathRewriter::new(
-            &config.path_rewrite.pattern,
-            &config.path_rewrite.replacement,
-        );
+        let rewriter = PathRewriter::new(&path_rewrite.pattern, &path_rewrite.replacement);
 
         let new_uri_str = rewriter.rewrite(&uri_str).await;
         new_uri_str.parse().unwrap_or(uri)
     }
 
+    async fn fetch_remote_uri_if_openlist(&self, uri: &Uri) -> Result<Uri, AppStreamError> {
+        let cache = self.state.get_open_list_cache().await;
+        if let Some(cached_uri) = cache.get(&self.open_list_cache_key(uri)) {
+            return Ok(cached_uri);
+        }
+
+        let config = self.get_backend_config().await;
+        let openlist_config = match &config.backend_config {
+            StreamBackendConfig::OpenList(open_list) => open_list,
+            _ => return Ok(uri.clone()),
+        };
+
+        let openlist_client = ClientBuilder::<OpenListClient>::new()
+            .with_plugin(CurlPlugin)
+            .build();
+
+        let result = openlist_client
+            .fetch_file_path(
+                &openlist_config.uri().to_string(),
+                &openlist_config.token,
+                uri.to_string(),
+            )
+            .await;
+
+        match result {
+            Ok(new_url) => {
+                let new_uri: Uri = new_url.parse().map_err(|e: hyper::http::uri::InvalidUri| {
+                    AppStreamError::InvalidOpenListUri(e.to_string())
+                })?;
+                cache.insert(self.open_list_cache_key(uri), new_uri.clone());
+
+                Ok(new_uri)
+            }
+            Err(e) => Err(AppStreamError::UnexpectedOpenListError(e.to_string())),
+        }
+    }
+
     async fn get_backend_config(&self) -> Arc<BackendConfig> {
-        let config_arc =
-            self.config
-                .get_or_init(|| async {
-                    let config = self.state.get_config().await;
-                    let backend = config.backend.as_ref().expect(
-                        "Attempted to access backend config, but backend is not configured",
-                    );
-                    let user_agent = if let Some(StreamBackendConfig::OpenList(open_list)) =
-                        &config.backend_config
-                    {
-                        Some(open_list.user_agent.clone())
-                    } else {
-                        None
-                    };
-                    Arc::new(BackendConfig {
-                        crypto_key: config.general.encipher_key.clone(),
-                        crypto_iv: config.general.encipher_iv.clone(),
-                        user_agent,
-                        path_rewrite: backend.path_rewrite.clone(),
-                    })
+        let config_arc = self
+            .config
+            .get_or_init(|| async {
+                let config = self.state.get_config().await;
+                let backend = config
+                    .backend
+                    .as_ref()
+                    .expect("Attempted to access backend, but backend is not configured");
+                let backend_config = config.backend_config.as_ref().expect(
+                    "Attempted to access backend config, but backend config is not configured",
+                );
+                Arc::new(BackendConfig {
+                    crypto_key: config.general.encipher_key.clone(),
+                    crypto_iv: config.general.encipher_iv.clone(),
+                    backend: backend.clone(),
+                    backend_config: backend_config.clone(),
                 })
-                .await;
+            })
+            .await;
 
         config_arc.clone()
     }
@@ -152,7 +179,10 @@ impl AppStreamService {
     async fn build_redirect_info(&self, url: Uri, original_headers: &HeaderMap) -> RedirectInfo {
         let mut final_headers = original_headers.clone();
         let config = self.get_backend_config().await;
-        let user_agent = config.user_agent.clone();
+        let user_agent = match &config.backend_config {
+            StreamBackendConfig::DirectLink(dirct_link) => Some(dirct_link.user_agent.to_string()),
+            _ => None,
+        };
 
         if let Some(user_agent) = user_agent {
             if !user_agent.is_empty() {
@@ -168,6 +198,21 @@ impl AppStreamService {
             target_url: url,
             final_headers,
         }
+    }
+
+    fn decrypt_key(&self, params: &SignParams) -> Result<String, AppStreamError> {
+        if params.sign.is_empty() {
+            return Err(AppStreamError::InvalidEncryptedSignature);
+        }
+
+        let input = params.sign.to_lowercase();
+        Ok(StringUtil::md5(&input))
+    }
+
+    fn open_list_cache_key(&self, uri: &Uri) -> String {
+        let url = uri.to_string().to_lowercase();
+        let input = url.to_lowercase();
+        StringUtil::md5(&input)
     }
 }
 
@@ -202,11 +247,17 @@ impl StreamService for AppStreamService {
                 }
                 ProxyMode::Proxy => {
                     let config = self.get_backend_config().await;
-                    let user_agent = config.user_agent.clone();
+                    let user_agent = match &config.backend_config {
+                        StreamBackendConfig::DirectLink(dirct_link) => {
+                            Some(dirct_link.user_agent.to_string())
+                        }
+                        _ => None,
+                    }
+                    .unwrap_or(SystemInfo::new().get_user_agent());
                     RemoteStreamer::stream(
                         self.state.clone(),
                         uri,
-                        user_agent,
+                        Some(user_agent),
                         &request.original_headers,
                     )
                     .await

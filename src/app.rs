@@ -15,6 +15,7 @@ pub struct AppState {
     decrypt_cache: OnceCell<GeneralCache>,
     strm_file_cache: OnceCell<GeneralCache>,
     forward_info_cache: OnceCell<GeneralCache>,
+    open_list_cache: OnceCell<GeneralCache>,
 }
 
 impl AppState {
@@ -26,6 +27,7 @@ impl AppState {
             decrypt_cache: OnceCell::new(),
             strm_file_cache: OnceCell::new(),
             forward_info_cache: OnceCell::new(),
+            open_list_cache: OnceCell::new(),
         }
     }
 
@@ -84,6 +86,13 @@ impl AppState {
     pub async fn get_forward_info_cache(&self) -> &GeneralCache {
         let (capacity, ttl) = self.get_cache_settings().await;
         self.forward_info_cache
+            .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
+            .await
+    }
+
+    pub async fn get_open_list_cache(&self) -> &GeneralCache {
+        let (capacity, ttl) = self.get_cache_settings().await;
+        self.open_list_cache
             .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
             .await
     }

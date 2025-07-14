@@ -34,7 +34,9 @@ impl General {
     pub fn emby_uri(&self) -> Uri {
         let scheme = self.get_port_scheme();
         let should_show_port = !(self.emby_port == "443" || self.emby_port == "80");
-        let clean_url = self.emby_url.trim_start_matches("//");
+        let clean_url = self.emby_url
+            .trim_start_matches("//")
+            .trim_end_matches('/');
 
         let uri_str = if should_show_port {
             format!("{}://{}:{}", scheme, clean_url, self.emby_port)

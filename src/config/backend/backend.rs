@@ -17,10 +17,12 @@ pub struct Backend {
 impl Backend {
 
     pub fn uri(&self) -> Uri {
-        let scheme = if self.port == "443" { "https" } else { "http" };
+        let scheme = self.get_port_scheme();
         let should_show_port = !(self.port == "443" || self.port == "80");
         let clean_url = self.base_url
             .trim_start_matches("//")
+            .trim_end_matches('/');
+        let clean_path = self.path.trim_start_matches("/")
             .trim_end_matches('/');
 
         let uri_str = if should_show_port {
@@ -29,17 +31,25 @@ impl Backend {
                 scheme,
                 clean_url,
                 self.port,
-                self.path.trim_start_matches('/')
+                clean_path
             )
         } else {
             format!(
                 "{}://{}/{}",
                 scheme,
                 clean_url,
-                self.path.trim_start_matches('/')
+                clean_path
             )
         };
 
         uri_str.parse().expect("Failed to parse backend URI")
+    }
+
+    fn get_port_scheme(&self) -> &str {
+        if self.port == "443" {
+            "https"
+        } else {
+            "http"
+        }
     }
 }

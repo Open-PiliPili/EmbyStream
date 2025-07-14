@@ -34,4 +34,8 @@ pub enum Error {
     EmbyPathRequestError,
     #[error("Emby path parser error")]
     EmbyPathParserError,
+    #[error("Invalid openlist uri: {0}")]
+    InvalidOpenListUri(String),
+    #[error("Unexpected openlist error: {0}")]
+    UnexpectedOpenListError(String)
 }
