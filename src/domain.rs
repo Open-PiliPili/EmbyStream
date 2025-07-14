@@ -19,3 +19,4 @@ pub const REMOTE_STREAMER_LOGGER_DOMAIN: &str = "REMOTE-STREAM";
 
 pub const FORWARD_LOGGER_DOMAIN: &str = "FORWARD";
 pub const USER_AGENT_FILTER: &str = "USER-AGENT-FILTER";
+pub const INIT_LOGGER_DOMAIN: &str = "INIT";

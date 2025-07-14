@@ -5,7 +5,6 @@ use tokio::sync::{OnceCell, RwLock as TokioRwLock};
 use crate::{
     cache::{FileCache, GeneralCache},
     config::config::Config,
-    error::Error,
 };
 
 pub struct AppState {
@@ -37,13 +36,6 @@ impl AppState {
 
     pub async fn get_config(&self) -> impl DerefTrait<Target = Config> + '_ {
         self.config.read().await
-    }
-
-    pub async fn full_reload(&self) -> Result<(), Error> {
-        let new_config =
-            Config::load_or_init().map_err(|e| Error::LoadConfigError(e.to_string()))?;
-        self.reload_config(new_config).await;
-        Ok(())
     }
 
     async fn get_cache_settings(&self) -> (u64, u64) {

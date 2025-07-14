@@ -17,6 +17,7 @@ cbc = "0.1.2"
 cipher = "0.4.4"
 clap = { version = "4.5.41", features = ["derive"] }
 directories = "6.0.0"
+figlet-rs = "0.1.5"
 futures-util = "0.3.31"
 generic-array = "1.2.0"
 hyper = { version = "1.6.0", features = ["full"] }
@@ -60,3 +61,4 @@ tracing-subscriber = { version = "0.3.19", features = [
 ] }
 uuid = { version = "1.17.0", features = ["v4"] }
 url = "2.5.4"
+env_logger = "0.11.8"
