@@ -74,9 +74,21 @@ port = "443"                   # HTTPS port for stream service
 proxy_mode = "proxy"           # Backend proxy mode for media streaming (options: "proxy", "redirect")
 
 [Backend.PathRewrite]
-enable = false
-pattern = ""
-replacement = ""
+enable = false                 # Set to true to enable this feature.
+pattern = ""                   # The regex pattern to search for.
+replacement = ""               # The replacement string. Use $1 for the first captured group.
+# --- Examples ---
+# 1. Add a CDN host: /path/video.mp4 -> https://my-cdn.com/path/video.mp4
+#    pattern = "^(/.*)$"
+#    replacement = "https://my-cdn.com$1"
+#
+# 2. Remove a base path: /media/movies/video.mp4 -> /movies/video.mp4
+#    pattern = "^/media(/.*)$"
+#    replacement = "$1"
+#
+# 3. Replace a proxy path: /stream/video.mp4 -> /proxy/video.mp4
+#    pattern = "^/stream(/.*)$"
+#    replacement = "/proxy$1"
 
 [Disk]
 # Disk backend configuration - for local or mounted storage
