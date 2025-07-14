@@ -9,9 +9,9 @@ use hyper::{
     StatusCode, Uri,
     header::{self, HeaderMap},
 };
-use tokio::sync::OnceCell;
 use reqwest::Url;
 use tokio::fs::{self as TokioFS, metadata as TokioMetadata};
+use tokio::sync::OnceCell;
 use url::form_urlencoded;
 
 use super::types::{ForwardConfig, ForwardInfo, PathParams};
@@ -72,10 +72,7 @@ impl AppForwardService {
             return token.to_owned();
         }
 
-        self.get_forward_config()
-            .await
-            .emby_api_key
-            .clone()
+        self.get_forward_config().await.emby_api_key.clone()
     }
 
     async fn get_forward_info(
@@ -136,8 +133,7 @@ impl AppForwardService {
         let sign_value = self.get_encrypt_sign(forward_info).await?;
         let config = self.get_forward_config().await;
 
-        let mut url =
-            Url::parse(&config.backend_url).map_err(|_| AppForwardError::InvalidUri)?;
+        let mut url = Url::parse(&config.backend_url).map_err(|_| AppForwardError::InvalidUri)?;
 
         url.query_pairs_mut()
             .append_pair("sign", &sign_value)
@@ -281,21 +277,24 @@ impl AppForwardService {
     }
 
     async fn get_forward_config(&self) -> Arc<ForwardConfig> {
-        let config_arc = self
-            .config
-            .get_or_init(|| async {
-                let config = self.state.get_config().await;
-                Arc::new(ForwardConfig {
-                    expired_seconds: config.general.expired_seconds,
-                    proxy_mode: config.backend.proxy_mode.clone(),
-                    backend_url: config.backend.uri().to_string(),
-                    crypto_key: config.general.encipher_key.clone(),
-                    crypto_iv: config.general.encipher_iv.clone(),
-                    emby_server_url: config.general.emby_uri().to_string(),
-                    emby_api_key: config.general.emby_api_key.to_string(),
+        let config_arc =
+            self.config
+                .get_or_init(|| async {
+                    let config = self.state.get_config().await;
+                    let backend = config.backend.as_ref().expect(
+                        "Attempted to access forward config, but backend is not configured",
+                    );
+                    Arc::new(ForwardConfig {
+                        expired_seconds: config.general.expired_seconds,
+                        proxy_mode: backend.proxy_mode.clone(),
+                        backend_url: backend.uri().to_string(),
+                        crypto_key: config.general.encipher_key.clone(),
+                        crypto_iv: config.general.encipher_iv.clone(),
+                        emby_server_url: config.general.emby_uri().to_string(),
+                        emby_api_key: config.general.emby_api_key.to_string(),
+                    })
                 })
-            })
-            .await;
+                .await;
 
         config_arc.clone()
     }

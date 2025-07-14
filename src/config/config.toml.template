@@ -17,6 +17,14 @@ memory_mode = "middle"
 # - Recommended range: 300-86400 (5 minutes to 1 day)
 expired_seconds = 3600
 
+# Stream running mode
+# - Options: "frontend", "backend", "dual"
+# - "frontend": Runs only the frontend service.
+# - "backend": Runs only the backend service.
+# - "dual": Runs both frontend and backend services.
+# - Default: "frontend"
+stream_mode = "frontend"
+
 # Backend type for media streaming (options: "disk", "direct_link", "openlist")
 backend_type = "disk"
 

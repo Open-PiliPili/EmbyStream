@@ -109,12 +109,13 @@ impl AppStreamService {
             .config
             .get_or_init(|| async {
                 let config = self.state.get_config().await;
-                let user_agent =
-                    if let StreamBackendConfig::OpenList(open_list) = &config.backend_config {
-                        Some(open_list.user_agent.clone())
-                    } else {
-                        None
-                    };
+                let user_agent = if let Some(StreamBackendConfig::OpenList(open_list)) =
+                    &config.backend_config
+                {
+                    Some(open_list.user_agent.clone())
+                } else {
+                    None
+                };
                 Arc::new(BackendConfig {
                     crypto_key: config.general.encipher_key.clone(),
                     crypto_iv: config.general.encipher_iv.clone(),

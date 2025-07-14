@@ -1,11 +1,27 @@
 use hyper::Uri;
 use serde::Deserialize;
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamMode {
+    Frontend,
+    Backend,
+    Dual,
+}
+
+impl Default for StreamMode {
+    fn default() -> Self {
+        StreamMode::Frontend
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct General {
     pub log_level: String,
     pub mermory_mode: String,
     pub expired_seconds: u64,
+    #[serde(default)]
+    pub stream_mode: StreamMode,
     pub backend_type: String,
     pub encipher_key: String,
     pub encipher_iv: String,
@@ -15,7 +31,6 @@ pub struct General {
 }
 
 impl General {
-
     pub fn emby_uri(&self) -> Uri {
         let scheme = self.get_port_scheme();
         let should_show_port = !(self.emby_port == "443" || self.emby_port == "80");
@@ -31,7 +46,11 @@ impl General {
     }
 
     fn get_port_scheme(&self) -> &str {
-        if self.emby_port == "443" { "https" } else { "http" }
+        if self.emby_port == "443" {
+            "https"
+        } else {
+            "http"
+        }
     }
 }
 

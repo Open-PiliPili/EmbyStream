@@ -17,4 +17,6 @@ pub enum ConfigError {
     CopyTemplate(IoError),
     #[error("Invalid backend type: '{0}'")]
     InvalidBackendType(String),
+    #[error("Missing configuration: '{0}'")]
+    MissingConfig(String),
 }

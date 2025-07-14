@@ -13,7 +13,7 @@ use super::error::ConfigError;
 use crate::config::{
     backend::{Backend, BackendConfig},
     frontend::Frontend,
-    general::{General, UserAgent},
+    general::{General, StreamMode, UserAgent},
     types::RawConfig,
 };
 use crate::{
@@ -34,9 +34,9 @@ pub struct Config {
     pub path: PathBuf,
     pub general: General,
     pub user_agent: UserAgent,
-    pub frontend: Frontend,
-    pub backend: Backend,
-    pub backend_config: BackendConfig,
+    pub frontend: Option<Frontend>,
+    pub backend: Option<Backend>,
+    pub backend_config: Option<BackendConfig>,
 }
 
 impl Config {
@@ -59,6 +59,15 @@ impl Config {
         }
 
         let default_path = Self::get_default_config_path()?.join(CONFIG_FILE_NAME);
+        if default_path.exists() {
+            info_log!(
+                CONFIG_LOGGER_DOMAIN,
+                "Loading config file from default location: {}",
+                default_path.display()
+            );
+            return Self::load_from_path(&default_path);
+        }
+
         Self::handle_missing_config(&default_path)?;
         unreachable!();
     }
@@ -85,23 +94,47 @@ impl Config {
         let content = fs::read_to_string(path)?;
         let raw_config: RawConfig = toml::from_str(&content)?;
 
-        let backend_config = match raw_config.general.backend_type.as_str() {
-            "disk" => BackendConfig::Disk(raw_config.disk.ok_or_else(|| {
-                ConfigError::InvalidBackendType(format!("{} backend not configured", "disk"))
-            })?),
-            "openlist" => BackendConfig::OpenList(raw_config.open_list.ok_or_else(|| {
-                ConfigError::InvalidBackendType(format!("{} backend not configured", "openlist"))
-            })?),
-            "direct_link" => {
-                BackendConfig::DirectLink(raw_config.direct_link.ok_or_else(|| {
-                    ConfigError::InvalidBackendType(format!(
-                        "{} backend not configured",
-                        "direct_link"
-                    ))
-                })?)
+        let stream_mode = &raw_config.general.stream_mode;
+
+        if (stream_mode == &StreamMode::Frontend || stream_mode == &StreamMode::Dual)
+            && raw_config.frontend.is_none()
+        {
+            return Err(ConfigError::MissingConfig("Frontend".to_string()));
+        }
+
+        let backend_config;
+
+        if stream_mode == &StreamMode::Frontend
+            || stream_mode == &StreamMode::Backend
+            || stream_mode == &StreamMode::Dual
+        {
+            if raw_config.backend.is_none() {
+                return Err(ConfigError::MissingConfig("Backend".to_string()));
             }
-            other => return Err(ConfigError::InvalidBackendType(other.to_string())),
-        };
+
+            let backend_type = raw_config.general.backend_type.as_str();
+            let config = match backend_type.to_lowercase().as_str() {
+                "disk" => BackendConfig::Disk(
+                    raw_config
+                        .disk
+                        .ok_or_else(|| ConfigError::MissingConfig("Disk".to_string()))?,
+                ),
+                "openlist" => BackendConfig::OpenList(
+                    raw_config
+                        .open_list
+                        .ok_or_else(|| ConfigError::MissingConfig("OpenList".to_string()))?,
+                ),
+                "direct_link" => BackendConfig::DirectLink(
+                    raw_config
+                        .direct_link
+                        .ok_or_else(|| ConfigError::MissingConfig("DirectLink".to_string()))?,
+                ),
+                other => return Err(ConfigError::InvalidBackendType(other.to_string())),
+            };
+            backend_config = Some(config);
+        } else {
+            backend_config = None;
+        }
 
         Ok(Config {
             path: path.to_path_buf(),
