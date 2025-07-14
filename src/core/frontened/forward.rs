@@ -36,7 +36,7 @@ impl ForwardMiddleware {
     fn get_item_id(&self, path: &str) -> Option<String> {
         ITEM_ID_REGEX
             .captures(path)
-            .and_then(|caps| caps.get(2))
+            .and_then(|caps| caps.get(1))
             .map(|m| m.as_str().to_owned())
     }
 
