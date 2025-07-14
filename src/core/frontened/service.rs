@@ -173,7 +173,7 @@ impl AppForwardService {
         path = self.rewrite_if_needed(path.as_str()).await;
         debug_log!(FORWARD_LOGGER_DOMAIN, "Sign path: {:?}", path);
 
-        let uri: Uri = path.parse().map_err(|_| AppForwardError::InvalidUri)?;
+        let uri: Uri = self.hyper_uri(&path)?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let expired_at = now + self.get_forward_config().await.expired_seconds;
@@ -326,6 +326,39 @@ impl AppForwardService {
                 .await;
 
         config_arc.clone()
+    }
+
+    fn hyper_uri(&self, input: &str) -> Result<Uri, AppForwardError> {
+        if let Some(scheme) = input.split("://").next() {
+            if ["http", "https", "file"].contains(&scheme) {
+                return input.parse().map_err(|_| AppForwardError::InvalidUri);
+            }
+        }
+
+        let path = Path::new(input);
+
+        if !path.exists() {
+            return Err(AppForwardError::InvalidUri);
+        }
+
+        let absolute_path = path
+            .canonicalize()
+            .map_err(|_| AppForwardError::InvalidUri)?;
+
+        #[cfg(unix)]
+        let file_uri = format!("file://{}", absolute_path.display());
+
+        #[cfg(windows)]
+        let file_uri = {
+            let path_str = absolute_path
+                .display()
+                .to_string()
+                .replace('\\', "/")
+                .replace(":", "|");
+            format!("file:///{}", path_str)
+        };
+
+        file_uri.parse().map_err(|_| AppForwardError::InvalidUri)
     }
 }
 
