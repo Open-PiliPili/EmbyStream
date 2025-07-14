@@ -336,14 +336,23 @@ impl AppForwardService {
         }
 
         let path = Path::new(input);
-
         if !path.exists() {
+            error_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "Path {} does not exist",
+                path.display()
+            );
             return Err(AppForwardError::InvalidUri);
         }
 
         let absolute_path = path
             .canonicalize()
             .map_err(|_| AppForwardError::InvalidUri)?;
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Absolute path: {}",
+            absolute_path.display()
+        );
 
         #[cfg(unix)]
         let file_uri = format!("file://{}", absolute_path.display());
