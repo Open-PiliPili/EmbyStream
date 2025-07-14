@@ -6,5 +6,4 @@ pub struct OpenList {
     pub port: String,
     pub token: String,
     pub user_agent: String,
-    pub path_replace_rule_regex: String,
 }

@@ -24,7 +24,7 @@ use crate::{
         request::Request as AppForwardRequest,
     },
     network::CurlPlugin,
-    util::StringUtil,
+    util::{PathRewriter, StringUtil},
 };
 
 const MAX_STRM_FILE_SIZE: u64 = 1024 * 1024;
@@ -169,7 +169,9 @@ impl AppForwardService {
             return Ok(sign);
         }
 
-        let path = self.reparse_if_strm(params.path.as_str()).await?;
+        let mut path = self.reparse_if_strm(params.path.as_str()).await?;
+        path = self.rewrite_if_needed(path.as_str()).await;
+
         let uri = path.parse().map_err(|_| AppForwardError::InvalidUri)?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
@@ -241,6 +243,20 @@ impl AppForwardService {
         Ok(content)
     }
 
+    async fn rewrite_if_needed(&self, path: &str) -> String {
+        let config = self.get_forward_config().await;
+        if !config.path_rewrite.is_need_rewrite(path) {
+            return path.to_string();
+        }
+
+        let rewriter = PathRewriter::new(
+            &config.path_rewrite.pattern,
+            &config.path_rewrite.replacement,
+        );
+
+        rewriter.rewrite(path).await
+    }
+
     fn build_redirect_info(&self, url: Uri, original_headers: &HeaderMap) -> RedirectInfo {
         let mut final_headers = original_headers.clone();
 
@@ -281,8 +297,11 @@ impl AppForwardService {
             self.config
                 .get_or_init(|| async {
                     let config = self.state.get_config().await;
-                    let backend = config.backend.as_ref().expect(
+                    let frontend = config.frontend.as_ref().expect(
                         "Attempted to access forward config, but backend is not configured",
+                    );
+                    let backend = config.backend.as_ref().expect(
+                        "Attempted to access backend config, but backend is not configured",
                     );
                     Arc::new(ForwardConfig {
                         expired_seconds: config.general.expired_seconds,
@@ -292,6 +311,7 @@ impl AppForwardService {
                         crypto_iv: config.general.encipher_iv.clone(),
                         emby_server_url: config.general.emby_uri().to_string(),
                         emby_api_key: config.general.emby_api_key.to_string(),
+                        path_rewrite: frontend.path_rewrite.clone(),
                     })
                 })
                 .await;

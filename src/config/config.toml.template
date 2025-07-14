@@ -57,6 +57,11 @@ deny_ua = []
 # Frontend web server configuration
 listen_port = 60001  # Port for the frontend web interface
 
+[Frontend.PathRewrite]
+enable = false
+pattern = ""
+replacement = ""
+
 # Backend-specific configurations
 # Only configure the section matching your chosen backend_type
 
@@ -68,9 +73,13 @@ path = "stream"                # Path component for stream URLs
 port = "443"                   # HTTPS port for stream service
 proxy_mode = "proxy"           # Backend proxy mode for media streaming (options: "proxy", "redirect")
 
+[Backend.PathRewrite]
+enable = false
+pattern = ""
+replacement = ""
+
 [Disk]
 # Disk backend configuration - for local or mounted storage
-path_replace_rule_regex = ""   # Regex pattern for path rewriting (optional)
 
 [OpenList]
 # OpenList backend configuration
@@ -78,9 +87,7 @@ base_url = "https://openlist.example.com" # OpenList server URL
 port = "443"                             # OpenList server port
 token = ""                               # Authentication token for OpenList
 user_agent = ""                          # Custom User-Agent for requests
-path_replace_rule_regex = ""             # Regex pattern for path rewriting (optional)
 
 [DirectLink]
 # DirectLink backend configuration - for CDN or direct streaming
 user_agent = ""                         # Custom User-Agent for requests
-path_replace_rule_regex = ""            # Regex pattern for path rewriting (optional)

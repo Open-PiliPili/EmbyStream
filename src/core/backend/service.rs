@@ -9,7 +9,7 @@ use super::{
     result::Result as AppStreamResult, source::Source, types::BackendConfig,
 };
 use crate::core::redirect_info::RedirectInfo;
-use crate::{AppState, STREAM_LOGGER_DOMAIN, error_log, info_log};
+use crate::{AppState, PathRewriter, STREAM_LOGGER_DOMAIN, error_log, info_log};
 use crate::{
     CryptoInput, CryptoOperation, CryptoOutput,
     config::backend::types::BackendConfig as StreamBackendConfig,
@@ -104,25 +104,56 @@ impl AppStreamService {
         }
     }
 
+    async fn rewrite_uri_if_needed(&self, uri: Uri) -> Uri {
+        let config = self.get_backend_config().await;
+
+        if !config.path_rewrite.is_need_rewrite(uri.path()) {
+            return uri;
+        }
+
+        let path = uri.path();
+        let rewriter = PathRewriter::new(
+            &config.path_rewrite.pattern,
+            &config.path_rewrite.replacement,
+        );
+
+        if let Ok(new_path) = rewriter.rewrite(path).await {
+            if let Ok(new_uri) = Uri::builder()
+                .scheme(uri.scheme_str().unwrap_or("http"))
+                .authority(uri.authority().unwrap_or_default())
+                .path_and_query(new_path)
+                .build()
+            {
+                return new_uri;
+            }
+        }
+
+        uri
+    }
+
     async fn get_backend_config(&self) -> Arc<BackendConfig> {
-        let config_arc = self
-            .config
-            .get_or_init(|| async {
-                let config = self.state.get_config().await;
-                let user_agent = if let Some(StreamBackendConfig::OpenList(open_list)) =
-                    &config.backend_config
-                {
-                    Some(open_list.user_agent.clone())
-                } else {
-                    None
-                };
-                Arc::new(BackendConfig {
-                    crypto_key: config.general.encipher_key.clone(),
-                    crypto_iv: config.general.encipher_iv.clone(),
-                    user_agent,
+        let config_arc =
+            self.config
+                .get_or_init(|| async {
+                    let config = self.state.get_config().await;
+                    let backend = config.backend.as_ref().expect(
+                        "Attempted to access backend config, but backend is not configured",
+                    );
+                    let user_agent = if let Some(StreamBackendConfig::OpenList(open_list)) =
+                        &config.backend_config
+                    {
+                        Some(open_list.user_agent.clone())
+                    } else {
+                        None
+                    };
+                    Arc::new(BackendConfig {
+                        crypto_key: config.general.encipher_key.clone(),
+                        crypto_iv: config.general.encipher_iv.clone(),
+                        user_agent,
+                        path_rewrite: backend.path_rewrite.clone(),
+                    })
                 })
-            })
-            .await;
+                .await;
 
         config_arc.clone()
     }

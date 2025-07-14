@@ -6,6 +6,35 @@ use crate::config::{
     general::{General, UserAgent},
 };
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct PathRewriteConfig {
+    #[serde(default)]
+    pub enable: bool,
+    #[serde(default)]
+    pub pattern: String,
+    #[serde(default)]
+    pub replacement: String,
+}
+
+impl PathRewriteConfig {
+    pub fn is_need_rewrite(&self, path: &str) -> bool {
+        if path.is_empty() || !self.enable {
+            return false;
+        }
+        !self.pattern.is_empty() && !self.replacement.is_empty()
+    }
+}
+
+impl Default for PathRewriteConfig {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            pattern: String::new(),
+            replacement: String::new(),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub struct RawConfig {
     #[serde(rename = "General")]

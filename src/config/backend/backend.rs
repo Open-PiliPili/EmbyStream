@@ -1,6 +1,8 @@
 use hyper::Uri;
 use serde::Deserialize;
 
+use crate::config::types::PathRewriteConfig;
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Backend {
     pub listen_port: u16,
@@ -8,6 +10,8 @@ pub struct Backend {
     pub path: String,
     pub port: String,
     pub proxy_mode: String,
+    #[serde(default, rename = "PathRewrite")]
+    pub path_rewrite: PathRewriteConfig,
 }
 
 impl Backend {
