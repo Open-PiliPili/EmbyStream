@@ -4,8 +4,8 @@ use crate::system::Environment;
 
 #[derive(Debug)]
 pub struct SystemInfo {
-    version: String,
-    environment: Environment,
+    pub version: String,
+    pub environment: Environment,
 }
 
 impl SystemInfo {

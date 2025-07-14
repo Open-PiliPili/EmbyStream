@@ -92,6 +92,7 @@ replacement = ""               # The replacement string. Use $1 for the first ca
 
 [Disk]
 # Disk backend configuration - for local or mounted storage
+description = ""
 
 [OpenList]
 # OpenList backend configuration

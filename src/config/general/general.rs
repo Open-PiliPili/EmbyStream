@@ -18,7 +18,7 @@ impl Default for StreamMode {
 #[derive(Clone, Debug, Deserialize)]
 pub struct General {
     pub log_level: String,
-    pub mermory_mode: String,
+    pub memory_mode: String,
     pub expired_seconds: u64,
     #[serde(default)]
     pub stream_mode: StreamMode,

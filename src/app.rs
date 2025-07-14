@@ -40,7 +40,7 @@ impl AppState {
 
     async fn get_cache_settings(&self) -> (u64, u64) {
         let config = self.get_config().await;
-        match config.general.mermory_mode.as_str() {
+        match config.general.memory_mode.as_str() {
             "low" => (128, 30 * 30),
             "high" => (512, 60 * 60 * 2),
             _ => (256, 60 * 60),

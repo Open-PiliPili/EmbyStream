@@ -15,6 +15,7 @@ use embystream::{
         gateway::Gateway, response::ResponseBuilder, ua_filter::UserAgentFilterMiddleware,
     },
     logger::{LogLevel, Logger},
+    system::SystemInfo
 };
 
 #[tokio::main]
@@ -31,11 +32,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
 async fn run_app(config_path: Option<PathBuf>) -> Result<(), Box<dyn Error + Send + Sync>> {
     setup_figlet();
-    setup_initial_logger();
-    setup_print_info();
-
     let config = setup_load_config(config_path);
-    setup_reinit_logger(&config);
+    setup_logger(&config);
+    setup_print_info(&config);
 
     let app_state = setup_cache(&config).await;
     let frontend_state = app_state.clone();
@@ -57,25 +56,26 @@ fn setup_figlet() {
     }
 }
 
-fn setup_initial_logger() {
-    Logger::builder().with_level(LogLevel::Info).build();
-}
-
-fn setup_print_info() {
+fn setup_print_info(config: &Config) {
     info_log!(INIT_LOGGER_DOMAIN, "Initializing EmbyStream...");
+
+    let system_info = SystemInfo::new();
+    let configurarion = if cfg!(debug_assertions) {
+        "Development"
+    } else {
+        "Production"
+    };
     info_log!(
         INIT_LOGGER_DOMAIN,
-        "    -> Version: {}",
-        env!("CARGO_PKG_VERSION")
+        "Environment: {:?} [{:?}], Version: {:?}",
+        system_info.environment,
+        &configurarion,
+        system_info.version
     );
     info_log!(
         INIT_LOGGER_DOMAIN,
-        "    -> Environment: {}",
-        if cfg!(debug_assertions) {
-            "Development"
-        } else {
-            "Production"
-        }
+        "Log level: {}",
+        config.general.log_level.as_str()
     );
 }
 
@@ -84,7 +84,7 @@ fn setup_load_config(config_path: Option<PathBuf>) -> Config {
         Ok(config) => {
             info_log!(
                 INIT_LOGGER_DOMAIN,
-                "    -> Configuration loaded successfully."
+                "Configuration loaded successfully."
             );
             config
         }
@@ -99,7 +99,7 @@ fn setup_load_config(config_path: Option<PathBuf>) -> Config {
     }
 }
 
-fn setup_reinit_logger(config: &Config) {
+fn setup_logger(config: &Config) {
     let level = LogLevel::from_str(&config.general.log_level).unwrap_or(LogLevel::Info);
     Logger::builder().with_level(level).build();
 }
