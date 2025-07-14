@@ -60,7 +60,8 @@ impl AppStreamService {
             return Err(AppStreamError::ExpiredStream);
         }
 
-        let uri = sign.uri.clone().ok_or(AppStreamError::InvalidUri)?;
+        let mut uri = sign.uri.clone().ok_or(AppStreamError::InvalidUri)?;
+        uri = self.rewrite_uri_if_needed(uri).await;
 
         if sign.is_local() {
             Ok(Source::Local(PathBuf::from(uri.to_string())))
@@ -106,29 +107,19 @@ impl AppStreamService {
 
     async fn rewrite_uri_if_needed(&self, uri: Uri) -> Uri {
         let config = self.get_backend_config().await;
+        let uri_str = uri.to_string();
 
-        if !config.path_rewrite.is_need_rewrite(uri.path()) {
+        if !config.path_rewrite.is_need_rewrite(&uri_str) {
             return uri;
         }
 
-        let path = uri.path();
         let rewriter = PathRewriter::new(
             &config.path_rewrite.pattern,
             &config.path_rewrite.replacement,
         );
 
-        if let Ok(new_path) = rewriter.rewrite(path).await {
-            if let Ok(new_uri) = Uri::builder()
-                .scheme(uri.scheme_str().unwrap_or("http"))
-                .authority(uri.authority().unwrap_or_default())
-                .path_and_query(new_path)
-                .build()
-            {
-                return new_uri;
-            }
-        }
-
-        uri
+        let new_uri_str = rewriter.rewrite(&uri_str).await;
+        new_uri_str.parse().unwrap_or(uri)
     }
 
     async fn get_backend_config(&self) -> Arc<BackendConfig> {

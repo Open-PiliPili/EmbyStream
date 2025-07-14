@@ -21,7 +21,6 @@ pub struct UserAgentFilterMiddleware {
 }
 
 impl UserAgentFilterMiddleware {
-    #[allow(dead_code)]
     pub fn new(state: Arc<AppState>) -> Self {
         Self {
             state,
