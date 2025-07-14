@@ -15,7 +15,7 @@ use tokio::sync::OnceCell;
 use url::form_urlencoded;
 
 use super::types::{ForwardConfig, ForwardInfo, PathParams};
-use crate::{AppState, FORWARD_LOGGER_DOMAIN, error_log, info_log};
+use crate::{AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
     client::{ClientBuilder, EmbyClient},
     core::{
@@ -172,14 +172,22 @@ impl AppForwardService {
         let mut path = self.reparse_if_strm(params.path.as_str()).await?;
         path = self.rewrite_if_needed(path.as_str()).await;
 
-        let uri = path.parse().map_err(|_| AppForwardError::InvalidUri)?;
+        let uri: Uri = path.parse().map_err(|_| AppForwardError::InvalidUri)?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let expired_at = now + self.get_forward_config().await.expired_seconds;
         let sign = Sign {
-            uri: Some(uri),
+            uri: Some(uri.clone()),
             expired_at: Some(expired_at),
         };
+
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Successfully retrieved sign: {:?} by path: {:?}, expired_at: {:?}",
+            sign,
+            uri.to_string(),
+            expired_at
+        );
 
         encrypt_cache.insert(cache_key, sign.clone());
 
