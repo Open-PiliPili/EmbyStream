@@ -171,6 +171,7 @@ impl AppForwardService {
 
         let mut path = self.reparse_if_strm(params.path.as_str()).await?;
         path = self.rewrite_if_needed(path.as_str()).await;
+        debug_log!(FORWARD_LOGGER_DOMAIN, "Sign path: {:?}", path);
 
         let uri: Uri = path.parse().map_err(|_| AppForwardError::InvalidUri)?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
