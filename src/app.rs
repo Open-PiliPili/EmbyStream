@@ -44,48 +44,47 @@ impl AppState {
         Ok(())
     }
 
+    async fn get_cache_settings(&self) -> (u64, u64) {
+        let config = self.get_config().await;
+        match config.general.mermory_mode.as_str() {
+            "low" => (128, 30 * 30),
+            "high" => (512, 60 * 60 * 2),
+            _ => (256, 60 * 60),
+        }
+    }
+
     pub async fn get_file_cache(&self) -> &FileCache {
+        let (capacity, ttl) = self.get_cache_settings().await;
         self.file_cache
-            .get_or_init(|| async {
-                let cache = FileCache::new(256, 60 * 60);
-                cache
-            })
+            .get_or_init(|| async move { FileCache::new(capacity, ttl) })
             .await
     }
 
     pub async fn get_encrypt_cache(&self) -> &GeneralCache {
+        let (capacity, ttl) = self.get_cache_settings().await;
         self.encrypt_cache
-            .get_or_init(|| async {
-                let cache = GeneralCache::new(256, 60 * 60);
-                cache
-            })
+            .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
             .await
     }
 
     pub async fn get_decrypt_cache(&self) -> &GeneralCache {
+        let (capacity, ttl) = self.get_cache_settings().await;
         self.decrypt_cache
-            .get_or_init(|| async {
-                let cache = GeneralCache::new(256, 60 * 60);
-                cache
-            })
+            .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
             .await
     }
 
     pub async fn get_strm_file_cache(&self) -> &GeneralCache {
+        let (capacity, ttl) = self.get_cache_settings().await;
         self.strm_file_cache
-            .get_or_init(|| async {
-                let cache = GeneralCache::new(256, 60 * 60);
-                cache
-            })
+            .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
             .await
     }
 
     pub async fn get_forward_info_cache(&self) -> &GeneralCache {
+        let (capacity, ttl) = self.get_cache_settings().await;
         self.forward_info_cache
-            .get_or_init(|| async {
-                let cache = GeneralCache::new(256, 60 * 60);
-                cache
-            })
+            .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
             .await
     }
 }
