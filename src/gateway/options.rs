@@ -6,7 +6,7 @@ use super::{
     response::{BoxBodyType, ResponseBuilder},
 };
 use crate::gateway::context::Context;
-use crate::{GATEWAY_LOGGER_DOMAIN, error_log};
+use crate::{GATEWAY_LOGGER_DOMAIN, debug_log, error_log};
 
 #[derive(Clone)]
 pub struct OptionsMiddleware;
@@ -14,6 +14,8 @@ pub struct OptionsMiddleware;
 #[async_trait]
 impl Middleware for OptionsMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+        debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting options middleware...");
+
         if ctx.method == hyper::Method::OPTIONS {
             error_log!(
                 GATEWAY_LOGGER_DOMAIN,

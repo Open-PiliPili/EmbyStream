@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use hyper::{Response, StatusCode, header};
 use tokio::sync::OnceCell;
 
-use crate::{AppState, USER_AGENT_FILTER, error_log};
+use crate::{AppState, USER_AGENT_FILTER, debug_log, error_log};
 use crate::{
     config::general::UserAgent,
     gateway::{
@@ -81,6 +81,11 @@ impl UserAgentFilterMiddleware {
 #[async_trait]
 impl Middleware for UserAgentFilterMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+        debug_log!(
+            USER_AGENT_FILTER,
+            "Starting user agent filter middleware..."
+        );
+
         let ua_lower = ctx
             .headers
             .get(header::USER_AGENT)

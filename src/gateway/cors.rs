@@ -6,6 +6,7 @@ use super::{
     response::BoxBodyType,
 };
 use crate::gateway::context::Context;
+use crate::{GATEWAY_LOGGER_DOMAIN, debug_log};
 
 #[derive(Clone)]
 pub struct CorsMiddleware;
@@ -13,6 +14,8 @@ pub struct CorsMiddleware;
 #[async_trait]
 impl Middleware for CorsMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+        debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting HTTP cors middleware...");
+
         let mut response = next.run(ctx).await;
 
         response.headers_mut().insert(

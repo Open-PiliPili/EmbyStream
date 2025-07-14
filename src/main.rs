@@ -4,7 +4,9 @@ use clap::Parser;
 use figlet_rs::FIGfont;
 use hyper::StatusCode;
 
-use embystream::{AppState, INIT_LOGGER_DOMAIN, error_log, info_log};
+use embystream::{
+    AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log, info_log,
+};
 use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
     cli::{Cli, Commands},
@@ -15,7 +17,7 @@ use embystream::{
         gateway::Gateway, response::ResponseBuilder, ua_filter::UserAgentFilterMiddleware,
     },
     logger::{LogLevel, Logger},
-    system::SystemInfo
+    system::SystemInfo,
 };
 
 #[tokio::main]
@@ -82,10 +84,7 @@ fn setup_print_info(config: &Config) {
 fn setup_load_config(config_path: Option<PathBuf>) -> Config {
     match Config::load_or_init(config_path) {
         Ok(config) => {
-            info_log!(
-                INIT_LOGGER_DOMAIN,
-                "Configuration loaded successfully."
-            );
+            info_log!(INIT_LOGGER_DOMAIN, "Configuration loaded successfully.");
             config
         }
         Err(e) => {
@@ -173,5 +172,8 @@ async fn setup_backend_gateway(
 }
 
 fn default_handler() -> Handler {
-    Arc::new(|_ctx: Context| ResponseBuilder::with_status_code(StatusCode::SERVICE_UNAVAILABLE))
+    Arc::new(|_ctx: Context| {
+        debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting default middleware...");
+        ResponseBuilder::with_status_code(StatusCode::SERVICE_UNAVAILABLE)
+    })
 }

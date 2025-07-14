@@ -6,9 +6,9 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use url::form_urlencoded;
 
-use super::{service::ForwardService};
+use super::service::ForwardService;
 use crate::frontened::types::PathParams;
-use crate::{FORWARD_LOGGER_DOMAIN, debug_log, info_log};
+use crate::{FORWARD_LOGGER_DOMAIN, GATEWAY_LOGGER_DOMAIN, debug_log, info_log};
 use crate::{
     core::request::Request as AppForwardRequest,
     gateway::{
@@ -30,9 +30,7 @@ pub struct ForwardMiddleware {
 
 impl ForwardMiddleware {
     pub fn new(forward_service: Arc<dyn ForwardService>) -> Self {
-        Self {
-            forward_service,
-        }
+        Self { forward_service }
     }
 
     fn get_item_id(&self, path: &str) -> Option<String> {
@@ -56,6 +54,8 @@ impl ForwardMiddleware {
 #[async_trait]
 impl Middleware for ForwardMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+        debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting forward middleware...");
+
         let Some(item_id) = self.get_item_id(&ctx.path) else {
             return next.run(ctx).await;
         };
