@@ -138,6 +138,9 @@ async fn setup_frontend_gateway(
 
     gateway.set_handler(default_handler());
     gateway.listen().await?;
+
+    debug_log!(INIT_LOGGER_DOMAIN, "Successfully start frontend listener");
+
     Ok(())
 }
 
@@ -168,6 +171,9 @@ async fn setup_backend_gateway(
 
     gateway.set_handler(default_handler());
     gateway.listen().await?;
+
+    debug_log!(INIT_LOGGER_DOMAIN, "Successfully start backend listener");
+
     Ok(())
 }
 
