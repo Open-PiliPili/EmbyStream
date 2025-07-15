@@ -142,6 +142,11 @@ impl AppForwardService {
         let sign_value = self.get_encrypt_sign(forward_info).await?;
         let config = self.get_forward_config().await;
 
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Get signed url by backend_url: {:?}",
+            &config.backend_url
+        );
         let mut url = Url::parse(&config.backend_url).map_err(|_| AppForwardError::InvalidUri)?;
 
         url.query_pairs_mut()
@@ -151,7 +156,7 @@ impl AppForwardService {
         let url_str = url.as_str();
         debug_log!(
             FORWARD_LOGGER_DOMAIN,
-            "Get signed url: {:?}",
+            "Get signed url by url str: {:?}",
             url_str
         );
 
