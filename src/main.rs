@@ -118,6 +118,8 @@ async fn setup_frontend_gateway(
         return Ok(());
     }
 
+    debug_log!(INIT_LOGGER_DOMAIN, "Successfully start frontend listener");
+
     let frontend = config.frontend.as_ref().ok_or_else(|| {
         error_log!(
             INIT_LOGGER_DOMAIN,
@@ -139,8 +141,6 @@ async fn setup_frontend_gateway(
     gateway.set_handler(default_handler());
     gateway.listen().await?;
 
-    debug_log!(INIT_LOGGER_DOMAIN, "Successfully start frontend listener");
-
     Ok(())
 }
 
@@ -153,6 +153,8 @@ async fn setup_backend_gateway(
     if !(mode == StreamMode::Backend || mode == StreamMode::Dual) {
         return Ok(());
     }
+
+    debug_log!(INIT_LOGGER_DOMAIN, "Successfully start backend listener");
 
     let backend = config.backend.as_ref().ok_or_else(|| {
         error_log!(INIT_LOGGER_DOMAIN, "Error: Backend configuration not exist");
@@ -171,8 +173,6 @@ async fn setup_backend_gateway(
 
     gateway.set_handler(default_handler());
     gateway.listen().await?;
-
-    debug_log!(INIT_LOGGER_DOMAIN, "Successfully start backend listener");
 
     Ok(())
 }
