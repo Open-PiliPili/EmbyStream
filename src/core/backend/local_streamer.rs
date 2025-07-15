@@ -91,6 +91,14 @@ impl LocalStreamer {
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+        debug_log!(
+            LOCAL_STREAMER_LOGGER_DOMAIN,
+            "Successfully seeked stream partial content, start: {}, end: {}, len: {}",
+            start,
+            end,
+            len
+        );
+
         let limited_reader = file.take(len);
         let stream = AdaptiveChunkStream::new(limited_reader, start_time)
             .map_ok(Frame::data)
