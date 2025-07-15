@@ -19,8 +19,18 @@ use crate::{
 };
 
 static ITEM_ID_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^/(?:emby/)?videos/([a-zA-Z0-9_-]+)/(?:original|stream)(?:\.[a-zA-Z0-9]+)?$")
-        .expect("Invalid regex pattern")
+    Regex::new(&concat!(
+        r"^/(?:emby/)?videos/",  // 1. Path prefix
+        r"([\w-]+)",             // 2. Item ID capture
+        r"(?:",                  // 3. Start path alternatives
+        r"/(?:original|stream)", // 4. Legacy paths
+        r"(?:\.[\w]+)?",         // 5. Optional extension
+        r"|/hls\d*/[^/]+",       // 6. HLS path prefix
+        r"(?:/\d+)?",            // 7. Optional HLS sequence
+        r"\.(?:ts|m3u8)",        // 8. HLS extensions
+        r")$"                    // 9. Close group
+    ))
+    .expect("Invalid regex pattern")
 });
 
 #[derive(Clone)]
