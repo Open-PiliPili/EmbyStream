@@ -9,6 +9,8 @@ use serde::{Deserialize};
 use crate::backend::proxy_mode::ProxyMode;
 use crate::{FORWARD_LOGGER_DOMAIN, debug_log};
 
+const PSEUDO_HOST: &str = "local-file.invalid";
+
 #[derive(Debug, Deserialize)]
 pub struct SignParams {
     #[serde(default)]
@@ -99,8 +101,8 @@ impl Sign {
             return false;
         };
 
-        if let Some(scheme) = uri.scheme_str() {
-            return scheme.to_lowercase() == "file";
+        if let Some(scheme) = uri.host() {
+            return scheme.to_lowercase() == PSEUDO_HOST;
         }
 
         uri.host().is_none() && uri.path().starts_with('/')
