@@ -1,5 +1,8 @@
-use std::sync::Arc;
-use std::time::Instant;
+use std::{
+    sync::Arc,
+    time::Instant
+};
+
 use async_trait::async_trait;
 use hyper::{Request, Response, body};
 
