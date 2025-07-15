@@ -114,6 +114,7 @@ impl AppStreamService {
                     "Succesfully decrypted signatures: {:?}",
                     sign_map
                 );
+                decrypt_cache.insert(cache_key, sign_map.clone());
                 Ok(Sign::from_map(&sign_map))
             }
         }
