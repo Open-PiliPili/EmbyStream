@@ -22,13 +22,13 @@ pub struct AdaptiveChunkStream<R: AsyncRead + Unpin> {
 
 impl<R: AsyncRead + Unpin> AdaptiveChunkStream<R> {
     pub fn new(reader: R, request_start_time: Instant) -> Self {
-        let initial_chunk_size = 16 * 1024;
+        let initial_chunk_size = 128 * 1024;
         Self {
             reader,
             buf: BytesMut::with_capacity(initial_chunk_size),
-            initial_chunks_count: 4,
+            initial_chunks_count: 1,
             initial_chunk_size,
-            standard_chunk_size: 256 * 1024,
+            standard_chunk_size: 512 * 1024,
             request_start_time,
             first_chunk_sent: false,
         }
@@ -39,7 +39,25 @@ impl<R: AsyncRead + Unpin> Stream for AdaptiveChunkStream<R> {
     type Item = std::io::Result<Bytes>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.as_mut().get_mut();
+        let this = &mut *self;
+
+        if !this.buf.is_empty() {
+            if !this.first_chunk_sent {
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Time to first chunk: {:?}",
+                    this.request_start_time.elapsed()
+                );
+                this.first_chunk_sent = true;
+            }
+
+            if this.initial_chunks_count > 0 {
+                this.initial_chunks_count -= 1;
+            }
+
+            let chunk = this.buf.split().freeze();
+            return Poll::Ready(Some(Ok(chunk)));
+        }
 
         let chunk_size = if this.initial_chunks_count > 0 {
             this.initial_chunk_size
@@ -48,6 +66,8 @@ impl<R: AsyncRead + Unpin> Stream for AdaptiveChunkStream<R> {
         };
 
         this.buf.reserve(chunk_size);
+
+        let original_len = this.buf.len();
         let mut read_buf = ReadBuf::uninit(this.buf.spare_capacity_mut());
 
         match Pin::new(&mut this.reader).poll_read(cx, &mut read_buf) {
@@ -59,7 +79,7 @@ impl<R: AsyncRead + Unpin> Stream for AdaptiveChunkStream<R> {
                 }
 
                 unsafe {
-                    this.buf.set_len(this.buf.len() + bytes_filled);
+                    this.buf.set_len(original_len + bytes_filled);
                 }
 
                 if !this.first_chunk_sent {
@@ -75,7 +95,7 @@ impl<R: AsyncRead + Unpin> Stream for AdaptiveChunkStream<R> {
                     this.initial_chunks_count -= 1;
                 }
 
-                let chunk = this.buf.split_to(bytes_filled).freeze();
+                let chunk = this.buf.split().freeze();
                 Poll::Ready(Some(Ok(chunk)))
             }
             Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
