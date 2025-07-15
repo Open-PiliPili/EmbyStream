@@ -18,17 +18,27 @@ use crate::{
     },
 };
 
-static ITEM_ID_REGEX: Lazy<Regex> = Lazy::new(|| {
+static NORMAL_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(&concat!(
-        r"^/(?:emby/)?videos/",  // 1. Path prefix
-        r"([\w-]+)",             // 2. Item ID capture
-        r"(?:",                  // 3. Start path alternatives
-        r"/(?:original|stream)", // 4. Legacy paths
-        r"(?:\.[\w]+)?",         // 5. Optional extension
-        r"|/hls\d*/[^/]+",       // 6. HLS path prefix
-        r"(?:/\d+)?",            // 7. Optional HLS sequence
-        r"\.(?:ts|m3u8)",        // 8. HLS extensions
-        r")$"                    // 9. Close group
+        r"^/(?:emby/)?videos/",    // 1. Path prefix
+        r"([a-zA-Z0-9_-]+)",       // 2. Item ID capture
+        r"(?:",                    // 3. Start path alternatives
+        r"/(?:original|stream)",   // 4. Legacy paths
+        r"(?:\.[a-zA-Z0-9]+)?",    // 5. Optional extension
+        r"|/[a-zA-Z0-9_-]+\.m3u8", // 6. Direct m3u8 path
+        r")$"                      // 7. Close group
+    ))
+    .expect("Invalid regex pattern")
+});
+
+static HLS_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&concat!(
+        r"^/(?:emby/)?videos/", // 1. Path prefix
+        r"([a-zA-Z0-9_-]+)",    // 2. Item ID capture
+        r"/hls\d*/",            // 3. HLS path prefix
+        r"[^/]+",               // 4. Segment name
+        r"(?:/\d+)?",           // 5. Optional HLS sequence
+        r"\.(?:ts|m3u8)$"       // 6. HLS extensions
     ))
     .expect("Invalid regex pattern")
 });
@@ -44,7 +54,11 @@ impl ForwardMiddleware {
     }
 
     fn get_item_id(&self, path: &str) -> Option<String> {
-        ITEM_ID_REGEX
+        if let Some(caps) = NORMAL_STREAM_REGEX.captures(path) {
+            return caps.get(1).map(|m| m.as_str().to_owned());
+        }
+
+        HLS_STREAM_REGEX
             .captures(path)
             .and_then(|caps| caps.get(1))
             .map(|m| m.as_str().to_owned())
