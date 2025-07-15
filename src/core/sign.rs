@@ -4,10 +4,10 @@ use std::{
 };
 
 use hyper::Uri;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 
 use crate::backend::proxy_mode::ProxyMode;
-use crate::uri_serde;
+use crate::{FORWARD_LOGGER_DOMAIN, debug_log};
 
 #[derive(Debug, Deserialize)]
 pub struct SignParams {
@@ -27,11 +27,9 @@ impl Default for SignParams {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default)]
 pub struct Sign {
-    #[serde(with = "uri_serde", default)]
     pub uri: Option<Uri>,
-    #[serde(default)]
     pub expired_at: Option<u64>,
 }
 
@@ -41,12 +39,38 @@ impl Sign {
     }
 
     pub fn from_map(map: &HashMap<String, String>) -> Self {
-        serde_json::from_value(serde_json::json!(map)).unwrap_or_default()
+        debug_log!(FORWARD_LOGGER_DOMAIN, "Map to sign: {:?}", map);
+        let mut sign = Sign::default();
+
+        if let Some(uri_str) = map.get("uri") {
+            sign.uri = uri_str.parse::<Uri>().ok();
+        }
+
+        if let Some(expired_at_str) = map.get("expired_at") {
+            sign.expired_at = expired_at_str.parse::<u64>().ok();
+        }
+
+        sign
     }
 
     pub fn to_map(&self) -> HashMap<String, String> {
-        let value = serde_json::to_value(self).unwrap_or_default();
-        serde_json::from_value(value).unwrap_or_default()
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Sign to map by uri: {:?} expired_at: {:?}",
+            self.uri,
+            self.expired_at
+        );
+        let mut map = HashMap::new();
+
+        if let Some(uri) = &self.uri {
+            map.insert("uri".to_string(), uri.to_string());
+        }
+
+        if let Some(expired_at) = self.expired_at {
+            map.insert("expired_at".to_string(), expired_at.to_string());
+        }
+
+        map
     }
 
     pub fn is_valid(&self) -> bool {

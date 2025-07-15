@@ -1,7 +1,6 @@
 pub mod backend;
 pub mod frontened;
 pub mod sign;
-pub mod uri_serde;
 pub mod error;
 pub mod request;
 pub mod redirect_info;
