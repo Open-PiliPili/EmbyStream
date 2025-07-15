@@ -78,5 +78,7 @@ impl Gateway {
 }
 
 fn is_ignorable_connection_error(err: &dyn Error) -> bool {
-    err.to_string().contains("connection closed")
+    let err_lowercased = err.to_string().to_lowercase();
+    err_lowercased.contains("connection closed") ||
+        err_lowercased.contains("connection reset by peer")
 }
