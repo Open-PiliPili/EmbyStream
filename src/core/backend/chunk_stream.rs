@@ -26,7 +26,7 @@ impl<R: AsyncRead + Unpin> AdaptiveChunkStream<R> {
         Self {
             reader,
             buf: BytesMut::with_capacity(initial_chunk_size),
-            initial_chunks_count: 8,
+            initial_chunks_count: 4,
             initial_chunk_size,
             standard_chunk_size: 256 * 1024,
             request_start_time,
