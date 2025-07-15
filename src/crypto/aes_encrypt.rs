@@ -1,16 +1,13 @@
 use std::collections::HashMap;
 
-use serde_json;
 use aes::Aes128;
-use cbc::Encryptor;
 use aes::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7, generic_array::GenericArray};
-use base64::{
-    Engine,
-    engine::general_purpose::STANDARD as BASE64
-};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use cbc::Encryptor;
+use serde_json;
 
 use super::key_normalizer::KeyNormalizer;
-use crate::{CRYPTO_LOGGER_DOMAIN, Error, error_log, info_log};
+use crate::{CRYPTO_LOGGER_DOMAIN, Error, debug_log, error_log};
 
 // Create type alias for AES-128-CBC Encryptor
 type Aes128CbcEncryptor = Encryptor<Aes128>;
@@ -34,11 +31,18 @@ impl AesEncrypt {
     /// * `Ok(String)` - The Base64-encoded encrypted string (IV + ciphertext).
     /// * `Err(Error)` - If the key length is invalid or encryption fails.
     pub fn encrypt(dict: &HashMap<String, String>, key: &str, iv: &str) -> Result<String, Error> {
-        info_log!(CRYPTO_LOGGER_DOMAIN, "Starting AES encryption for dictionary");
+        debug_log!(
+            CRYPTO_LOGGER_DOMAIN,
+            "Starting AES encryption for dictionary"
+        );
 
         // Serialize dictionary to JSON
         let json = serde_json::to_string(dict).map_err(|e| {
-            error_log!(CRYPTO_LOGGER_DOMAIN, "Failed to serialize dictionary to JSON: {}", e);
+            error_log!(
+                CRYPTO_LOGGER_DOMAIN,
+                "Failed to serialize dictionary to JSON: {}",
+                e
+            );
             Error::JsonError(e)
         })?;
 
@@ -65,7 +69,10 @@ impl AesEncrypt {
 
         // Encode to Base64
         let encoded = BASE64.encode(&ciphertext);
-        info_log!(CRYPTO_LOGGER_DOMAIN, "Encryption successful, produced Base64 string");
+        debug_log!(
+            CRYPTO_LOGGER_DOMAIN,
+            "Encryption successful, produced Base64 string"
+        );
         Ok(encoded)
     }
 }

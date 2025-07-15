@@ -1,10 +1,9 @@
 use super::{
-    aes_encrypt::AesEncrypt, aes_decrypt::AesDecrypt,
-    crypto_operation::CryptoOperation, crypto_input::CryptoInput,
-    crypto_output::CryptoOutput
+    aes_decrypt::AesDecrypt, aes_encrypt::AesEncrypt, crypto_input::CryptoInput,
+    crypto_operation::CryptoOperation, crypto_output::CryptoOutput,
 };
 
-use crate::{CRYPTO_LOGGER_DOMAIN, Error, error_log, info_log};
+use crate::{CRYPTO_LOGGER_DOMAIN, Error, debug_log, error_log};
 
 /// Unified cryptographic operation handler.
 pub struct Crypto;
@@ -31,15 +30,24 @@ impl Crypto {
         key: &str,
         iv: &str,
     ) -> Result<CryptoOutput, Error> {
-        info_log!(CRYPTO_LOGGER_DOMAIN, "Executing cryptographic operation: {:?}", operation);
+        debug_log!(
+            CRYPTO_LOGGER_DOMAIN,
+            "Executing cryptographic operation: {:?}",
+            operation
+        );
 
         match operation {
             CryptoOperation::Encrypt => {
                 let dict = match input {
                     CryptoInput::Dictionary(dict) => dict,
                     _ => {
-                        error_log!(CRYPTO_LOGGER_DOMAIN, "Invalid input for encryption: expected dictionary");
-                        return Err(Error::EncryptionError("Invalid input: expected dictionary".to_string()));
+                        error_log!(
+                            CRYPTO_LOGGER_DOMAIN,
+                            "Invalid input for encryption: expected dictionary"
+                        );
+                        return Err(Error::EncryptionError(
+                            "Invalid input: expected dictionary".to_string(),
+                        ));
                     }
                 };
                 let encrypted = AesEncrypt::encrypt(&dict, key, iv)?;
@@ -53,11 +61,9 @@ impl Crypto {
                             CRYPTO_LOGGER_DOMAIN,
                             "Invalid input for decryption: expected encrypted string"
                         );
-                        return Err(
-                            Error::DecryptionError(
-                                "Invalid input: expected encrypted string".to_string()
-                            )
-                        );
+                        return Err(Error::DecryptionError(
+                            "Invalid input: expected encrypted string".to_string(),
+                        ));
                     }
                 };
                 let dict = AesDecrypt::decrypt(&encrypted, key, iv)?;

@@ -15,7 +15,7 @@ use tokio::fs::{self as TokioFS, metadata as TokioMetadata};
 use tokio::sync::OnceCell;
 
 use super::types::{ForwardConfig, ForwardInfo, PathParams};
-use crate::{AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log};
+use crate::{AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log};
 use crate::{
     client::{ClientBuilder, EmbyClient},
     core::{
@@ -415,11 +415,6 @@ impl ForwardService for AppForwardService {
                 }
             })?;
 
-        info_log!(
-            FORWARD_LOGGER_DOMAIN,
-            "Routing forward request to {:?}",
-            remote_uri
-        );
         Ok(self.build_redirect_info(remote_uri, &request.original_headers))
     }
 }
