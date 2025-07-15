@@ -126,7 +126,11 @@ impl AppForwardService {
                 path: path.to_string(),
             })
             .ok_or_else(|| {
-                error_log!("Media source not found: {}", path_params.media_source_id);
+                error_log!(
+                    FORWARD_LOGGER_DOMAIN,
+                    "Media source not found: {}",
+                    path_params.media_source_id
+                );
                 AppForwardError::EmbyPathParserError
             })?;
 
@@ -151,6 +155,8 @@ impl AppForwardService {
 
     async fn get_encrypt_sign(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
         let encrypt_map = self.get_sign(params).await?.to_map();
+        debug_log!(FORWARD_LOGGER_DOMAIN, "Ready to encrypt sign map: {:?}", encrypt_map);
+
         let config = self.get_forward_config().await;
         let crypto_result = Crypto::execute(
             CryptoOperation::Encrypt,
