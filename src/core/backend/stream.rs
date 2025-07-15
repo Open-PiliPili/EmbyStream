@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use hyper::{Response, StatusCode};
 
 use super::{result::Result as AppStreamResult, service::StreamService};
-use crate::{GATEWAY_LOGGER_DOMAIN, REMOTE_STREAMER_LOGGER_DOMAIN, info_log, debug_log};
+use crate::{GATEWAY_LOGGER_DOMAIN, REMOTE_STREAMER_LOGGER_DOMAIN, debug_log, info_log};
 use crate::{
     core::request::Request as AppStreamRequest,
     gateway::{
@@ -33,7 +33,27 @@ impl Middleware for StreamMiddleware {
     async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting stream middleware...");
 
-        if ctx.path != *self.path {
+        let request_path = {
+            let path = ctx.path.clone().to_lowercase();
+            path.trim_start_matches('/')
+                .trim_end_matches('/')
+                .to_string()
+        };
+
+        let expected_path = {
+            let path = self.path.clone().to_lowercase();
+            path.trim_start_matches('/')
+                .trim_end_matches('/')
+                .to_string()
+        };
+
+        if expected_path != request_path {
+            debug_log!(
+                REMOTE_STREAMER_LOGGER_DOMAIN,
+                "Ctx path: {} doesn't match path {}!",
+                ctx.path,
+                self.path
+            );
             return next.run(ctx).await;
         }
 
