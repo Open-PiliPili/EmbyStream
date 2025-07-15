@@ -1,4 +1,10 @@
-use std::{convert::Infallible, error::Error, net::SocketAddr, sync::Arc};
+use std::{
+    convert::Infallible,
+    error::Error,
+    io::{Error as IoError, ErrorKind as IoErrorKind},
+    net::SocketAddr,
+    sync::Arc
+};
 
 use hyper::{Request, Response, StatusCode, body, server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
@@ -77,8 +83,18 @@ impl Gateway {
     }
 }
 
-fn is_ignorable_connection_error(err: &dyn Error) -> bool {
-    let err_lowercased = err.to_string().to_lowercase();
-    err_lowercased.contains("connection closed") ||
-        err_lowercased.contains("connection reset by peer")
+fn is_ignorable_connection_error(err: &(dyn Error + 'static)) -> bool {
+    let mut source = Some(err);
+
+    while let Some(current_err) = source {
+        if let Some(io_err) = current_err.downcast_ref::<IoError>() {
+            match io_err.kind() {
+                IoErrorKind::ConnectionReset | IoErrorKind::BrokenPipe => return true,
+                _ => (),
+            }
+        }
+        source = current_err.source();
+    }
+
+    false
 }

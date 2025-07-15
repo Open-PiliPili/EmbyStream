@@ -148,7 +148,14 @@ impl AppForwardService {
             .append_pair("sign", &sign_value)
             .append_pair("proxy_mode", &config.proxy_mode);
 
-        url.as_str()
+        let url_str = url.as_str();
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Get signed url: {:?}",
+            url_str
+        );
+
+        url_str
             .parse()
             .map_err(|_| AppForwardError::InvalidUri)
     }
