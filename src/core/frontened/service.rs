@@ -24,7 +24,7 @@ use crate::{
     },
     crypto::{Crypto, CryptoInput, CryptoOperation, CryptoOutput},
     network::CurlPlugin,
-    util::{PathRewriter, StringUtil, UriExt},
+    util::{PathRewriter, StringUtil, UriExt, UriExtError},
 };
 
 const MAX_STRM_FILE_SIZE: u64 = 1024 * 1024;
@@ -160,14 +160,16 @@ impl AppForwardService {
             url_str
         );
 
-        url_str
-            .parse()
-            .map_err(|_| AppForwardError::InvalidUri)
+        url_str.parse().map_err(|_| AppForwardError::InvalidUri)
     }
 
     async fn get_encrypt_sign(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
         let encrypt_map = self.get_sign(params).await?.to_map();
-        debug_log!(FORWARD_LOGGER_DOMAIN, "Ready to encrypt sign map: {:?}", encrypt_map);
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Ready to encrypt sign map: {:?}",
+            encrypt_map
+        );
 
         let config = self.get_forward_config().await;
         let crypto_result = Crypto::execute(
@@ -197,7 +199,11 @@ impl AppForwardService {
         path = self.rewrite_if_needed(path.as_str()).await;
         debug_log!(FORWARD_LOGGER_DOMAIN, "Sign path: {:?}", path);
 
-        let uri: Uri = Uri::from_path_or_url(path).map_err(|_| AppForwardError::InvalidUri)?;
+        let uri: Uri = Uri::from_path_or_url(path).map_err(|e| match e {
+            UriExtError::FileNotFound(path) => AppForwardError::FileNotFound(path),
+            UriExtError::InvalidUri => AppForwardError::InvalidUri,
+            UriExtError::IoError(e) => AppForwardError::IoError(e),
+        })?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let expired_at = now + self.get_forward_config().await.expired_seconds;
@@ -374,14 +380,27 @@ impl ForwardService for AppForwardService {
                 StatusCode::BAD_REQUEST
             })?;
 
-        let remote_uri = self.get_signed_uri(&forward_info).await.map_err(|e| {
-            error_log!(
-                FORWARD_LOGGER_DOMAIN,
-                "Routing forward signed uri error: {:?}",
-                e
-            );
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        let remote_uri = self
+            .get_signed_uri(&forward_info)
+            .await
+            .map_err(|e| match e {
+                AppForwardError::FileNotFound(path) => {
+                    error_log!(
+                        FORWARD_LOGGER_DOMAIN,
+                        "Routing forward signed uri error because of file missing: {}",
+                        path
+                    );
+                    StatusCode::NOT_FOUND
+                }
+                _ => {
+                    error_log!(
+                        FORWARD_LOGGER_DOMAIN,
+                        "Routing forward signed uri error: {:?}",
+                        e
+                    );
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+            })?;
 
         info_log!(
             FORWARD_LOGGER_DOMAIN,

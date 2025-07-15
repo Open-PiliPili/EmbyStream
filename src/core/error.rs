@@ -1,3 +1,5 @@
+use std::io::Error as IoError;
+
 use thiserror::Error;
 
 use crate::Error as CommonError;
@@ -37,5 +39,9 @@ pub enum Error {
     #[error("Invalid openlist uri: {0}")]
     InvalidOpenListUri(String),
     #[error("Unexpected openlist error: {0}")]
-    UnexpectedOpenListError(String)
+    UnexpectedOpenListError(String),
+    #[error("File not found: {0}")]
+    FileNotFound(String),
+    #[error("IO error: {0}")]
+    IoError(#[from] IoError),
 }

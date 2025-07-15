@@ -8,6 +8,8 @@ const PSEUDO_BASE_URI: &str = "http://local-file.invalid";
 
 #[derive(Error, Debug)]
 pub enum UriExtError {
+    #[error("File not found: {0}")]
+    FileNotFound(String),
     #[error("Invalid URI")]
     InvalidUri,
     #[error("IO error: {0}")]
@@ -27,7 +29,11 @@ impl UriExt for Uri {
             return path_str.parse().map_err(|_| UriExtError::InvalidUri);
         }
 
-        let absolute_path = fs::canonicalize(Path::new(path_str))?;
+        let path = Path::new(path_str);
+        if !path.exists() {
+            return Err(UriExtError::FileNotFound(path_str.to_string()));
+        }
+        let absolute_path = fs::canonicalize(path)?;
         let path_str = absolute_path.to_string_lossy();
 
         let normalized_path = if cfg!(windows) {
@@ -70,5 +76,22 @@ impl UriExt for Uri {
                     })
             })
             .unwrap_or_else(|| self.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_pathbuf() {
+        let path = "****";
+
+        let uri = Uri::from_path_or_url(path);
+        if let Ok(uri) = uri {
+            println!("{:?}", uri);
+        } else {
+            println!("{:?}", uri.unwrap_err());
+        }
     }
 }
