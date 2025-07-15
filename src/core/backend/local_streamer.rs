@@ -11,7 +11,7 @@ use super::{
     chunk_stream::AdaptiveChunkStream, response::Response, result::Result as AppStreamResult,
 };
 use crate::cache::FileMetadata;
-use crate::{AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, error_log};
+use crate::{AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, error_log, debug_log};
 
 pub(crate) struct LocalStreamer;
 
@@ -59,6 +59,13 @@ impl LocalStreamer {
         range_value: &str,
         start_time: Instant,
     ) -> Result<AppStreamResult, StatusCode> {
+        debug_log!(
+            LOCAL_STREAMER_LOGGER_DOMAIN,
+            "Start stream partial content, metadata: {:?}, range_value: {:?}",
+            file_metadata,
+            range_value
+        );
+
         let Ok(parsed) = http_range_header::parse_range_header(range_value) else {
             return Err(StatusCode::RANGE_NOT_SATISFIABLE);
         };
@@ -118,6 +125,12 @@ impl LocalStreamer {
         file_metadata: &FileMetadata,
         start_time: Instant,
     ) -> Result<AppStreamResult, StatusCode> {
+        debug_log!(
+            LOCAL_STREAMER_LOGGER_DOMAIN,
+            "Start stream full content, metadata: {:?}",
+            file_metadata
+        );
+
         let handle = file_entry.handle.read().await;
         let file = handle
             .try_clone()
