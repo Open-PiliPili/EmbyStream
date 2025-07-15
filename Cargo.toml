@@ -18,6 +18,7 @@ cipher = "0.4.4"
 clap = { version = "4.5.41", features = ["derive"] }
 directories = "6.0.0"
 figlet-rs = "0.1.5"
+form_urlencoded = "1.2.1"
 futures-util = "0.3.31"
 generic-array = "1.2.0"
 hyper = { version = "1.6.0", features = ["full"] }
@@ -30,6 +31,7 @@ libc = "0.2.174"
 md5 = "0.8.0"
 moka = { version = "0.12.10", features = ["future", "sync"] }
 once_cell = "1.21.3"
+percent-encoding = "2.3.1"
 regex = "1.11.1"
 reqwest = { version = "0.12.19", default-features = false, features = [
     "gzip",
@@ -42,7 +44,6 @@ reqwest = { version = "0.12.19", default-features = false, features = [
 ] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-serde_yaml = "0.9.33"
 serde_urlencoded = "0.7.1"
 thiserror = "2.0.12"
 time = { version = "0.3.41", features = ["macros", "local-offset"] }
@@ -59,6 +60,3 @@ tracing-subscriber = { version = "0.3.19", features = [
     "local-time",
     "json"
 ] }
-uuid = { version = "1.17.0", features = ["v4"] }
-url = "2.5.4"
-env_logger = "0.11.8"

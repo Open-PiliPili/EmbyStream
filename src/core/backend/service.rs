@@ -9,7 +9,7 @@ use super::{
     result::Result as AppStreamResult, source::Source, types::BackendConfig,
 };
 use crate::core::redirect_info::RedirectInfo;
-use crate::{AppState, STREAM_LOGGER_DOMAIN, error_log, info_log};
+use crate::{AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
     CryptoInput, CryptoOperation, CryptoOutput,
     client::{ClientBuilder, OpenListClient},
@@ -19,7 +19,7 @@ use crate::{
     network::CurlPlugin,
     sign::{Sign, SignParams},
     system::SystemInfo,
-    util::{PathRewriter, StringUtil},
+    util::{PathRewriter, StringUtil, UriExt},
 };
 
 #[async_trait]
@@ -68,8 +68,19 @@ impl AppStreamService {
         uri = self.fetch_remote_uri_if_openlist(&uri).await?;
 
         if sign.is_local() {
-            Ok(Source::Local(PathBuf::from(uri.to_string())))
+            let local_path = PathBuf::from(Uri::to_path_or_url_string(&uri));
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "Routing to local path {:?}",
+                local_path
+            );
+            Ok(Source::Local(local_path))
         } else {
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "Routing to remote path {:?}",
+                Uri::to_path_or_url_string(&uri)
+            );
             Ok(Source::Remote {
                 uri,
                 mode: params.proxy_mode,
@@ -82,6 +93,7 @@ impl AppStreamService {
         let cache_key = self.decrypt_key(params)?;
 
         if let Some(sign) = decrypt_cache.get(&cache_key) {
+            debug_log!(STREAM_LOGGER_DOMAIN, "Sign cache hit: {:?}", sign);
             return Ok(sign);
         }
 
@@ -96,13 +108,20 @@ impl AppStreamService {
 
         match crypto_result {
             CryptoOutput::Encrypted(_) => Err(AppStreamError::InvalidEncryptedSignature),
-            CryptoOutput::Dictionary(sign_map) => Ok(Sign::from_map(&sign_map)),
+            CryptoOutput::Dictionary(sign_map) => {
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Succesfully decrypted signatures: {:?}",
+                    sign_map
+                );
+                Ok(Sign::from_map(&sign_map))
+            }
         }
     }
 
     async fn rewrite_uri_if_needed(&self, uri: Uri) -> Uri {
         let config = self.get_backend_config().await;
-        let uri_str = uri.to_string();
+        let uri_str = Uri::to_path_or_url_string(&uri);
         let path_rewrite = config.backend.path_rewrite.clone();
 
         if !path_rewrite.is_need_rewrite(&uri_str) {
@@ -118,6 +137,11 @@ impl AppStreamService {
     async fn fetch_remote_uri_if_openlist(&self, uri: &Uri) -> Result<Uri, AppStreamError> {
         let cache = self.state.get_open_list_cache().await;
         if let Some(cached_uri) = cache.get(&self.open_list_cache_key(uri)) {
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "Open list cache hit: {:?}",
+                cached_uri
+            );
             return Ok(cached_uri);
         }
 
@@ -133,9 +157,9 @@ impl AppStreamService {
 
         let result = openlist_client
             .fetch_file_path(
-                &openlist_config.uri().to_string(),
+                Uri::to_path_or_url_string(&openlist_config.uri()),
                 &openlist_config.token,
-                uri.to_string(),
+                Uri::to_path_or_url_string(&uri),
             )
             .await;
 
@@ -210,7 +234,7 @@ impl AppStreamService {
     }
 
     fn open_list_cache_key(&self, uri: &Uri) -> String {
-        let url = uri.to_string().to_lowercase();
+        let url = Uri::to_path_or_url_string(uri).to_lowercase();
         let input = url.to_lowercase();
         StringUtil::md5(&input)
     }

@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use form_urlencoded;
 use hyper::{Response, StatusCode, Uri};
 use once_cell::sync::Lazy;
 use regex::Regex;
-use url::form_urlencoded;
 
 use super::service::ForwardService;
 use crate::frontened::types::PathParams;

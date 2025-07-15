@@ -5,6 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use form_urlencoded;
 use hyper::{
     StatusCode, Uri,
     header::{self, HeaderMap},
@@ -12,7 +13,6 @@ use hyper::{
 use reqwest::Url;
 use tokio::fs::{self as TokioFS, metadata as TokioMetadata};
 use tokio::sync::OnceCell;
-use url::form_urlencoded;
 
 use super::types::{ForwardConfig, ForwardInfo, PathParams};
 use crate::{AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log};
@@ -24,7 +24,7 @@ use crate::{
     },
     crypto::{Crypto, CryptoInput, CryptoOperation, CryptoOutput},
     network::CurlPlugin,
-    util::{PathRewriter, StringUtil},
+    util::{PathRewriter, StringUtil, UriExt},
 };
 
 const MAX_STRM_FILE_SIZE: u64 = 1024 * 1024;
@@ -83,6 +83,11 @@ impl AppForwardService {
         let forward_info_cache = self.state.get_forward_info_cache().await;
         let cache_key = self.forward_info_key(&path_params)?;
         if let Some(cached_forward_info) = forward_info_cache.get(&cache_key) {
+            debug_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "Forward info cache hit {:?}",
+                cached_forward_info
+            );
             return Ok(cached_forward_info);
         }
 
@@ -166,6 +171,7 @@ impl AppForwardService {
         let cache_key = self.encrypt_key(&params)?;
 
         if let Some(sign) = encrypt_cache.get(&cache_key) {
+            debug_log!(FORWARD_LOGGER_DOMAIN, "Sign cache hit: {:?}", sign);
             return Ok(sign);
         }
 
@@ -173,7 +179,7 @@ impl AppForwardService {
         path = self.rewrite_if_needed(path.as_str()).await;
         debug_log!(FORWARD_LOGGER_DOMAIN, "Sign path: {:?}", path);
 
-        let uri: Uri = self.hyper_uri(&path)?;
+        let uri: Uri = Uri::from_path_or_url(path).map_err(|_| AppForwardError::InvalidUri)?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let expired_at = now + self.get_forward_config().await.expired_seconds;
@@ -204,6 +210,12 @@ impl AppForwardService {
         let strm_cache_key = self.strm_key(path)?;
 
         if let Some(cached_path) = strm_cache.get::<String>(&strm_cache_key) {
+            debug_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "Strm cache hit: {:?} by path {}",
+                cached_path,
+                path
+            );
             return Ok(cached_path);
         }
 
@@ -326,48 +338,6 @@ impl AppForwardService {
                 .await;
 
         config_arc.clone()
-    }
-
-    fn hyper_uri(&self, input: &str) -> Result<Uri, AppForwardError> {
-        if let Some(scheme) = input.split("://").next() {
-            if ["http", "https", "file"].contains(&scheme) {
-                return input.parse().map_err(|_| AppForwardError::InvalidUri);
-            }
-        }
-
-        let path = Path::new(input);
-        if !path.exists() {
-            error_log!(
-                FORWARD_LOGGER_DOMAIN,
-                "Path {} does not exist",
-                path.display()
-            );
-            return Err(AppForwardError::InvalidUri);
-        }
-
-        let absolute_path = path
-            .canonicalize()
-            .map_err(|_| AppForwardError::InvalidUri)?;
-        debug_log!(
-            FORWARD_LOGGER_DOMAIN,
-            "Absolute path: {}",
-            absolute_path.display()
-        );
-
-        #[cfg(unix)]
-        let file_uri = format!("file://{}", absolute_path.display());
-
-        #[cfg(windows)]
-        let file_uri = {
-            let path_str = absolute_path
-                .display()
-                .to_string()
-                .replace('\\', "/")
-                .replace(":", "|");
-            format!("file:///{}", path_str)
-        };
-
-        file_uri.parse().map_err(|_| AppForwardError::InvalidUri)
     }
 }
 
