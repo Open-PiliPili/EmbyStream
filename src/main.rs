@@ -11,7 +11,7 @@ use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
     cli::{Cli, Commands},
     config::{config::Config, general::StreamMode},
-    frontened::{forward::ForwardMiddleware, service::AppForwardService},
+    frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
         CorsMiddleware, LoggerMiddleware, OptionsMiddleware, chain::Handler, context::Context,
         gateway::Gateway, response::ResponseBuilder, ua_filter::UserAgentFilterMiddleware,

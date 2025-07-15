@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 use super::service::ForwardService;
-use crate::frontened::types::PathParams;
+use crate::frontend::types::PathParams;
 use crate::{FORWARD_LOGGER_DOMAIN, GATEWAY_LOGGER_DOMAIN, debug_log, info_log};
 use crate::{
     core::request::Request as AppForwardRequest,

@@ -1,5 +1,5 @@
 pub mod backend;
-pub mod frontened;
+pub mod frontend;
 pub mod sign;
 pub mod error;
 pub mod request;
