@@ -1,4 +1,5 @@
 use std::{
+    io::{Error as IoError, ErrorKind as IoErrorKind},
     fs,
     path::{Path, PathBuf},
     process,
@@ -156,8 +157,8 @@ impl Config {
                 "Missing template config file at {}",
                 template_path.display()
             );
-            return Err(ConfigError::CopyTemplate(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
+            return Err(ConfigError::CopyTemplate(IoError::new(
+                IoErrorKind::NotFound,
                 format!("Template file not found at {}", template_path.display()),
             )));
         }

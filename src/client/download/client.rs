@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+
+use reqwest::Response;
+
 use crate::{
     api::download::API,
     client::BuildableClient,
     network::{NetworkPlugin, NetworkProvider},
 };
-use reqwest::Response;
 
 pub struct Client {
     provider: NetworkProvider,

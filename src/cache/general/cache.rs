@@ -1,5 +1,6 @@
-use moka::sync::Cache as MokaCache;
 use std::{any::Any, fmt::Debug, sync::Arc, time::Duration};
+
+use moka::sync::Cache as MokaCache;
 
 /// A high-performance, thread-safe, generic cache powered by Moka.
 ///
