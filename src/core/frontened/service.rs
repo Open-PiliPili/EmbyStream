@@ -230,6 +230,12 @@ impl AppForwardService {
             return Ok(path.to_string());
         }
 
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Detected strm file: {}",
+            path
+        );
+
         let strm_cache = self.state.get_strm_file_cache().await;
         let strm_cache_key = self.strm_key(path)?;
 
@@ -283,6 +289,13 @@ impl AppForwardService {
             })?
             .trim()
             .to_string();
+
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Read strm file: {} (content: {})",
+            path,
+            content
+        );
 
         strm_cache.insert(strm_cache_key, content.clone());
         Ok(content)
