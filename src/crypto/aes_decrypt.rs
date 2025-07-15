@@ -10,7 +10,7 @@ use base64::{
 };
 
 use super::key_normalizer::KeyNormalizer;
-use crate::{CRYPTO_LOGGER_DOMAIN, Error, error_log, info_log};
+use crate::{CRYPTO_LOGGER_DOMAIN, Error, error_log, debug_log};
 
 // Create type alias for AES-128-CBC Decryptor
 type Aes128CbcDecryptor = Decryptor<Aes128>;
@@ -35,7 +35,7 @@ impl AesDecrypt {
     /// * `Ok(HashMap<String, String>)` - The decrypted dictionary.
     /// * `Err(Error)` - If the key length is invalid, Base64 decoding fails, or decryption fails.
     pub fn decrypt(encrypted: &str, key: &str, iv: &str) -> Result<HashMap<String, String>, Error> {
-        info_log!(CRYPTO_LOGGER_DOMAIN, "Starting AES decryption for Base64 string");
+        debug_log!(CRYPTO_LOGGER_DOMAIN, "Starting AES decryption for Base64 string");
 
         // Decode Base64
         let decoded = BASE64.decode(encrypted).map_err(|e| {
@@ -70,7 +70,7 @@ impl AesDecrypt {
             Error::JsonError(e)
         })?;
 
-        info_log!(CRYPTO_LOGGER_DOMAIN, "Decryption successful, restored dictionary");
+        debug_log!(CRYPTO_LOGGER_DOMAIN, "Decryption successful, restored dictionary");
         Ok(dict)
     }
 }

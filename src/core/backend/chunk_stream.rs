@@ -8,7 +8,7 @@ use bytes::{Bytes, BytesMut};
 use futures_util::Stream;
 use tokio::io::{AsyncRead, ReadBuf};
 
-use crate::{STREAM_LOGGER_DOMAIN, info_log};
+use crate::{STREAM_LOGGER_DOMAIN, debug_log};
 
 pub struct AdaptiveChunkStream<R: AsyncRead + Unpin> {
     reader: R,
@@ -63,7 +63,7 @@ impl<R: AsyncRead + Unpin> Stream for AdaptiveChunkStream<R> {
                 }
 
                 if !this.first_chunk_sent {
-                    info_log!(
+                    debug_log!(
                         STREAM_LOGGER_DOMAIN,
                         "Time to first chunk: {:?}",
                         this.request_start_time.elapsed()
