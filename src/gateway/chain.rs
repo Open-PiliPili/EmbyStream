@@ -1,18 +1,23 @@
-use std::{
-    sync::Arc,
-    time::Instant
-};
+use std::{sync::Arc, time::Instant};
 
 use async_trait::async_trait;
-use hyper::{Request, Response, body};
+use hyper::{
+    Request, Response,
+    body::{self, Incoming},
+};
 
 use crate::gateway::{context::Context, response::BoxBodyType};
 
-pub type Handler = Arc<dyn Fn(Context) -> Response<BoxBodyType> + Send + Sync>;
+pub type Handler = Arc<dyn Fn(Context, Option<Incoming>) -> Response<BoxBodyType> + Send + Sync>;
 
 #[async_trait]
 pub trait Middleware: Send + Sync {
-    async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType>;
+    async fn handle<'a>(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next<'a>,
+    ) -> Response<BoxBodyType>;
     fn clone_box(&self) -> Box<dyn Middleware>;
 }
 
@@ -28,15 +33,15 @@ pub struct Next<'a> {
 }
 
 impl<'a> Next<'a> {
-    pub async fn run(self, ctx: Context) -> Response<BoxBodyType> {
+    pub async fn run(self, ctx: Context, body: Option<Incoming>) -> Response<BoxBodyType> {
         if let Some((current, rest)) = self.chain.split_first() {
             let next = Next {
                 chain: rest,
                 handler: self.handler,
             };
-            current.handle(ctx, next).await
+            current.handle(ctx, body, next).await
         } else {
-            (self.handler)(ctx)
+            (self.handler)(ctx, body)
         }
     }
 }
@@ -61,19 +66,13 @@ impl Chain {
 
     pub async fn run(self, req: Request<body::Incoming>) -> Response<BoxBodyType> {
         let (parts, body) = req.into_parts();
-        let ctx = Context::new(
-            parts.uri,
-            parts.method,
-            parts.headers,
-            Some(body),
-            Instant::now()
-        );
+        let ctx = Context::new(parts.uri, parts.method, parts.headers, Instant::now());
 
         let next = Next {
             chain: &self.middlewares,
             handler: &self.handler,
         };
 
-        next.run(ctx).await
+        next.run(ctx, Some(body)).await
     }
 }

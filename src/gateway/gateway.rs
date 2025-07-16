@@ -3,10 +3,15 @@ use std::{
     error::Error,
     io::{Error as IoError, ErrorKind as IoErrorKind},
     net::SocketAddr,
-    sync::Arc
+    sync::Arc,
 };
 
-use hyper::{Request, Response, StatusCode, body, server::conn::http1, service::service_fn};
+use hyper::{
+    Request, Response, StatusCode,
+    body::{self, Incoming},
+    server::conn::http1,
+    service::service_fn,
+};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
@@ -46,9 +51,11 @@ impl Gateway {
         let listener = TcpListener::bind(&addr).await?;
 
         let handler = self.handler.clone().unwrap_or_else(|| {
-            Arc::new(|_ctx: Context| -> Response<BoxBodyType> {
-                ResponseBuilder::with_status_code(StatusCode::INTERNAL_SERVER_ERROR)
-            })
+            Arc::new(
+                |_ctx: Context, _body: Option<Incoming>| -> Response<BoxBodyType> {
+                    ResponseBuilder::with_status_code(StatusCode::INTERNAL_SERVER_ERROR)
+                },
+            )
         });
 
         let middlewares = Arc::new(std::mem::take(&mut self.middlewares));

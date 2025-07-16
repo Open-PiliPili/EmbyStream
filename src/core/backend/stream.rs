@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hyper::{Response, StatusCode};
+use hyper::{Response, StatusCode, body::Incoming};
 
 use super::{result::Result as AppStreamResult, service::StreamService};
 use crate::{GATEWAY_LOGGER_DOMAIN, REMOTE_STREAMER_LOGGER_DOMAIN, debug_log, info_log};
@@ -30,7 +30,12 @@ impl StreamMiddleware {
 
 #[async_trait]
 impl Middleware for StreamMiddleware {
-    async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+    async fn handle<'a>(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next<'a>,
+    ) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting stream middleware...");
 
         let request_path = {
@@ -54,7 +59,7 @@ impl Middleware for StreamMiddleware {
                 ctx.path,
                 self.path
             );
-            return next.run(ctx).await;
+            return next.run(ctx, body).await;
         }
 
         let stream_request = AppStreamRequest {

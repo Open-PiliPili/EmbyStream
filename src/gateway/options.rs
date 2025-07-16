@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use hyper::{Response, StatusCode};
+use hyper::{Response, StatusCode, body::Incoming};
 
 use super::{
     chain::{Middleware, Next},
@@ -13,7 +13,12 @@ pub struct OptionsMiddleware;
 
 #[async_trait]
 impl Middleware for OptionsMiddleware {
-    async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+    async fn handle<'a>(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next<'a>,
+    ) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting options middleware...");
 
         if ctx.method == hyper::Method::OPTIONS {
@@ -24,7 +29,7 @@ impl Middleware for OptionsMiddleware {
             return ResponseBuilder::with_status_code(StatusCode::NO_CONTENT);
         }
 
-        next.run(ctx).await
+        next.run(ctx, body).await
     }
 
     fn clone_box(&self) -> Box<dyn Middleware> {

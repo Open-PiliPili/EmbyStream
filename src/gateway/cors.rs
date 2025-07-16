@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use hyper::Response;
+use hyper::{Response, body::Incoming};
 
 use super::{
     chain::{Middleware, Next},
@@ -13,10 +13,15 @@ pub struct CorsMiddleware;
 
 #[async_trait]
 impl Middleware for CorsMiddleware {
-    async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+    async fn handle<'a>(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next<'a>,
+    ) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting HTTP cors middleware...");
 
-        let mut response = next.run(ctx).await;
+        let mut response = next.run(ctx, body).await;
 
         response.headers_mut().insert(
             "Access-Control-Allow-Origin",

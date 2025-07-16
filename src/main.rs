@@ -2,7 +2,7 @@ use std::{error::Error, path::PathBuf, str::FromStr, sync::Arc};
 
 use clap::Parser;
 use figlet_rs::FIGfont;
-use hyper::StatusCode;
+use hyper::{StatusCode, body::Incoming};
 
 use embystream::{
     AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log, info_log,
@@ -188,8 +188,8 @@ async fn setup_backend_gateway(
 }
 
 fn default_handler() -> Handler {
-    Arc::new(|_ctx: Context| {
-        debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting default middleware...");
+    Arc::new(|_ctx: Context, _body: Option<Incoming>| {
+        debug_log!(GATEWAY_LOGGER_DOMAIN, "Fallback to default middleware...");
         ResponseBuilder::with_status_code(StatusCode::SERVICE_UNAVAILABLE)
     })
 }

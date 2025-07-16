@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use form_urlencoded;
-use hyper::{Response, StatusCode, Uri};
+use hyper::{Response, StatusCode, Uri, body::Incoming};
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -77,11 +77,16 @@ impl ForwardMiddleware {
 
 #[async_trait]
 impl Middleware for ForwardMiddleware {
-    async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+    async fn handle<'a>(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next<'a>,
+    ) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting forward middleware...");
 
         let Some(item_id) = self.get_item_id(&ctx.path) else {
-            return next.run(ctx).await;
+            return next.run(ctx, body).await;
         };
 
         let path_params = PathParams {

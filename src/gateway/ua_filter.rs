@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hyper::{Response, StatusCode, header};
+use hyper::{Response, StatusCode, body::Incoming, header};
 use tokio::sync::OnceCell;
 
 use crate::{AppState, USER_AGENT_FILTER, debug_log, error_log};
@@ -80,7 +80,12 @@ impl UserAgentFilterMiddleware {
 
 #[async_trait]
 impl Middleware for UserAgentFilterMiddleware {
-    async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+    async fn handle<'a>(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next<'a>,
+    ) -> Response<BoxBodyType> {
         debug_log!(
             USER_AGENT_FILTER,
             "Starting user agent filter middleware..."
@@ -96,7 +101,7 @@ impl Middleware for UserAgentFilterMiddleware {
         let is_allowed = self.is_ua_allowed(&ua).await;
 
         if is_allowed {
-            next.run(ctx).await
+            next.run(ctx, body).await
         } else {
             error_log!(USER_AGENT_FILTER, "Forbidden user-agent: {}", ua);
             ResponseBuilder::with_status_code(StatusCode::FORBIDDEN)

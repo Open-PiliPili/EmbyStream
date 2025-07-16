@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use hyper::{Response, header};
+use hyper::{Response, body::Incoming, header};
 
 use super::{
     chain::{Middleware, Next},
@@ -13,7 +13,12 @@ pub struct LoggerMiddleware;
 
 #[async_trait]
 impl Middleware for LoggerMiddleware {
-    async fn handle<'a>(&self, ctx: Context, next: Next<'a>) -> Response<BoxBodyType> {
+    async fn handle<'a>(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next<'a>,
+    ) -> Response<BoxBodyType> {
         info_log!(GATEWAY_LOGGER_DOMAIN, "Incoming request details:");
         info_log!(GATEWAY_LOGGER_DOMAIN, "Request Headers: {:?}", ctx.headers);
         info_log!(
@@ -30,7 +35,7 @@ impl Middleware for LoggerMiddleware {
             );
         }
 
-        let response = next.run(ctx).await;
+        let response = next.run(ctx, body).await;
 
         info_log!(
             GATEWAY_LOGGER_DOMAIN,
