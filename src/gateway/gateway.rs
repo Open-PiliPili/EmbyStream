@@ -6,7 +6,7 @@ use std::{
     path::Path,
     sync::Arc,
 };
-
+use std::path::PathBuf;
 use hyper::{Response, StatusCode, body::Incoming, server::conn::http1};
 use hyper_util::{
     rt::{TokioExecutor, TokioIo},
@@ -48,9 +48,11 @@ impl Gateway {
         }
     }
 
-    pub fn with_tls(mut self, cert_path: &str, key_path: &str) -> Self {
-        self.cert_path = Some(cert_path.to_string());
-        self.key_path = Some(key_path.to_string());
+    pub fn with_tls(mut self, cert_path: Option<PathBuf>, key_path: Option<PathBuf>) -> Self {
+        if let (Some(cert), Some(key)) = (cert_path, key_path) {
+            self.cert_path = Some(cert.to_string_lossy().into_owned());
+            self.key_path = Some(key.to_string_lossy().into_owned());
+        }
         self
     }
 

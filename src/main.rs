@@ -6,7 +6,7 @@ use hyper::{StatusCode, body::Incoming};
 
 use embystream::cli::RunArgs;
 use embystream::{
-    AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log,
+    AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log, info_log,
 };
 use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
@@ -184,34 +184,12 @@ async fn setup_backend_gateway(
     let service = Arc::new(AppStreamService::new(app_state.clone()));
 
     let mut gateway = Gateway::new(&addr)
+        .with_tls(config.get_ssl_cert_path(), config.get_ssl_key_path())
         .add_middleware(Box::new(LoggerMiddleware))
         .add_middleware(Box::new(UserAgentFilterMiddleware::new(app_state.clone())))
         .add_middleware(Box::new(CorsMiddleware))
         .add_middleware(Box::new(OptionsMiddleware))
         .add_middleware(Box::new(StreamMiddleware::new(&backend.path, service)));
-
-    let cert_path_opt = config.get_ssl_cert_path();
-    let key_path_opt = config.get_ssl_key_path();
-
-    if let (Some(cert_path), Some(key_path)) = (cert_path_opt, key_path_opt) {
-        let cert_path_str = cert_path.to_string_lossy();
-        let key_path_str = key_path.to_string_lossy();
-
-        if cert_path.exists() && key_path.exists() {
-            info_log!(
-                INIT_LOGGER_DOMAIN,
-                "Enabling TLS for backend gateway. Cert: '{}', Key: '{}'",
-                cert_path.display(),
-                key_path.display()
-            );
-            gateway = gateway.with_tls(&cert_path_str, &key_path_str);
-        } else {
-            warn_log!(
-                INIT_LOGGER_DOMAIN,
-                "SSL certificate or key file not found. Backend gateway will start without TLS."
-            );
-        }
-    }
 
     gateway.set_handler(default_handler());
     gateway.listen().await?;
