@@ -11,7 +11,7 @@ use super::{
     chunk_stream::AdaptiveChunkStream, response::Response, result::Result as AppStreamResult,
 };
 use crate::cache::FileMetadata;
-use crate::{AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, error_log, debug_log};
+use crate::{AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, debug_log, error_log};
 
 pub(crate) struct LocalStreamer;
 
@@ -70,7 +70,8 @@ impl LocalStreamer {
             return Err(StatusCode::RANGE_NOT_SATISFIABLE);
         };
 
-        let Ok(validated_ranges) = parsed.validate(file_metadata.file_size) else {
+        let file_length = file_metadata.file_size;
+        let Ok(validated_ranges) = parsed.validate(file_length) else {
             return Err(StatusCode::RANGE_NOT_SATISFIABLE);
         };
 
@@ -100,7 +101,7 @@ impl LocalStreamer {
         );
 
         let limited_reader = file.take(len);
-        let stream = AdaptiveChunkStream::new(limited_reader, start_time)
+        let stream = AdaptiveChunkStream::new(limited_reader, file_length, start_time)
             .map_ok(Frame::data)
             .map_err(Into::into);
 
@@ -144,8 +145,9 @@ impl LocalStreamer {
             .try_clone()
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let file_length = file_metadata.file_size;
 
-        let stream = AdaptiveChunkStream::new(file, start_time)
+        let stream = AdaptiveChunkStream::new(file, file_length, start_time)
             .map_ok(Frame::data)
             .map_err(Into::into);
 
