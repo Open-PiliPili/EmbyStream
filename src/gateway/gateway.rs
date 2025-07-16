@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::{
     error::Error as StdError,
     fs::File,
@@ -6,13 +7,13 @@ use std::{
     path::Path,
     sync::Arc,
 };
-use std::path::PathBuf;
+
 use hyper::{Response, StatusCode, body::Incoming, server::conn::http1};
 use hyper_util::{
     rt::{TokioExecutor, TokioIo},
     server::conn::auto as hyper_conn_auto,
 };
-use rustls::ServerConfig;
+use rustls::{ServerConfig, crypto::aws_lc_rs};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
@@ -81,6 +82,10 @@ impl Gateway {
     }
 
     pub async fn listen(&mut self) -> Result<(), Box<dyn StdError + Send + Sync>> {
+        aws_lc_rs::default_provider()
+            .install_default()
+            .expect("Failed to install rustls crypto provider");
+
         let addr: SocketAddr = self.addr.parse()?;
         let listener = TcpListener::bind(&addr).await?;
         let handler = self.handler.clone().unwrap_or_else(Self::default_handler);
