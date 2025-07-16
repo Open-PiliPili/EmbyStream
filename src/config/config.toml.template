@@ -53,6 +53,17 @@ allow_ua = []
 # Example: deny_ua = ["curl/7.68.0", "wget"]
 deny_ua = []
 
+[Http2]
+# Path to SSL/TLS certificate file (PEM format)
+# Required for HTTPS/HTTP2 connections
+# Example: ssl_cert_file = "/path/to/certificate.pem"
+ssl_cert_file = "ssl.cer"
+
+# Path to SSL/TLS private key file (PEM format)
+# Required for HTTPS/HTTP2 connections
+# Example: ssl_key_file = "/path/to/private_key.pem"
+ssl_key_file = "ssl.key"
+
 [Frontend]
 # Frontend web server configuration
 listen_port = 60001  # Port for the frontend web interface

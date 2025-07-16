@@ -19,4 +19,10 @@ pub enum Commands {
 pub struct RunArgs {
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<PathBuf>,
+
+    #[arg(long, value_name = "FILE")]
+    pub ssl_cert_file: Option<PathBuf>,
+
+    #[arg(long, value_name = "FILE")]
+    pub ssl_key_file: Option<PathBuf>,
 }

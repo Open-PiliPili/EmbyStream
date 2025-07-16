@@ -1,6 +1,6 @@
 use std::{
-    io::{Error as IoError, ErrorKind as IoErrorKind},
     fs,
+    io::{Error as IoError, ErrorKind as IoErrorKind},
     path::{Path, PathBuf},
     process,
 };
@@ -9,17 +9,22 @@ use directories::BaseDirs;
 use libc;
 use serde::Deserialize;
 
-use super::error::ConfigError;
-use crate::config::{
+use super::{
     backend::{Backend, BackendConfig},
+    error::ConfigError,
     frontend::Frontend,
     general::{General, StreamMode, UserAgent},
+    http2::Http2,
     types::RawConfig,
 };
+use crate::cli::RunArgs;
 use crate::{CONFIG_LOGGER_DOMAIN, error_log, info_log};
 
 const CONFIG_DIR_NAME: &str = "embystream";
 const CONFIG_FILE_NAME: &str = "config.toml";
+const SSL_DIR_NAME: &str = "ssl";
+const SSL_CER_FILE_NAME: &str = "ssl-cert";
+const SSL_KEY_FILE_NAME: &str = "ssl-key";
 const DOCKER_CONFIG_PATH: &str = "/config/embystream/config.toml";
 const TEMPLATE_CONFIG_PATH: &str = "src/config.toml.template";
 const ROOT_CONFIG_PATH: &str = "/root/.config/embystream";
@@ -33,44 +38,69 @@ pub struct Config {
     pub frontend: Option<Frontend>,
     pub backend: Option<Backend>,
     pub backend_config: Option<BackendConfig>,
+    pub http2: Http2,
 }
 
 impl Config {
-    pub fn load_or_init(config_path: Option<PathBuf>) -> Result<Self, ConfigError> {
-        if let Some(path) = config_path {
-            return Self::load_from_path(&path);
+    pub fn load_or_init(args: &RunArgs) -> Result<Self, ConfigError> {
+        let config_path = match &args.config {
+            Some(path) => path.clone(),
+            None => Self::get_default_config_path()?.join(CONFIG_FILE_NAME),
+        };
+
+        if !config_path.exists() {
+            Self::handle_missing_config(&config_path)?;
+            unreachable!();
         }
 
-        let default_path = Self::get_default_config_path()?.join(CONFIG_FILE_NAME);
-        if default_path.exists() {
-            info_log!(
-                CONFIG_LOGGER_DOMAIN,
-                "Loading config file from default location: {}",
-                default_path.display()
-            );
-            return Self::load_from_path(&default_path);
+        info_log!(
+            CONFIG_LOGGER_DOMAIN,
+            "Loading config file from: {}",
+            config_path.display()
+        );
+
+        let mut config = Self::load_from_path(&config_path)?;
+
+        if let Some(cert_path) = &args.ssl_cert_file {
+            config.http2.ssl_cert_file = cert_path.to_string_lossy().to_string();
+        }
+        if let Some(key_path) = &args.ssl_key_file {
+            config.http2.ssl_key_file = key_path.to_string_lossy().to_string();
         }
 
-        Self::handle_missing_config(&default_path)?;
-        unreachable!();
+        Ok(config)
     }
 
-    pub fn reload(&mut self) -> Result<(), ConfigError> {
-        info_log!(
-            CONFIG_LOGGER_DOMAIN,
-            "Reloading config file at {}",
-            self.path.display()
-        );
-        let new_config = Self::load_from_path(&self.path)?;
+    pub fn get_ssl_cert_path(&self) -> Option<PathBuf> {
+        let config_dir = self.path.parent()?;
+        let path_str = &self.http2.ssl_cert_file;
 
-        *self = new_config;
+        if path_str.is_empty() {
+            return Some(config_dir.join(SSL_DIR_NAME).join(SSL_CER_FILE_NAME));
+        }
 
-        info_log!(
-            CONFIG_LOGGER_DOMAIN,
-            "Successfully reloaded config file at {}",
-            self.path.display()
-        );
-        Ok(())
+        let path = PathBuf::from(path_str);
+        if path.is_absolute() {
+            Some(path)
+        } else {
+            Some(config_dir.join(path))
+        }
+    }
+
+    pub fn get_ssl_key_path(&self) -> Option<PathBuf> {
+        let config_dir = self.path.parent()?;
+        let path_str = &self.http2.ssl_key_file;
+
+        if path_str.is_empty() {
+            return Some(config_dir.join(SSL_DIR_NAME).join(SSL_KEY_FILE_NAME));
+        }
+
+        let path = PathBuf::from(path_str);
+        if path.is_absolute() {
+            Some(path)
+        } else {
+            Some(config_dir.join(path))
+        }
     }
 
     fn load_from_path(path: &Path) -> Result<Self, ConfigError> {
@@ -126,6 +156,7 @@ impl Config {
             frontend: raw_config.frontend,
             backend: raw_config.backend,
             backend_config,
+            http2: raw_config.http2.unwrap_or_default(),
         })
     }
 
@@ -144,6 +175,19 @@ impl Config {
             // macOS and other Unix-like systems
             base_dirs.home_dir().join(".config").join(CONFIG_DIR_NAME)
         };
+
+        if !path.exists() {
+            fs::create_dir_all(&path).map_err(|e| ConfigError::CreateDir {
+                path: path.display().to_string(),
+                source: e,
+            })?;
+
+            let ssl_path = path.join(SSL_DIR_NAME);
+            fs::create_dir_all(&ssl_path).map_err(|e| ConfigError::CreateDir {
+                path: ssl_path.display().to_string(),
+                source: e,
+            })?;
+        }
 
         Ok(path)
     }

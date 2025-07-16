@@ -80,12 +80,7 @@ impl UserAgentFilterMiddleware {
 
 #[async_trait]
 impl Middleware for UserAgentFilterMiddleware {
-    async fn handle<'a>(
-        &self,
-        ctx: Context,
-        body: Option<Incoming>,
-        next: Next<'a>,
-    ) -> Response<BoxBodyType> {
+    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
         debug_log!(
             USER_AGENT_FILTER,
             "Starting user agent filter middleware..."
@@ -101,7 +96,7 @@ impl Middleware for UserAgentFilterMiddleware {
         let is_allowed = self.is_ua_allowed(&ua).await;
 
         if is_allowed {
-            next.run(ctx, body).await
+            next(ctx, body).await
         } else {
             error_log!(USER_AGENT_FILTER, "Forbidden user-agent: {}", ua);
             ResponseBuilder::with_status_code(StatusCode::FORBIDDEN)

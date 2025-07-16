@@ -7,6 +7,7 @@ pub mod logger;
 pub mod options;
 pub mod response;
 pub mod ua_filter;
+pub mod svc;
 
 pub use chain::{Handler as MiddlewareHandler, Middleware, Next};
 pub use context::Context as MiddlewareContext;

@@ -13,15 +13,10 @@ pub struct CorsMiddleware;
 
 #[async_trait]
 impl Middleware for CorsMiddleware {
-    async fn handle<'a>(
-        &self,
-        ctx: Context,
-        body: Option<Incoming>,
-        next: Next<'a>,
-    ) -> Response<BoxBodyType> {
+    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting HTTP cors middleware...");
 
-        let mut response = next.run(ctx, body).await;
+        let mut response = next(ctx, body).await;
 
         response.headers_mut().insert(
             "Access-Control-Allow-Origin",

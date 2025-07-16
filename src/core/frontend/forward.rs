@@ -77,16 +77,11 @@ impl ForwardMiddleware {
 
 #[async_trait]
 impl Middleware for ForwardMiddleware {
-    async fn handle<'a>(
-        &self,
-        ctx: Context,
-        body: Option<Incoming>,
-        next: Next<'a>,
-    ) -> Response<BoxBodyType> {
+    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting forward middleware...");
 
         let Some(item_id) = self.get_item_id(&ctx.path) else {
-            return next.run(ctx, body).await;
+            return next(ctx, body).await;
         };
 
         let path_params = PathParams {

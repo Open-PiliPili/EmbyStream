@@ -4,6 +4,7 @@ use crate::config::{
     backend::{Backend, direct::DirectLink, disk::Disk, openlist::OpenList},
     frontend::Frontend,
     general::{General, UserAgent},
+    http2::Http2,
 };
 
 #[derive(Clone, Debug, Deserialize)]
@@ -41,6 +42,8 @@ pub struct RawConfig {
     pub general: General,
     #[serde(rename = "UserAgent")]
     pub user_agent: UserAgent,
+    #[serde(rename = "Http2")]
+    pub http2: Option<Http2>,
     #[serde(rename = "Frontend")]
     pub frontend: Option<Frontend>,
     #[serde(rename = "Backend")]

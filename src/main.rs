@@ -1,11 +1,12 @@
-use std::{error::Error, path::PathBuf, str::FromStr, sync::Arc};
+use std::{error::Error, str::FromStr, sync::Arc};
 
 use clap::Parser;
 use figlet_rs::FIGfont;
 use hyper::{StatusCode, body::Incoming};
 
+use embystream::cli::RunArgs;
 use embystream::{
-    AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log, info_log,
+    AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log,
 };
 use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
@@ -25,16 +26,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let cli = Cli::parse();
     match cli.command {
         Some(Commands::Run(run_args)) => {
-            run_app(run_args.config).await?;
+            run_app(&run_args).await?;
         }
         None => {}
     }
     Ok(())
 }
 
-async fn run_app(config_path: Option<PathBuf>) -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn run_app(run_args: &RunArgs) -> Result<(), Box<dyn Error + Send + Sync>> {
     setup_figlet();
-    let config = setup_load_config(config_path);
+    let config = setup_load_config(run_args);
     setup_logger(&config);
     setup_print_info(&config);
 
@@ -91,8 +92,8 @@ fn setup_print_info(config: &Config) {
     );
 }
 
-fn setup_load_config(config_path: Option<PathBuf>) -> Config {
-    match Config::load_or_init(config_path) {
+fn setup_load_config(run_args: &RunArgs) -> Config {
+    match Config::load_or_init(run_args) {
         Ok(config) => {
             info_log!(INIT_LOGGER_DOMAIN, "Configuration loaded successfully.");
             config
@@ -124,7 +125,11 @@ async fn setup_frontend_gateway(
     let config = app_state.get_config().await.clone();
     let mode = config.general.stream_mode;
 
-    if !(mode == StreamMode::Frontend || mode == StreamMode::Dual) {
+    if !matches!(mode, StreamMode::Frontend | StreamMode::Dual) {
+        debug_log!(
+            INIT_LOGGER_DOMAIN,
+            "Skipping frontend gateway setup - stream mode not enabled"
+        );
         return Ok(());
     }
 
@@ -158,9 +163,13 @@ async fn setup_backend_gateway(
     app_state: &Arc<AppState>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let config = app_state.get_config().await.clone();
-    let mode = config.general.stream_mode;
+    let mode = config.general.clone().stream_mode;
 
-    if !(mode == StreamMode::Backend || mode == StreamMode::Dual) {
+    if !matches!(mode, StreamMode::Backend | StreamMode::Dual) {
+        debug_log!(
+            INIT_LOGGER_DOMAIN,
+            "Skipping backend gateway setup - stream mode not enabled"
+        );
         return Ok(());
     }
 
@@ -180,6 +189,29 @@ async fn setup_backend_gateway(
         .add_middleware(Box::new(CorsMiddleware))
         .add_middleware(Box::new(OptionsMiddleware))
         .add_middleware(Box::new(StreamMiddleware::new(&backend.path, service)));
+
+    let cert_path_opt = config.get_ssl_cert_path();
+    let key_path_opt = config.get_ssl_key_path();
+
+    if let (Some(cert_path), Some(key_path)) = (cert_path_opt, key_path_opt) {
+        let cert_path_str = cert_path.to_string_lossy();
+        let key_path_str = key_path.to_string_lossy();
+
+        if cert_path.exists() && key_path.exists() {
+            info_log!(
+                INIT_LOGGER_DOMAIN,
+                "Enabling TLS for backend gateway. Cert: '{}', Key: '{}'",
+                cert_path.display(),
+                key_path.display()
+            );
+            gateway = gateway.with_tls(&cert_path_str, &key_path_str);
+        } else {
+            warn_log!(
+                INIT_LOGGER_DOMAIN,
+                "SSL certificate or key file not found. Backend gateway will start without TLS."
+            );
+        }
+    }
 
     gateway.set_handler(default_handler());
     gateway.listen().await?;

@@ -30,12 +30,7 @@ impl StreamMiddleware {
 
 #[async_trait]
 impl Middleware for StreamMiddleware {
-    async fn handle<'a>(
-        &self,
-        ctx: Context,
-        body: Option<Incoming>,
-        next: Next<'a>,
-    ) -> Response<BoxBodyType> {
+    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting stream middleware...");
 
         let request_path = {
@@ -59,7 +54,7 @@ impl Middleware for StreamMiddleware {
                 ctx.path,
                 self.path
             );
-            return next.run(ctx, body).await;
+            return next(ctx, body).await;
         }
 
         let stream_request = AppStreamRequest {
