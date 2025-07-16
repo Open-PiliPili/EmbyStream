@@ -65,7 +65,7 @@ impl Gateway {
                     "SSL certificate does not exist: cert_path={:?}, key_path={:?}",
                     cert,
                     key
-                )
+                );
             }
         }
         self
