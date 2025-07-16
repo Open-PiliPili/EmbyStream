@@ -79,6 +79,16 @@ fn setup_print_info(config: &Config) {
         "Log level: {}",
         config.general.log_level.as_str()
     );
+    info_log!(
+        INIT_LOGGER_DOMAIN,
+        "Memory mode: {}",
+        config.general.memory_mode.as_str()
+    );
+    info_log!(
+        INIT_LOGGER_DOMAIN,
+        "Stream mode: {}",
+        config.general.stream_mode
+    );
 }
 
 fn setup_load_config(config_path: Option<PathBuf>) -> Config {

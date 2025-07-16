@@ -1,3 +1,5 @@
+use std::fmt;
+
 use hyper::Uri;
 use serde::Deserialize;
 
@@ -12,6 +14,16 @@ pub enum StreamMode {
 impl Default for StreamMode {
     fn default() -> Self {
         StreamMode::Frontend
+    }
+}
+
+impl fmt::Display for StreamMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StreamMode::Frontend => write!(f, "frontend"),
+            StreamMode::Backend => write!(f, "backend"),
+            StreamMode::Dual => write!(f, "dual"),
+        }
     }
 }
 
