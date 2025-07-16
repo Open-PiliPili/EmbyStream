@@ -5,9 +5,22 @@ use std::{
     io::{BufReader, Error as IoError, ErrorKind as IoErrorKind},
     net::SocketAddr,
     path::Path,
+    str,
     sync::Arc,
 };
 
+use super::{
+    chain::{Handler, Middleware},
+    svc::Svc,
+};
+use crate::{
+    GATEWAY_LOGGER_DOMAIN, debug_log, error_log,
+    gateway::{
+        context::Context,
+        response::{BoxBodyType, ResponseBuilder},
+    },
+    info_log, warn_log,
+};
 use hyper::{Response, StatusCode, body::Incoming, server::conn::http1};
 use hyper_util::{
     rt::{TokioExecutor, TokioIo},
@@ -16,19 +29,6 @@ use hyper_util::{
 use rustls::{ServerConfig, crypto::aws_lc_rs};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
-
-use super::{
-    chain::{Handler, Middleware},
-    svc::Svc,
-};
-use crate::{
-    GATEWAY_LOGGER_DOMAIN, error_log,
-    gateway::{
-        context::Context,
-        response::{BoxBodyType, ResponseBuilder},
-    },
-    info_log, warn_log,
-};
 
 pub struct Gateway {
     addr: String,
@@ -52,7 +52,7 @@ impl Gateway {
     pub fn with_tls(mut self, cert_path: Option<PathBuf>, key_path: Option<PathBuf>) -> Self {
         if let (Some(cert), Some(key)) = (cert_path, key_path) {
             if cert.exists() && key.exists() {
-                info_log!(
+                debug_log!(
                     GATEWAY_LOGGER_DOMAIN,
                     "SSL certificate exist, start loading cert_path={:?}, key_path={:?}",
                     cert,
@@ -172,24 +172,60 @@ impl Gateway {
         );
         loop {
             let (stream, peer_addr) = listener.accept().await?;
+            debug_log!(
+                GATEWAY_LOGGER_DOMAIN,
+                "Incoming TCP connection from {}",
+                peer_addr
+            );
+
             let tls_acceptor = tls_acceptor.clone();
             let service = Svc::new(handler.clone(), middlewares.clone());
 
             tokio::spawn(async move {
-                if let Ok(tls_stream) = tls_acceptor.accept(stream).await {
-                    let io = TokioIo::new(tls_stream);
-                    if let Err(err) = hyper_conn_auto::Builder::new(TokioExecutor::new())
-                        .serve_connection(io, service)
-                        .await
-                    {
-                        if !Self::is_ignorable_connection_error(err.as_ref()) {
-                            error_log!(
-                                GATEWAY_LOGGER_DOMAIN,
-                                "Error serving HTTPS connection from {}: {:?}",
-                                peer_addr,
-                                err
-                            );
+                debug_log!(GATEWAY_LOGGER_DOMAIN, "Shake hands for {}", peer_addr);
+
+                match tls_acceptor.accept(stream).await {
+                    Ok(tls_stream) => {
+                        let (_, conn) = tls_stream.get_ref();
+                        let alpn_protocol = conn
+                            .alpn_protocol()
+                            .map_or("None", |p| str::from_utf8(p).unwrap_or("Invalid UTF-8"));
+
+                        debug_log!(
+                            GATEWAY_LOGGER_DOMAIN,
+                            "TLS shake hands for {} success。ALPN protocol: {}",
+                            peer_addr,
+                            alpn_protocol
+                        );
+
+                        let io = TokioIo::new(tls_stream);
+                        debug_log!(
+                            GATEWAY_LOGGER_DOMAIN,
+                            "Handling the connection from {} over to Hyper",
+                            peer_addr
+                        );
+
+                        if let Err(err) = hyper_conn_auto::Builder::new(TokioExecutor::new())
+                            .serve_connection(io, service)
+                            .await
+                        {
+                            if !Self::is_ignorable_connection_error(err.as_ref()) {
+                                error_log!(
+                                    GATEWAY_LOGGER_DOMAIN,
+                                    "Error occurred while processing HTTPS connection from {}: {:?}",
+                                    peer_addr,
+                                    err
+                                );
+                            }
                         }
+                    }
+                    Err(e) => {
+                        error_log!(
+                            GATEWAY_LOGGER_DOMAIN,
+                            "TLS shake hands error for {}: {:?}",
+                            peer_addr,
+                            e
+                        );
                     }
                 }
             });
