@@ -50,8 +50,23 @@ impl Gateway {
 
     pub fn with_tls(mut self, cert_path: Option<PathBuf>, key_path: Option<PathBuf>) -> Self {
         if let (Some(cert), Some(key)) = (cert_path, key_path) {
-            self.cert_path = Some(cert.to_string_lossy().into_owned());
-            self.key_path = Some(key.to_string_lossy().into_owned());
+            if cert.exists() && key.exists() {
+                info_log!(
+                    GATEWAY_LOGGER_DOMAIN,
+                    "SSL certificate exist, start loading cert_path={:?}, key_path={:?}",
+                    cert,
+                    key
+                );
+                self.cert_path = Some(cert.to_string_lossy().into_owned());
+                self.key_path = Some(key.to_string_lossy().into_owned());
+            } else {
+                warn_log!(
+                    GATEWAY_LOGGER_DOMAIN,
+                    "SSL certificate does not exist: cert_path={:?}, key_path={:?}",
+                    cert,
+                    key
+                )
+            }
         }
         self
     }
