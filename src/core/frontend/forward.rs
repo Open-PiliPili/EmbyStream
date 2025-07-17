@@ -20,25 +20,25 @@ use crate::{
 
 static NORMAL_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(&concat!(
-        r"^/(?:emby/)?videos/",    // 1. Path prefix
-        r"([a-zA-Z0-9_-]+)",       // 2. Item ID capture
-        r"(?:",                    // 3. Start path alternatives
-        r"/(?:original|stream)",   // 4. Legacy paths
-        r"(?:\.[a-zA-Z0-9]+)?",    // 5. Optional extension
-        r"|/[a-zA-Z0-9_-]+\.m3u8", // 6. Direct m3u8 path
-        r")$"                      // 7. Close group
+        r"(?i)^/(?:emby/)?videos/", // 1. Path prefix
+        r"([a-zA-Z0-9_-]+)",        // 2. Item ID capture
+        r"(?:",                     // 3. Start path alternatives
+        r"/(?:original|stream)",    // 4. Legacy paths
+        r"(?:\.[a-zA-Z0-9]+)?",     // 5. Optional extension
+        r"|/[a-zA-Z0-9_-]+\.m3u8",  // 6. Direct m3u8 path
+        r")$"                       // 7. Close group
     ))
     .expect("Invalid regex pattern")
 });
 
 static HLS_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(&concat!(
-        r"^/(?:emby/)?videos/", // 1. Path prefix
-        r"([a-zA-Z0-9_-]+)",    // 2. Item ID capture
-        r"/hls\d*/",            // 3. HLS path prefix
-        r"[^/]+",               // 4. Segment name
-        r"(?:/\d+)?",           // 5. Optional HLS sequence
-        r"\.(?:ts|m3u8)$"       // 6. HLS extensions
+        r"(?i)^/(?:emby/)?videos/", // 1. Path prefix
+        r"([a-zA-Z0-9_-]+)",        // 2. Item ID capture
+        r"/hls\d*/",                // 3. HLS path prefix
+        r"[^/]+",                   // 4. Segment name
+        r"(?:/\d+)?",               // 5. Optional HLS sequence
+        r"\.(?:ts|m3u8)$"           // 6. HLS extensions
     ))
     .expect("Invalid regex pattern")
 });
@@ -77,7 +77,12 @@ impl ForwardMiddleware {
 
 #[async_trait]
 impl Middleware for ForwardMiddleware {
-    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
+    async fn handle(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next,
+    ) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting forward middleware...");
 
         let Some(item_id) = self.get_item_id(&ctx.path) else {
