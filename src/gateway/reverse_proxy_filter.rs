@@ -42,7 +42,7 @@ impl ReverseProxyFilterMiddleware {
         };
 
         match (input_url.host_str(), trusted_url.host_str()) {
-            (Some(input_host), Some(trusted_host)) => input_host.eq_ignore_ascii_case(trusted_host),
+            (Some(input_host), Some(trusted_host)) => !input_host.eq_ignore_ascii_case(trusted_host),
             _ => false,
         }
     }
@@ -61,9 +61,7 @@ impl Middleware for ReverseProxyFilterMiddleware {
             "Starting anti reverse proxy filter middleware..."
         );
 
-        let scheme_with_host_lower = ctx.get_scheme_and_host()
-            .unwrap_or_default()
-            .to_lowercase();
+        let scheme_with_host_lower = ctx.get_scheme_and_host().unwrap_or_default().to_lowercase();
 
         let is_need_anti = self.is_need_anti(&scheme_with_host_lower);
 
