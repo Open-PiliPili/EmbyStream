@@ -23,7 +23,7 @@ impl Middleware for LoggerMiddleware {
         info_log!(
             GATEWAY_LOGGER_DOMAIN,
             "Request scheme and host: {:?}",
-            ctx.get_scheme_and_host()
+            ctx.get_host()
         );
         info_log!(
             GATEWAY_LOGGER_DOMAIN,

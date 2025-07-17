@@ -22,25 +22,9 @@ impl Context {
         }
     }
 
-    pub fn get_scheme_and_host(&self) -> Option<String> {
-        let scheme = self.uri.scheme_str()?;
-        let host = self.uri.host()?.trim();
-
-        if host.is_empty() {
-            return None;
-        }
-
-        match self.uri.port_u16() {
-            Some(port) => {
-                let skip_port = matches!((scheme, port), ("http", 80) | ("https", 443));
-                Some(if skip_port {
-                    format!("{scheme}://{host}")
-                } else {
-                    format!("{scheme}://{host}:{port}")
-                })
-            }
-            None => Some(format!("{scheme}://{host}")),
-        }
+    pub fn get_host(&self) -> Option<String> {
+        self.get_header("host")
+            .map(|h| h.to_string())
     }
 
     pub fn get_query_params(&self) -> Option<HashMap<String, String>> {

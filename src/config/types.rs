@@ -53,6 +53,32 @@ impl Default for AntiReverseProxyConfig {
     }
 }
 
+impl AntiReverseProxyConfig {
+    #[inline]
+    pub fn is_need_anti(&self, host: &str) -> bool {
+        if !self.enable || self.trusted_host.is_empty() {
+            return false;
+        }
+
+        fn extract_valid_host(url: &str) -> Option<&str> {
+            let cleaned = url.trim_start_matches("http://")
+                .trim_start_matches("https://");
+
+            cleaned.split(['/', ':'])
+                .next()
+                .filter(|&s| !s.is_empty())
+                .map(|s| s.trim_end_matches('/'))
+        }
+
+        match (extract_valid_host(host), extract_valid_host(&self.trusted_host)) {
+            (Some(request_host), Some(trusted_host)) => {
+                !request_host.eq_ignore_ascii_case(trusted_host)
+            },
+            _ => false
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub struct RawConfig {
     #[serde(rename = "General")]

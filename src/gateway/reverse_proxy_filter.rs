@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use hyper::{Response, StatusCode, body::Incoming};
-use reqwest::Url;
 
 use crate::{REVERSE_PROXY_FILTER_LOGGER_DOMAIN, debug_log, error_log};
 use crate::{
@@ -25,27 +24,6 @@ impl ReverseProxyFilterMiddleware {
             config: Arc::new(config),
         }
     }
-
-    fn is_need_anti(&self, scheme_with_host: &str) -> bool {
-        if !self.config.enable {
-            return false;
-        }
-
-        let input_url = match Url::parse(scheme_with_host) {
-            Ok(url) => url,
-            Err(_) => return false,
-        };
-
-        let trusted_url = match Url::parse(&self.config.trusted_host) {
-            Ok(url) => url,
-            Err(_) => return false,
-        };
-
-        match (input_url.host_str(), trusted_url.host_str()) {
-            (Some(input_host), Some(trusted_host)) => !input_host.eq_ignore_ascii_case(trusted_host),
-            _ => false,
-        }
-    }
 }
 
 #[async_trait]
@@ -61,9 +39,8 @@ impl Middleware for ReverseProxyFilterMiddleware {
             "Starting anti reverse proxy filter middleware..."
         );
 
-        let scheme_with_host_lower = ctx.get_scheme_and_host().unwrap_or_default().to_lowercase();
-
-        let is_need_anti = self.is_need_anti(&scheme_with_host_lower);
+        let host = ctx.get_host().unwrap_or_default();
+        let is_need_anti = self.config.is_need_anti(&host);
 
         if !is_need_anti {
             next(ctx, body).await
@@ -71,7 +48,7 @@ impl Middleware for ReverseProxyFilterMiddleware {
             error_log!(
                 REVERSE_PROXY_FILTER_LOGGER_DOMAIN,
                 "Forbidden host: {}",
-                scheme_with_host_lower
+                host
             );
             ResponseBuilder::with_status_code(StatusCode::FORBIDDEN)
         }
