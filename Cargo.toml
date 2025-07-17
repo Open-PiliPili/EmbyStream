@@ -63,3 +63,4 @@ tracing-subscriber = { version = "0.3.19", features = [
     "local-time",
     "json"
 ] }
+url = "2.5.4"

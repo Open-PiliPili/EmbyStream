@@ -13,15 +13,30 @@ pub struct LoggerMiddleware;
 
 #[async_trait]
 impl Middleware for LoggerMiddleware {
-    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
+    async fn handle(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next,
+    ) -> Response<BoxBodyType> {
         info_log!(GATEWAY_LOGGER_DOMAIN, "Incoming request details:");
-        info_log!(GATEWAY_LOGGER_DOMAIN, "Request Headers: {:?}", ctx.headers);
         info_log!(
             GATEWAY_LOGGER_DOMAIN,
-            "Request Method: {} path: {}",
+            "Request scheme and host: {:?}",
+            ctx.get_scheme_and_host()
+        );
+        info_log!(
+            GATEWAY_LOGGER_DOMAIN,
+            "Request query: {:?}",
+            ctx.get_query_params()
+        );
+        info_log!(
+            GATEWAY_LOGGER_DOMAIN,
+            "Request method: {} path: {}",
             ctx.method,
             ctx.path
         );
+        info_log!(GATEWAY_LOGGER_DOMAIN, "Request headers: {:?}", ctx.headers);
 
         if ctx.headers.contains_key(header::CONTENT_LENGTH) {
             info_log!(
@@ -34,12 +49,12 @@ impl Middleware for LoggerMiddleware {
 
         info_log!(
             GATEWAY_LOGGER_DOMAIN,
-            "Response Status: {}",
+            "Response status: {}",
             response.status()
         );
         info_log!(
             GATEWAY_LOGGER_DOMAIN,
-            "Response Headers: {:?}",
+            "Response headers: {:?}",
             response.headers()
         );
 
