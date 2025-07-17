@@ -36,6 +36,23 @@ impl Default for PathRewriteConfig {
     }
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct AntiReverseProxyConfig {
+    #[serde(default)]
+    pub enable: bool,
+    #[serde(default, rename = "host")]
+    pub trusted_host: String,
+}
+
+impl Default for AntiReverseProxyConfig {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            trusted_host: String::new(),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub struct RawConfig {
     #[serde(rename = "General")]

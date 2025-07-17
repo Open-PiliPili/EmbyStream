@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use hyper::{Response, StatusCode, body::Incoming, header};
 use tokio::sync::OnceCell;
 
-use crate::{AppState, USER_AGENT_FILTER, debug_log, error_log};
+use crate::{AppState, USER_AGENT_FILTER_LOGGER_DOMAIN, debug_log, error_log};
 use crate::{
     config::general::UserAgent,
     gateway::{
@@ -82,7 +82,7 @@ impl UserAgentFilterMiddleware {
 impl Middleware for UserAgentFilterMiddleware {
     async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
         debug_log!(
-            USER_AGENT_FILTER,
+            USER_AGENT_FILTER_LOGGER_DOMAIN,
             "Starting user agent filter middleware..."
         );
 
@@ -98,7 +98,7 @@ impl Middleware for UserAgentFilterMiddleware {
         if is_allowed {
             next(ctx, body).await
         } else {
-            error_log!(USER_AGENT_FILTER, "Forbidden user-agent: {}", ua);
+            error_log!(USER_AGENT_FILTER_LOGGER_DOMAIN, "Forbidden user-agent: {}", ua);
             ResponseBuilder::with_status_code(StatusCode::FORBIDDEN)
         }
     }

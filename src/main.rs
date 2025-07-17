@@ -4,6 +4,7 @@ use clap::Parser;
 use figlet_rs::FIGfont;
 use hyper::{StatusCode, body::Incoming};
 
+use embystream::gateway::reverse_proxy_filter::ReverseProxyFilterMiddleware;
 use embystream::{
     AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log, info_log,
 };
@@ -148,6 +149,9 @@ async fn setup_frontend_gateway(
     let mut gateway = Gateway::new(&addr)
         .add_middleware(Box::new(LoggerMiddleware))
         .add_middleware(Box::new(UserAgentFilterMiddleware::new(app_state.clone())))
+        .add_middleware(Box::new(ReverseProxyFilterMiddleware::new(
+            frontend.clone().anti_reverse_proxy,
+        )))
         .add_middleware(Box::new(CorsMiddleware))
         .add_middleware(Box::new(OptionsMiddleware))
         .add_middleware(Box::new(ForwardMiddleware::new(service)));
@@ -186,6 +190,9 @@ async fn setup_backend_gateway(
         .with_tls(config.get_ssl_cert_path(), config.get_ssl_key_path())
         .add_middleware(Box::new(LoggerMiddleware))
         .add_middleware(Box::new(UserAgentFilterMiddleware::new(app_state.clone())))
+        .add_middleware(Box::new(ReverseProxyFilterMiddleware::new(
+            backend.clone().anti_reverse_proxy,
+        )))
         .add_middleware(Box::new(CorsMiddleware))
         .add_middleware(Box::new(OptionsMiddleware))
         .add_middleware(Box::new(StreamMiddleware::new(&backend.path, service)));

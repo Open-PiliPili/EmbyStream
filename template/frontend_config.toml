@@ -73,6 +73,10 @@ enable = false
 pattern = ""
 replacement = ""
 
+[Frontend.AntiReverseProxy]
+enable = false
+host = ""
+
 # Backend-specific configurations
 # Only configure the section matching your chosen backend_type
 
@@ -100,6 +104,10 @@ replacement = ""               # The replacement string. Use $1 for the first ca
 # 3. Replace a proxy path: /stream/video.mp4 -> /proxy/video.mp4
 #    pattern = "^/stream(/.*)$"
 #    replacement = "/proxy$1"
+
+[Backend.AntiReverseProxy]
+enable = false
+host = ""
 
 [Disk]
 # Disk backend configuration - for local or mounted storage

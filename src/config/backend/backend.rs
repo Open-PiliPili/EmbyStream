@@ -1,7 +1,7 @@
 use hyper::Uri;
 use serde::Deserialize;
 
-use crate::config::types::PathRewriteConfig;
+use crate::config::types::{AntiReverseProxyConfig, PathRewriteConfig};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Backend {
@@ -12,6 +12,8 @@ pub struct Backend {
     pub proxy_mode: String,
     #[serde(default, rename = "PathRewrite")]
     pub path_rewrite: PathRewriteConfig,
+    #[serde(default, rename = "AntiReverseProxy")]
+    pub anti_reverse_proxy: AntiReverseProxyConfig,
 }
 
 impl Backend {
