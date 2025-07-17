@@ -5,7 +5,7 @@ Description=Emby Backend Service
 [Service]
 Type=simple
 ExecStartPre=/bin/sleep 3
-ExecStart=/usr/bin/embystream --config /mnt/stream/config.toml
+ExecStart=/usr/bin/embystream run --config /mnt/stream/config.toml
 User=root
 Restart=on-failure
 RestartSec=5

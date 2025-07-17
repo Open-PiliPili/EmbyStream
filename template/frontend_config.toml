@@ -1,0 +1,117 @@
+# Application Configuration File
+# All values in this file are case-sensitive
+
+[General]
+# Application log level (options: "trace", "debug", "info", "warn", "error")
+log_level = "info"
+
+# Memory usage profile (options: "low", "middle", "high")
+# - low: Minimal memory usage, reduced performance
+# - middle: Balanced memory and performance (recommended)
+# - high: Maximum performance, higher memory usage
+memory_mode = "middle"
+
+# Cache expiration time in seconds
+# - Default: 3600 (1 hour)
+# - Set to 0 to disable caching
+# - Recommended range: 300-86400 (5 minutes to 1 day)
+expired_seconds = 3600
+
+# Stream running mode
+# - Options: "frontend", "backend", "dual"
+# - "frontend": Runs only the frontend service.
+# - "backend": Runs only the backend service.
+# - "dual": Runs both frontend and backend services.
+# - Default: "frontend"
+stream_mode = "frontend"
+
+# Backend type for media streaming (options: "disk", "direct_link", "openlist")
+backend_type = "disk"
+
+# Encryption key for secure communications (6-16 bytes)
+# WARNING: Change this from the default value in production
+encipher_key = "Q4eCbawEp3sCvDvx" # Replace encipher key
+
+# Encryption iv for secure communications (6-16 bytes)
+# WARNING: Change this from the default value in production
+encipher_iv = "a3cH2abhxnu9hGo5" # Replace encipher iv
+
+# Emby server configuration
+emby_url = "http://127.0.0.1"                                  # Base URL of your Emby server
+emby_port = "8096"                                             # Replace Port for Emby server
+emby_api_key = "nmbp7mpixze8ghdfgki6yrijkeq5zuao"              # Replace API key for Emby (leave empty if not using)
+
+[UserAgent]
+# UserAgent filtering mode (options: "allow", "deny", "none")
+mode = "deny"
+
+# List of allowed User-Agents (used when mode = "allow")
+# Example: allow_ua = ["Mozilla/5.0", "AppleWebKit"]
+allow_ua = []
+
+# List of denied User-Agents (used when mode = "deny")
+# Example: deny_ua = ["curl/7.68.0", "wget"]
+deny_ua = ["curl", "wget", "python", "fimily", "infuse-library"]
+
+[Http2]
+# Path to SSL/TLS certificate file (PEM format)
+# Required for HTTPS/HTTP2 connections
+# Example: ssl_cert_file = "/path/to/certificate.pem"
+ssl_cert_file = ""
+
+# Path to SSL/TLS private key file (PEM format)
+# Required for HTTPS/HTTP2 connections
+# Example: ssl_key_file = "/path/to/private_key.pem"
+ssl_key_file = ""
+
+[Frontend]
+# Frontend web server configuration
+listen_port = 60001  # Replace port for the frontend web interface
+
+[Frontend.PathRewrite]
+enable = false
+pattern = ""
+replacement = ""
+
+# Backend-specific configurations
+# Only configure the section matching your chosen backend_type
+
+[Backend]
+# Backend server configuration
+listen_port = 60001                                    # Port for the stream service, option
+base_url = "https://backend.example.com"               # Replace base URL for stream service
+path = "stream"                                        # Path component for stream URLs
+port = "443"                                           # HTTPS port for stream service
+proxy_mode = "proxy"                                   # Backend proxy mode for media streaming (options: "proxy", "redirect")
+
+[Backend.PathRewrite]
+enable = false                 # Set to true to enable this feature.
+pattern = ""                   # The regex pattern to search for.
+replacement = ""               # The replacement string. Use $1 for the first captured group.
+# --- Examples ---
+# 1. Add a CDN host: /path/video.mp4 -> https://my-cdn.com/path/video.mp4
+#    pattern = "^(/.*)$"
+#    replacement = "https://my-cdn.com$1"
+#
+# 2. Remove a base path: /media/movies/video.mp4 -> /movies/video.mp4
+#    pattern = "^/media(/.*)$"
+#    replacement = "$1"
+#
+# 3. Replace a proxy path: /stream/video.mp4 -> /proxy/video.mp4
+#    pattern = "^/stream(/.*)$"
+#    replacement = "/proxy$1"
+
+[Disk]
+# Disk backend configuration - for local or mounted storage
+description = ""
+
+[OpenList]
+# OpenList backend configuration
+base_url = ""                            # OpenList server URL
+port = ""                                # OpenList server port
+token = ""                               # Authentication token for OpenList
+user_agent = ""                          # Custom User-Agent for requests
+
+[DirectLink]
+# DirectLink backend configuration - for CDN or direct streaming
+user_agent = ""                         # Custom User-Agent for requests
