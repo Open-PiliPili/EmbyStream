@@ -4,13 +4,12 @@ use clap::Parser;
 use figlet_rs::FIGfont;
 use hyper::{StatusCode, body::Incoming};
 
-use embystream::cli::RunArgs;
 use embystream::{
     AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log, info_log,
 };
 use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
-    cli::{Cli, Commands},
+    cli::{Cli, Commands, RunArgs},
     config::{config::Config, general::StreamMode},
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
