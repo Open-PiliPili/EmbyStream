@@ -30,10 +30,6 @@ impl AppState {
         }
     }
 
-    pub async fn reload_config(&self, new_config: Config) {
-        *self.config.write().await = new_config;
-    }
-
     pub async fn get_config(&self) -> impl DerefTrait<Target = Config> + '_ {
         self.config.read().await
     }
