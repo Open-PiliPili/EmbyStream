@@ -72,7 +72,7 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
       cp ./target/release/embystream /usr/local/bin
       ```
 
-### With Docker
+### With Docker Run
 
 ```shell
 docker run -d \
@@ -89,6 +89,13 @@ docker run -d \
   --log-opt max-file=3 \
   --restart unless-stopped \
   embystream
+```
+
+### With docker-compose
+
+Reference: [docker-compose.yam](https://raw.githubusercontent.com/Open-PiliPili/EmbyStream/main/template/docker/docker-compose.yaml)
+```shell
+docker-compose pull && docker-compose up -d
 ```
 
 ### Binaries
