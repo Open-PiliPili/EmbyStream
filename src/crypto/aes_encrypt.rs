@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use aes::Aes128;
-use aes::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7, generic_array::GenericArray};
+use aes::cipher::{
+    BlockEncryptMut, KeyIvInit, block_padding::Pkcs7,
+    generic_array::GenericArray,
+};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use cbc::Encryptor;
 use serde_json;
@@ -30,7 +33,11 @@ impl AesEncrypt {
     ///
     /// * `Ok(String)` - The Base64-encoded encrypted string (IV + ciphertext).
     /// * `Err(Error)` - If the key length is invalid or encryption fails.
-    pub fn encrypt(dict: &HashMap<String, String>, key: &str, iv: &str) -> Result<String, Error> {
+    pub fn encrypt(
+        dict: &HashMap<String, String>,
+        key: &str,
+        iv: &str,
+    ) -> Result<String, Error> {
         debug_log!(
             CRYPTO_LOGGER_DOMAIN,
             "Starting AES encryption for dictionary"
@@ -54,7 +61,8 @@ impl AesEncrypt {
         let iv = GenericArray::from_slice(&iv_bytes);
 
         // Initialize cipher
-        let cipher = Aes128CbcEncryptor::new(&GenericArray::from_slice(&key), &iv);
+        let cipher =
+            Aes128CbcEncryptor::new(&GenericArray::from_slice(&key), &iv);
 
         // Encrypt the JSON string with PKCS7 padding
         let plaintext = json.as_bytes();

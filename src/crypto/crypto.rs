@@ -1,6 +1,7 @@
 use super::{
-    aes_decrypt::AesDecrypt, aes_encrypt::AesEncrypt, crypto_input::CryptoInput,
-    crypto_operation::CryptoOperation, crypto_output::CryptoOutput,
+    aes_decrypt::AesDecrypt, aes_encrypt::AesEncrypt,
+    crypto_input::CryptoInput, crypto_operation::CryptoOperation,
+    crypto_output::CryptoOutput,
 };
 
 use crate::{CRYPTO_LOGGER_DOMAIN, Error, debug_log, error_log};
@@ -62,7 +63,8 @@ impl Crypto {
                             "Invalid input for decryption: expected encrypted string"
                         );
                         return Err(Error::DecryptionError(
-                            "Invalid input: expected encrypted string".to_string(),
+                            "Invalid input: expected encrypted string"
+                                .to_string(),
                         ));
                     }
                 };

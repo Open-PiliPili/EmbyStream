@@ -32,7 +32,11 @@ pub struct AdaptiveChunkStream<R: AsyncRead + Unpin> {
 }
 
 impl<R: AsyncRead + Unpin> AdaptiveChunkStream<R> {
-    pub fn new(reader: R, file_length: u64, request_start_time: Instant) -> Self {
+    pub fn new(
+        reader: R,
+        file_length: u64,
+        request_start_time: Instant,
+    ) -> Self {
         let (initial_chunk_size, initial_chunks_count, standard_chunk_size) =
             Self::get_chunk_sizes(file_length);
 
@@ -66,7 +70,10 @@ impl<R: AsyncRead + Unpin> AdaptiveChunkStream<R> {
 impl<R: AsyncRead + Unpin> Stream for AdaptiveChunkStream<R> {
     type Item = std::io::Result<Bytes>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         let this = &mut *self;
 
         if !this.buf.is_empty() {

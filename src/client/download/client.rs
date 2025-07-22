@@ -29,7 +29,7 @@ impl Client {
         let request = API::download(
             remote_url.into(),
             user_agent.into(),
-            forward_headers
+            forward_headers,
         );
         let response = self.provider.send_request(&request).await?;
         Ok(response)

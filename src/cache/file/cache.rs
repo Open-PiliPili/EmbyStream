@@ -1,13 +1,13 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration
+    time::Duration,
 };
 
 use moka::future::Cache;
 use tokio::fs::metadata as TokioMetadata;
 
-use crate::cache::file::{pool::FileEntryPool, Entry, Error, Metadata};
+use crate::cache::file::{Entry, Error, Metadata, pool::FileEntryPool};
 
 #[derive(Clone)]
 pub struct FileCache {
@@ -57,12 +57,17 @@ impl FileCache {
                     file_name: path
                         .file_name()
                         .and_then(|s| s.to_str())
-                        .map_or_else(|| "unknown".to_string(), |s| s.to_string())
-                    ,
+                        .map_or_else(
+                            || "unknown".to_string(),
+                            |s| s.to_string(),
+                        ),
                     format: path
                         .extension()
                         .and_then(|s| s.to_str())
-                        .map_or_else(|| "unknown".to_string(), |s| s.to_string()),
+                        .map_or_else(
+                            || "unknown".to_string(),
+                            |s| s.to_string(),
+                        ),
                     last_modified: meta.modified().ok(),
                     updated_at: std::time::SystemTime::now(),
                 };

@@ -13,7 +13,12 @@ pub struct CorsMiddleware;
 
 #[async_trait]
 impl Middleware for CorsMiddleware {
-    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
+    async fn handle(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next,
+    ) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting HTTP cors middleware...");
 
         let mut response = next(ctx, body).await;

@@ -15,7 +15,10 @@ pub struct Svc {
 }
 
 impl Svc {
-    pub fn new(handler: Handler, middlewares: Arc<Vec<Box<dyn Middleware>>>) -> Self {
+    pub fn new(
+        handler: Handler,
+        middlewares: Arc<Vec<Box<dyn Middleware>>>,
+    ) -> Self {
         Self {
             handler,
             middlewares,
@@ -26,7 +29,9 @@ impl Svc {
 impl Service<Request<Incoming>> for Svc {
     type Response = Response<BoxBodyType>;
     type Error = Infallible;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = Pin<
+        Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
 
     fn call(&self, req: Request<Incoming>) -> Self::Future {
         let handler = self.handler.clone();

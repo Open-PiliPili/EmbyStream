@@ -1,13 +1,9 @@
-pub mod general;
 pub mod file;
+pub mod general;
 
-pub use general::{
-    Cache as GeneralCache
-};
+pub use general::Cache as GeneralCache;
 
 pub use file::{
-    FileCache,
-    Entry as FileEntry,
+    Entry as FileEntry, Error as FileCacheError, FileCache,
     Metadata as FileMetadata,
-    Error as FileCacheError
 };

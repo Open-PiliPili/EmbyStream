@@ -1,7 +1,7 @@
-pub mod openlist;
-pub mod emby;
-pub mod telegram;
 pub mod download;
+pub mod emby;
+pub mod openlist;
+pub mod telegram;
 
 pub use emby::{
     API as EmbyAPI, Operation as EmbyOperation,

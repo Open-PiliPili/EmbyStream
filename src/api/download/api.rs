@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     network::{HttpMethod, NetworkTarget, NetworkTask},
     system::SystemInfo,
-    util::StringUtil
+    util::StringUtil,
 };
 
 /// Represents Emby API endpoints with their respective parameters.
@@ -11,7 +11,7 @@ use crate::{
 pub struct API {
     remote_url: String,
     user_agent: Option<String>,
-    forward_headers: Option<HashMap<String, String>>
+    forward_headers: Option<HashMap<String, String>>,
 }
 
 impl API {
@@ -23,7 +23,7 @@ impl API {
         API {
             remote_url: remote_url.into(),
             user_agent: user_agent.into(),
-            forward_headers: forward_headers.into()
+            forward_headers: forward_headers.into(),
         }
     }
 }
@@ -55,9 +55,7 @@ impl NetworkTarget for API {
 
         if let Some(forward_headers) = &self.forward_headers {
             headers.extend(
-                forward_headers
-                    .iter()
-                    .map(|(k, v)| (k.into(), v.clone())),
+                forward_headers.iter().map(|(k, v)| (k.into(), v.clone())),
             );
         }
 
@@ -65,7 +63,10 @@ impl NetworkTarget for API {
         if let Some(ua) = self.user_agent.as_deref().filter(|s| !s.is_empty()) {
             headers.push(("user-agent".into(), ua.to_string()));
         } else {
-            headers.push(("user-agent".into(), sys_info.get_user_agent().to_string()));
+            headers.push((
+                "user-agent".into(),
+                sys_info.get_user_agent().to_string(),
+            ));
         }
 
         headers

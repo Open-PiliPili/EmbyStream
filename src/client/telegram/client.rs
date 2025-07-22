@@ -1,7 +1,7 @@
 use crate::{
-    api::telegram::{TextMessage, PhotoMessage, API, Response, MessageResult},
+    api::telegram::{API, MessageResult, PhotoMessage, Response, TextMessage},
     client::BuildableClient,
-    network::{NetworkPlugin, NetworkProvider}
+    network::{NetworkPlugin, NetworkProvider},
 };
 
 pub struct Client {

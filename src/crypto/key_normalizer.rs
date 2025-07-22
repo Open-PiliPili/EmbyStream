@@ -1,4 +1,4 @@
-use crate::{Error, CRYPTO_LOGGER_DOMAIN, error_log};
+use crate::{CRYPTO_LOGGER_DOMAIN, Error, error_log};
 
 pub(crate) struct KeyNormalizer;
 

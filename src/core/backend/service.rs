@@ -5,8 +5,9 @@ use hyper::{HeaderMap, StatusCode, Uri, header};
 use tokio::sync::OnceCell;
 
 use super::{
-    local_streamer::LocalStreamer, proxy_mode::ProxyMode, remote_streamer::RemoteStreamer,
-    result::Result as AppStreamResult, source::Source, types::BackendConfig,
+    local_streamer::LocalStreamer, proxy_mode::ProxyMode,
+    remote_streamer::RemoteStreamer, result::Result as AppStreamResult,
+    source::Source, types::BackendConfig,
 };
 use crate::core::redirect_info::RedirectInfo;
 use crate::{AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log};
@@ -14,7 +15,9 @@ use crate::{
     CryptoInput, CryptoOperation, CryptoOutput,
     client::{ClientBuilder, OpenListClient},
     config::backend::types::BackendConfig as StreamBackendConfig,
-    core::{error::Error as AppStreamError, request::Request as AppStreamRequest},
+    core::{
+        error::Error as AppStreamError, request::Request as AppStreamRequest,
+    },
     crypto::Crypto,
     network::CurlPlugin,
     sign::{Sign, SignParams},
@@ -50,7 +53,9 @@ impl AppStreamService {
         let params = request
             .uri
             .query()
-            .and_then(|query| serde_urlencoded::from_str::<SignParams>(query).ok())
+            .and_then(|query| {
+                serde_urlencoded::from_str::<SignParams>(query).ok()
+            })
             .unwrap_or_default();
 
         if params.sign.is_empty() {
@@ -88,7 +93,11 @@ impl AppStreamService {
         }
     }
 
-    async fn decrypt(&self, sign: &str, params: &SignParams) -> Result<Sign, AppStreamError> {
+    async fn decrypt(
+        &self,
+        sign: &str,
+        params: &SignParams,
+    ) -> Result<Sign, AppStreamError> {
         let decrypt_cache = self.state.get_decrypt_cache().await;
         let cache_key = self.decrypt_key(params)?;
 
@@ -107,7 +116,9 @@ impl AppStreamService {
         .map_err(AppStreamError::CommonError)?;
 
         match crypto_result {
-            CryptoOutput::Encrypted(_) => Err(AppStreamError::InvalidEncryptedSignature),
+            CryptoOutput::Encrypted(_) => {
+                Err(AppStreamError::InvalidEncryptedSignature)
+            }
             CryptoOutput::Dictionary(sign_map) => {
                 debug_log!(
                     STREAM_LOGGER_DOMAIN,
@@ -129,13 +140,17 @@ impl AppStreamService {
             return uri;
         }
 
-        let rewriter = PathRewriter::new(&path_rewrite.pattern, &path_rewrite.replacement);
+        let rewriter =
+            PathRewriter::new(&path_rewrite.pattern, &path_rewrite.replacement);
 
         let new_uri_str = rewriter.rewrite(&uri_str).await;
         new_uri_str.parse().unwrap_or(uri)
     }
 
-    async fn fetch_remote_uri_if_openlist(&self, uri: &Uri) -> Result<Uri, AppStreamError> {
+    async fn fetch_remote_uri_if_openlist(
+        &self,
+        uri: &Uri,
+    ) -> Result<Uri, AppStreamError> {
         let cache = self.state.get_open_list_cache().await;
         if let Some(cached_uri) = cache.get(&self.open_list_cache_key(uri)) {
             debug_log!(
@@ -166,14 +181,18 @@ impl AppStreamService {
 
         match result {
             Ok(new_url) => {
-                let new_uri: Uri = new_url.parse().map_err(|e: hyper::http::uri::InvalidUri| {
-                    AppStreamError::InvalidOpenListUri(e.to_string())
-                })?;
+                let new_uri: Uri = new_url.parse().map_err(
+                    |e: hyper::http::uri::InvalidUri| {
+                        AppStreamError::InvalidOpenListUri(e.to_string())
+                    },
+                )?;
                 cache.insert(self.open_list_cache_key(uri), new_uri.clone());
 
                 Ok(new_uri)
             }
-            Err(e) => Err(AppStreamError::UnexpectedOpenListError(e.to_string())),
+            Err(e) => {
+                Err(AppStreamError::UnexpectedOpenListError(e.to_string()))
+            }
         }
     }
 
@@ -201,11 +220,17 @@ impl AppStreamService {
         config_arc.clone()
     }
 
-    async fn build_redirect_info(&self, url: Uri, original_headers: &HeaderMap) -> RedirectInfo {
+    async fn build_redirect_info(
+        &self,
+        url: Uri,
+        original_headers: &HeaderMap,
+    ) -> RedirectInfo {
         let mut final_headers = original_headers.clone();
         let config = self.get_backend_config().await;
         let user_agent = match &config.backend_config {
-            StreamBackendConfig::DirectLink(dirct_link) => Some(dirct_link.user_agent.to_string()),
+            StreamBackendConfig::DirectLink(dirct_link) => {
+                Some(dirct_link.user_agent.to_string())
+            }
             _ => None,
         };
 
@@ -225,7 +250,10 @@ impl AppStreamService {
         }
     }
 
-    fn decrypt_key(&self, params: &SignParams) -> Result<String, AppStreamError> {
+    fn decrypt_key(
+        &self,
+        params: &SignParams,
+    ) -> Result<String, AppStreamError> {
         if params.sign.is_empty() {
             return Err(AppStreamError::InvalidEncryptedSignature);
         }

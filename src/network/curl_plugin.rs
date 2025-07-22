@@ -5,7 +5,9 @@
 
 use reqwest::{Error, Request, Response};
 
-use crate::{NETWORK_LOGGER_DOMAIN, debug_log, error_log, network::plugin::NetworkPlugin};
+use crate::{
+    NETWORK_LOGGER_DOMAIN, debug_log, error_log, network::plugin::NetworkPlugin,
+};
 
 /// A plugin that logs network requests in curl command format.
 ///
@@ -52,9 +54,8 @@ impl CurlPlugin {
 
         for (name, value) in request.headers() {
             if let Ok(valid_str) = value.to_str() {
-                let escaped_value = valid_str
-                    .replace('"', "\\\"")
-                    .replace("'", "\\'");
+                let escaped_value =
+                    valid_str.replace('"', "\\\"").replace("'", "\\'");
                 curl_command
                     .push_str(&format!("-H \"{}: {}\" ", name, escaped_value));
             }

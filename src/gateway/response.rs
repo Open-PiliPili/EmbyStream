@@ -1,6 +1,9 @@
 use bytes::Bytes;
-use http_body_util::{BodyExt, combinators::BoxBody, Empty};
-use hyper::{Response, StatusCode, header::{self, HeaderMap}};
+use http_body_util::{BodyExt, Empty, combinators::BoxBody};
+use hyper::{
+    Response, StatusCode,
+    header::{self, HeaderMap},
+};
 
 use super::error::Error;
 
@@ -9,7 +12,6 @@ pub type BoxBodyType = BoxBody<Bytes, Error>;
 pub struct ResponseBuilder;
 
 impl ResponseBuilder {
-
     pub fn with_redirect(
         location: impl AsRef<str>,
         mut status: StatusCode,
@@ -22,7 +24,7 @@ impl ResponseBuilder {
         let mut response = Response::new(
             Empty::<Bytes>::new()
                 .map_err(|never| match never {})
-                .boxed()
+                .boxed(),
         );
 
         *response.status_mut() = status;
@@ -47,8 +49,6 @@ impl ResponseBuilder {
     }
 
     fn empty() -> BoxBodyType {
-        Empty::new()
-            .map_err(|never| match never {})
-            .boxed()
+        Empty::new().map_err(|never| match never {}).boxed()
     }
 }

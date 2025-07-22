@@ -11,7 +11,12 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(uri: Uri, method: Method, headers: HeaderMap, start_time: Instant) -> Self {
+    pub fn new(
+        uri: Uri,
+        method: Method,
+        headers: HeaderMap,
+        start_time: Instant,
+    ) -> Self {
         let path = uri.path().to_string();
         Self {
             uri,
@@ -23,8 +28,7 @@ impl Context {
     }
 
     pub fn get_host(&self) -> Option<String> {
-        self.get_header("host")
-            .map(|h| h.to_string())
+        self.get_header("host").map(|h| h.to_string())
     }
 
     pub fn get_query_params(&self) -> Option<HashMap<String, String>> {

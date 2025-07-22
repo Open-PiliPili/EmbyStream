@@ -32,7 +32,11 @@ impl Cache {
     /// If the key already exists, its value and expiration time are updated.
     /// If inserting a new item exceeds capacity, the least recently used
     /// item will be evicted.
-    pub fn insert<V: 'static + Send + Sync + Debug>(&self, key: String, value: V) {
+    pub fn insert<V: 'static + Send + Sync + Debug>(
+        &self,
+        key: String,
+        value: V,
+    ) {
         self.inner.insert(key, Arc::new(value));
     }
 

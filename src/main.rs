@@ -6,7 +6,8 @@ use hyper::{StatusCode, body::Incoming};
 
 use embystream::gateway::reverse_proxy_filter::ReverseProxyFilterMiddleware;
 use embystream::{
-    AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log, info_log,
+    AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log,
+    info_log,
 };
 use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
@@ -14,8 +15,9 @@ use embystream::{
     config::{config::Config, general::StreamMode},
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
-        CorsMiddleware, LoggerMiddleware, OptionsMiddleware, chain::Handler, context::Context,
-        gateway::Gateway, response::ResponseBuilder, ua_filter::UserAgentFilterMiddleware,
+        CorsMiddleware, LoggerMiddleware, OptionsMiddleware, chain::Handler,
+        context::Context, gateway::Gateway, response::ResponseBuilder,
+        ua_filter::UserAgentFilterMiddleware,
     },
     logger::{LogLevel, Logger},
     system::SystemInfo,
@@ -33,7 +35,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-async fn run_app(run_args: &RunArgs) -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn run_app(
+    run_args: &RunArgs,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     setup_figlet();
     let config = setup_load_config(run_args);
     setup_logger(&config);
@@ -110,7 +114,8 @@ fn setup_load_config(run_args: &RunArgs) -> Config {
 }
 
 fn setup_logger(config: &Config) {
-    let level = LogLevel::from_str(&config.general.log_level).unwrap_or(LogLevel::Info);
+    let level =
+        LogLevel::from_str(&config.general.log_level).unwrap_or(LogLevel::Info);
     Logger::builder().with_level(level).build();
 }
 
@@ -148,7 +153,9 @@ async fn setup_frontend_gateway(
 
     let mut gateway = Gateway::new(&addr)
         .add_middleware(Box::new(LoggerMiddleware))
-        .add_middleware(Box::new(UserAgentFilterMiddleware::new(app_state.clone())))
+        .add_middleware(Box::new(UserAgentFilterMiddleware::new(
+            app_state.clone(),
+        )))
         .add_middleware(Box::new(ReverseProxyFilterMiddleware::new(
             frontend.clone().anti_reverse_proxy,
         )))
@@ -179,7 +186,10 @@ async fn setup_backend_gateway(
     debug_log!(INIT_LOGGER_DOMAIN, "Successfully start backend listener");
 
     let backend = config.backend.as_ref().ok_or_else(|| {
-        error_log!(INIT_LOGGER_DOMAIN, "Error: Backend configuration not exist");
+        error_log!(
+            INIT_LOGGER_DOMAIN,
+            "Error: Backend configuration not exist"
+        );
         "Backend config missing"
     })?;
 
@@ -189,13 +199,18 @@ async fn setup_backend_gateway(
     let mut gateway = Gateway::new(&addr)
         .with_tls(config.get_ssl_cert_path(), config.get_ssl_key_path())
         .add_middleware(Box::new(LoggerMiddleware))
-        .add_middleware(Box::new(UserAgentFilterMiddleware::new(app_state.clone())))
+        .add_middleware(Box::new(UserAgentFilterMiddleware::new(
+            app_state.clone(),
+        )))
         .add_middleware(Box::new(ReverseProxyFilterMiddleware::new(
             backend.clone().anti_reverse_proxy,
         )))
         .add_middleware(Box::new(CorsMiddleware))
         .add_middleware(Box::new(OptionsMiddleware))
-        .add_middleware(Box::new(StreamMiddleware::new(&backend.path, service)));
+        .add_middleware(Box::new(StreamMiddleware::new(
+            &backend.path,
+            service,
+        )));
 
     gateway.set_handler(default_handler());
     gateway.listen().await?;

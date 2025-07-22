@@ -42,7 +42,8 @@ impl UriExt for Uri {
             path_str.into_owned()
         };
 
-        let encoded_path = percent_encode(normalized_path.as_bytes(), NON_ALPHANUMERIC);
+        let encoded_path =
+            percent_encode(normalized_path.as_bytes(), NON_ALPHANUMERIC);
         let pseudo_uri = format!(
             "{}?path={}{}",
             PSEUDO_BASE_URI,
@@ -58,7 +59,9 @@ impl UriExt for Uri {
     }
 
     fn to_path_or_url_string(&self) -> String {
-        if !(self.scheme_str() == Some("http") && self.host() == Some("local-file.invalid")) {
+        if !(self.scheme_str() == Some("http")
+            && self.host() == Some("local-file.invalid"))
+        {
             return self.to_string();
         }
 
@@ -67,7 +70,8 @@ impl UriExt for Uri {
                 form_urlencoded::parse(q.as_bytes())
                     .find(|(k, _)| k == "path")
                     .map(|(_, v)| {
-                        let decoded = percent_encoding::percent_decode_str(&v).decode_utf8_lossy();
+                        let decoded = percent_encoding::percent_decode_str(&v)
+                            .decode_utf8_lossy();
                         if cfg!(windows) {
                             decoded.replace('/', "\\")
                         } else {

@@ -1,7 +1,7 @@
 use crate::{
     api::openlist::Operation,
     network::{HttpMethod, NetworkTarget, NetworkTask},
-    system::SystemInfo
+    system::SystemInfo,
 };
 
 /// Represents OpenList API endpoints with their respective parameters.
@@ -101,7 +101,10 @@ impl NetworkTarget for API {
             ("accept".into(), "application/json, text/plain, */*".into()),
             ("authorization".into(), self.token.clone()),
             ("cache-control".into(), "no-cache".into()),
-            ("content-type".into(), "application/json;charset=UTF-8".into()),
+            (
+                "content-type".into(),
+                "application/json;charset=UTF-8".into(),
+            ),
             ("user-agent".into(), sys_info.get_user_agent()),
         ]
     }

@@ -1,6 +1,4 @@
-use crate::{
-    api::{PhotoMessage, TextMessage},
-};
+use crate::api::{PhotoMessage, TextMessage};
 
 /// Represents Telegram Bot API endpoints with their respective parameters.
 ///

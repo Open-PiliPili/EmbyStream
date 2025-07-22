@@ -8,10 +8,14 @@ use lazy_static::lazy_static;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use super::{
-    chunk_stream::AdaptiveChunkStream, response::Response, result::Result as AppStreamResult,
+    chunk_stream::AdaptiveChunkStream, response::Response,
+    result::Result as AppStreamResult,
 };
 use crate::cache::FileMetadata;
-use crate::{AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, debug_log, error_log};
+use crate::{
+    AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, debug_log,
+    error_log,
+};
 
 pub(crate) struct LocalStreamer;
 
@@ -47,7 +51,13 @@ impl LocalStreamer {
         };
 
         if let Some(range_value) = range_header {
-            Self::stream_partial_content(&file_entry, &metadata, &range_value, start_time).await
+            Self::stream_partial_content(
+                &file_entry,
+                &metadata,
+                &range_value,
+                start_time,
+            )
+            .await
         } else {
             Self::stream_full_file(&file_entry, &metadata, start_time).await
         }
@@ -66,7 +76,8 @@ impl LocalStreamer {
             range_value
         );
 
-        let Ok(parsed) = http_range_header::parse_range_header(range_value) else {
+        let Ok(parsed) = http_range_header::parse_range_header(range_value)
+        else {
             return Err(StatusCode::RANGE_NOT_SATISFIABLE);
         };
 
@@ -101,13 +112,15 @@ impl LocalStreamer {
         );
 
         let limited_reader = file.take(len);
-        let stream = AdaptiveChunkStream::new(limited_reader, file_length, start_time)
-            .map_ok(Frame::data)
-            .map_err(Into::into);
+        let stream =
+            AdaptiveChunkStream::new(limited_reader, file_length, start_time)
+                .map_ok(Frame::data)
+                .map_err(Into::into);
 
         let mut headers = HeaderMap::new();
         let content_type = get_content_type(file_metadata.format.as_str());
-        let content_range = format!("bytes {}-{}/{}", start, end, file_metadata.file_size);
+        let content_range =
+            format!("bytes {}-{}/{}", start, end, file_metadata.file_size);
 
         headers.insert(header::CONTENT_LENGTH, len.into());
         if let Ok(accept_ranges) = content_range.parse() {

@@ -1,21 +1,15 @@
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use futures_util::TryStreamExt;
 use http_body_util::{BodyExt, StreamBody};
-use hyper::{body::Frame, header, HeaderMap, StatusCode, Uri};
+use hyper::{HeaderMap, StatusCode, Uri, body::Frame, header};
 
-use super::{
-    response::Response,
-    result::Result as AppStreamResult,
-};
+use super::{response::Response, result::Result as AppStreamResult};
+use crate::{AppState, REMOTE_STREAMER_LOGGER_DOMAIN, error_log};
 use crate::{
     client::{ClientBuilder, DownloadClient},
     network::CurlPlugin,
 };
-use crate::{AppState, error_log, REMOTE_STREAMER_LOGGER_DOMAIN};
 
 pub(crate) struct RemoteStreamer;
 
@@ -34,8 +28,9 @@ impl RemoteStreamer {
         let mut headers_to_forward = headers.clone();
         headers_to_forward.remove(header::HOST);
 
-        let forwarded_headers = Self::header_map_to_option_hashmap(&headers_to_forward)
-            .filter(|h| !h.is_empty());
+        let forwarded_headers =
+            Self::header_map_to_option_hashmap(&headers_to_forward)
+                .filter(|h| !h.is_empty());
         let remote_response = client
             .download(url.to_string(), user_agent, forwarded_headers)
             .await
@@ -67,17 +62,15 @@ impl RemoteStreamer {
         headers: &HeaderMap,
     ) -> Option<HashMap<String, String>> {
         headers.iter().next().map(|_| {
-            headers.iter().fold(
-                HashMap::new(),
-                |mut acc, (name, value)| {
+            headers
+                .iter()
+                .fold(HashMap::new(), |mut acc, (name, value)| {
                     acc.insert(
                         name.as_str().to_owned(),
-                        String::from_utf8_lossy(value.as_bytes())
-                            .into_owned(),
+                        String::from_utf8_lossy(value.as_bytes()).into_owned(),
                     );
                     acc
-                },
-            )
+                })
         })
     }
 }

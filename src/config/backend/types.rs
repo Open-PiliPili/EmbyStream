@@ -1,6 +1,8 @@
 use serde::Deserialize;
 
-use super::{disk::disk::Disk, openlist::openlist::OpenList, direct::direct::DirectLink};
+use super::{
+    direct::direct::DirectLink, disk::disk::Disk, openlist::openlist::OpenList,
+};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "backend_type", content = "settings")]

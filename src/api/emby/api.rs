@@ -4,7 +4,7 @@ use crate::{
     api::emby::Operation,
     network::{HttpMethod, NetworkTarget, NetworkTask},
     system::SystemInfo,
-    util::StringUtil
+    util::StringUtil,
 };
 
 /// Represents Emby API endpoints with their respective parameters.
@@ -60,7 +60,9 @@ impl NetworkTarget for API {
     fn path(&self) -> String {
         match &self.operation {
             Operation::GetUser { user_id } => format!("emby/Users/{}", user_id),
-            Operation::PlaybackInfo { item_id, .. } => format!("emby/Items/{}/PlaybackInfo", item_id),
+            Operation::PlaybackInfo { item_id, .. } => {
+                format!("emby/Items/{}/PlaybackInfo", item_id)
+            }
         }
     }
 
@@ -73,8 +75,13 @@ impl NetworkTarget for API {
         params.insert("api_key".to_string(), self.api_key.clone());
         match &self.operation {
             Operation::GetUser { .. } => NetworkTask::RequestParameters(params),
-            Operation::PlaybackInfo { media_source_id, .. } => {
-                params.insert("MediaSourceId".to_string(), media_source_id.clone());
+            Operation::PlaybackInfo {
+                media_source_id, ..
+            } => {
+                params.insert(
+                    "MediaSourceId".to_string(),
+                    media_source_id.clone(),
+                );
                 NetworkTask::RequestParameters(params)
             }
         }
@@ -82,7 +89,8 @@ impl NetworkTarget for API {
 
     fn headers(&self) -> Vec<(String, String)> {
         let sys_info = SystemInfo::new();
-        let base_url = StringUtil::trim_trailing_slashes(&self.base_url).to_string();
+        let base_url =
+            StringUtil::trim_trailing_slashes(&self.base_url).to_string();
         vec![
             ("accept".into(), "application/json".into()),
             ("origin".into(), base_url.clone()),

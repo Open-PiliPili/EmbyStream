@@ -61,20 +61,25 @@ impl AntiReverseProxyConfig {
         }
 
         fn extract_valid_host(url: &str) -> Option<&str> {
-            let cleaned = url.trim_start_matches("http://")
+            let cleaned = url
+                .trim_start_matches("http://")
                 .trim_start_matches("https://");
 
-            cleaned.split(['/', ':'])
+            cleaned
+                .split(['/', ':'])
                 .next()
                 .filter(|&s| !s.is_empty())
                 .map(|s| s.trim_end_matches('/'))
         }
 
-        match (extract_valid_host(host), extract_valid_host(&self.trusted_host)) {
+        match (
+            extract_valid_host(host),
+            extract_valid_host(&self.trusted_host),
+        ) {
             (Some(request_host), Some(trusted_host)) => {
                 !request_host.eq_ignore_ascii_case(trusted_host)
-            },
-            _ => false
+            }
+            _ => false,
         }
     }
 }

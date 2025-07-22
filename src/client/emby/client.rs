@@ -1,5 +1,5 @@
 use crate::{
-    api::emby::{API, User, PlaybackInfo},
+    api::emby::{API, PlaybackInfo, User},
     client::BuildableClient,
     network::{NetworkPlugin, NetworkProvider},
 };
@@ -73,7 +73,8 @@ impl Client {
         item_id: impl Into<String>,
         media_source_id: impl Into<String>,
     ) -> Result<PlaybackInfo, anyhow::Error> {
-        let request = API::playback_info(base_url, api_key, item_id, media_source_id);
+        let request =
+            API::playback_info(base_url, api_key, item_id, media_source_id);
         let response = self.provider.send_request(&request).await?;
         let result: PlaybackInfo = response.json().await?;
         Ok(result)

@@ -4,5 +4,5 @@ pub enum Environment {
     Docker,
     Linux,
     MacOS,
-    Windows
+    Windows,
 }

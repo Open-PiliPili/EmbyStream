@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
-use serde_json;
 use aes::Aes128;
-use cbc::Decryptor;
-use aes::cipher::{BlockDecryptMut, KeyIvInit, block_padding::Pkcs7, generic_array::GenericArray};
-use base64::{
-    Engine,
-    engine::general_purpose::STANDARD as BASE64
+use aes::cipher::{
+    BlockDecryptMut, KeyIvInit, block_padding::Pkcs7,
+    generic_array::GenericArray,
 };
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use cbc::Decryptor;
+use serde_json;
 
 use super::key_normalizer::KeyNormalizer;
-use crate::{CRYPTO_LOGGER_DOMAIN, Error, error_log, debug_log};
+use crate::{CRYPTO_LOGGER_DOMAIN, Error, debug_log, error_log};
 
 // Create type alias for AES-128-CBC Decryptor
 type Aes128CbcDecryptor = Decryptor<Aes128>;
@@ -34,12 +34,23 @@ impl AesDecrypt {
     ///
     /// * `Ok(HashMap<String, String>)` - The decrypted dictionary.
     /// * `Err(Error)` - If the key length is invalid, Base64 decoding fails, or decryption fails.
-    pub fn decrypt(encrypted: &str, key: &str, iv: &str) -> Result<HashMap<String, String>, Error> {
-        debug_log!(CRYPTO_LOGGER_DOMAIN, "Starting AES decryption for Base64 string");
+    pub fn decrypt(
+        encrypted: &str,
+        key: &str,
+        iv: &str,
+    ) -> Result<HashMap<String, String>, Error> {
+        debug_log!(
+            CRYPTO_LOGGER_DOMAIN,
+            "Starting AES decryption for Base64 string"
+        );
 
         // Decode Base64
         let decoded = BASE64.decode(encrypted).map_err(|e| {
-            error_log!(CRYPTO_LOGGER_DOMAIN, "Failed to decode Base64 string: {}", e);
+            error_log!(
+                CRYPTO_LOGGER_DOMAIN,
+                "Failed to decode Base64 string: {}",
+                e
+            );
             Error::Base64DecodeError(e)
         })?;
 
@@ -53,7 +64,8 @@ impl AesDecrypt {
         let ciphertext = &decoded;
 
         // Initialize cipher
-        let cipher = Aes128CbcDecryptor::new(&GenericArray::from_slice(&key), iv);
+        let cipher =
+            Aes128CbcDecryptor::new(&GenericArray::from_slice(&key), iv);
 
         // Copy ciphertext to mutable buffer for in-place decryption
         let mut buffer = ciphertext.to_vec();
@@ -65,12 +77,20 @@ impl AesDecrypt {
             })?;
 
         // Deserialize JSON to dictionary
-        let dict: HashMap<String, String> = serde_json::from_slice(decrypted).map_err(|e| {
-            error_log!(CRYPTO_LOGGER_DOMAIN, "Failed to deserialize JSON to dictionary: {}", e);
+        let dict: HashMap<String, String> = serde_json::from_slice(decrypted)
+            .map_err(|e| {
+            error_log!(
+                CRYPTO_LOGGER_DOMAIN,
+                "Failed to deserialize JSON to dictionary: {}",
+                e
+            );
             Error::JsonError(e)
         })?;
 
-        debug_log!(CRYPTO_LOGGER_DOMAIN, "Decryption successful, restored dictionary");
+        debug_log!(
+            CRYPTO_LOGGER_DOMAIN,
+            "Decryption successful, restored dictionary"
+        );
         Ok(dict)
     }
 }

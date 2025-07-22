@@ -1,0 +1,9 @@
+# .rustfmt.toml (Fully Stable Version)
+
+edition = "2024"
+max_width = 80
+reorder_imports = true
+reorder_modules = true
+merge_derives = true
+use_try_shorthand = true
+fn_params_layout = "Tall"

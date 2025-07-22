@@ -1,6 +1,5 @@
 use crate::config::backend::{
-    Backend,
-    types::BackendConfig as StreamBackendConfig
+    Backend, types::BackendConfig as StreamBackendConfig,
 };
 
 #[derive(Clone, Debug)]

@@ -62,7 +62,8 @@ impl Config {
         let mut config = Self::load_from_path(&config_path)?;
 
         if let Some(cert_path) = &args.ssl_cert_file {
-            config.http2.ssl_cert_file = cert_path.to_string_lossy().to_string();
+            config.http2.ssl_cert_file =
+                cert_path.to_string_lossy().to_string();
         }
         if let Some(key_path) = &args.ssl_key_file {
             config.http2.ssl_key_file = key_path.to_string_lossy().to_string();
@@ -109,7 +110,8 @@ impl Config {
 
         let stream_mode = &raw_config.general.stream_mode;
 
-        if (stream_mode == &StreamMode::Frontend || stream_mode == &StreamMode::Dual)
+        if (stream_mode == &StreamMode::Frontend
+            || stream_mode == &StreamMode::Dual)
             && raw_config.frontend.is_none()
         {
             return Err(ConfigError::MissingConfig("Frontend".to_string()));
@@ -126,24 +128,27 @@ impl Config {
             }
 
             let backend_type = raw_config.general.backend_type.as_str();
-            let config = match backend_type.to_lowercase().as_str() {
-                "disk" => BackendConfig::Disk(
-                    raw_config
-                        .disk
-                        .ok_or_else(|| ConfigError::MissingConfig("Disk".to_string()))?,
-                ),
-                "openlist" => BackendConfig::OpenList(
-                    raw_config
-                        .open_list
-                        .ok_or_else(|| ConfigError::MissingConfig("OpenList".to_string()))?,
-                ),
-                "direct_link" => BackendConfig::DirectLink(
-                    raw_config
-                        .direct_link
-                        .ok_or_else(|| ConfigError::MissingConfig("DirectLink".to_string()))?,
-                ),
-                other => return Err(ConfigError::InvalidBackendType(other.to_string())),
-            };
+            let config =
+                match backend_type.to_lowercase().as_str() {
+                    "disk" => BackendConfig::Disk(raw_config.disk.ok_or_else(
+                        || ConfigError::MissingConfig("Disk".to_string()),
+                    )?),
+                    "openlist" => BackendConfig::OpenList(
+                        raw_config.open_list.ok_or_else(|| {
+                            ConfigError::MissingConfig("OpenList".to_string())
+                        })?,
+                    ),
+                    "direct_link" => BackendConfig::DirectLink(
+                        raw_config.direct_link.ok_or_else(|| {
+                            ConfigError::MissingConfig("DirectLink".to_string())
+                        })?,
+                    ),
+                    other => {
+                        return Err(ConfigError::InvalidBackendType(
+                            other.to_string(),
+                        ));
+                    }
+                };
             backend_config = Some(config);
         } else {
             backend_config = None;
@@ -167,14 +172,15 @@ impl Config {
 
         let base_dirs = BaseDirs::new().ok_or(ConfigError::NoHomeDir)?;
 
-        let path = if cfg!(target_os = "linux") && unsafe { libc::getuid() } == 0 {
-            PathBuf::from(ROOT_CONFIG_PATH)
-        } else if cfg!(target_os = "windows") {
-            base_dirs.config_dir().join(CONFIG_DIR_NAME)
-        } else {
-            // macOS and other Unix-like systems
-            base_dirs.home_dir().join(".config").join(CONFIG_DIR_NAME)
-        };
+        let path =
+            if cfg!(target_os = "linux") && unsafe { libc::getuid() } == 0 {
+                PathBuf::from(ROOT_CONFIG_PATH)
+            } else if cfg!(target_os = "windows") {
+                base_dirs.config_dir().join(CONFIG_DIR_NAME)
+            } else {
+                // macOS and other Unix-like systems
+                base_dirs.home_dir().join(".config").join(CONFIG_DIR_NAME)
+            };
 
         if !path.exists() {
             fs::create_dir_all(&path).map_err(|e| ConfigError::CreateDir {
@@ -183,9 +189,11 @@ impl Config {
             })?;
 
             let ssl_path = path.join(SSL_DIR_NAME);
-            fs::create_dir_all(&ssl_path).map_err(|e| ConfigError::CreateDir {
-                path: ssl_path.display().to_string(),
-                source: e,
+            fs::create_dir_all(&ssl_path).map_err(|e| {
+                ConfigError::CreateDir {
+                    path: ssl_path.display().to_string(),
+                    source: e,
+                }
             })?;
         }
 
@@ -203,7 +211,10 @@ impl Config {
             );
             return Err(ConfigError::CopyTemplate(IoError::new(
                 IoErrorKind::NotFound,
-                format!("Template file not found at {}", template_path.display()),
+                format!(
+                    "Template file not found at {}",
+                    template_path.display()
+                ),
             )));
         }
 
@@ -214,7 +225,8 @@ impl Config {
             })?;
         }
 
-        fs::copy(template_path, target_path).map_err(ConfigError::CopyTemplate)?;
+        fs::copy(template_path, target_path)
+            .map_err(ConfigError::CopyTemplate)?;
 
         info_log!(
             CONFIG_LOGGER_DOMAIN,

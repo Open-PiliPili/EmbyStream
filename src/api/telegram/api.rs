@@ -79,8 +79,12 @@ impl NetworkTarget for API {
     /// A `NetworkTask` containing all necessary request parameters.
     fn task(&self) -> NetworkTask {
         match &self.operation {
-            Operation::SendMessage(params) => params.clone().into_task(self.get_chat_id()),
-            Operation::SendPhoto(params) => params.clone().into_task(self.get_chat_id()),
+            Operation::SendMessage(params) => {
+                params.clone().into_task(self.get_chat_id())
+            }
+            Operation::SendPhoto(params) => {
+                params.clone().into_task(self.get_chat_id())
+            }
         }
     }
 

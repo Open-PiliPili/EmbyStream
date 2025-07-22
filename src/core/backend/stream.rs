@@ -4,7 +4,9 @@ use async_trait::async_trait;
 use hyper::{Response, StatusCode, body::Incoming};
 
 use super::{result::Result as AppStreamResult, service::StreamService};
-use crate::{GATEWAY_LOGGER_DOMAIN, REMOTE_STREAMER_LOGGER_DOMAIN, debug_log, info_log};
+use crate::{
+    GATEWAY_LOGGER_DOMAIN, REMOTE_STREAMER_LOGGER_DOMAIN, debug_log, info_log,
+};
 use crate::{
     core::request::Request as AppStreamRequest,
     gateway::{
@@ -30,7 +32,12 @@ impl StreamMiddleware {
 
 #[async_trait]
 impl Middleware for StreamMiddleware {
-    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
+    async fn handle(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next,
+    ) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting stream middleware...");
 
         let request_path = {

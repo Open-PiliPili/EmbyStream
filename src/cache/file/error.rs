@@ -1,7 +1,4 @@
-use std::{
-    sync::Arc,
-    io::Error as IoError
-};
+use std::{io::Error as IoError, sync::Arc};
 
 use thiserror::Error;
 

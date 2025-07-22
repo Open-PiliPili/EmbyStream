@@ -5,17 +5,14 @@
 
 use once_cell::sync::Lazy;
 use reqwest::{
-    Client,
+    Client, Error, Method, Response,
     header::{HeaderMap, HeaderName, HeaderValue},
-    Method,
-    Response,
-    Error
 };
 
 use crate::{
     network::{
-        extension::RequestFormExt, http_method::HttpMethod, plugin::NetworkPlugin,
-        target::NetworkTarget, task::NetworkTask,
+        extension::RequestFormExt, http_method::HttpMethod,
+        plugin::NetworkPlugin, target::NetworkTarget, task::NetworkTask,
     },
     system_info::SystemInfo,
 };

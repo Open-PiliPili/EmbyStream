@@ -39,17 +39,15 @@ impl UserAgentFilterMiddleware {
         match ua_config.is_allow_mode() {
             true => {
                 ua_config.allow_ua.is_empty()
-                    || ua_config
-                        .allow_ua
-                        .iter()
-                        .any(|rule| self.is_ua_matching(&ua_lower, &rule.to_lowercase()))
+                    || ua_config.allow_ua.iter().any(|rule| {
+                        self.is_ua_matching(&ua_lower, &rule.to_lowercase())
+                    })
             }
             false => {
                 ua_config.deny_ua.is_empty()
-                    || !ua_config
-                        .deny_ua
-                        .iter()
-                        .any(|rule| self.is_ua_matching(&ua_lower, &rule.to_lowercase()))
+                    || !ua_config.deny_ua.iter().any(|rule| {
+                        self.is_ua_matching(&ua_lower, &rule.to_lowercase())
+                    })
             }
         }
     }
@@ -80,7 +78,12 @@ impl UserAgentFilterMiddleware {
 
 #[async_trait]
 impl Middleware for UserAgentFilterMiddleware {
-    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
+    async fn handle(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next,
+    ) -> Response<BoxBodyType> {
         debug_log!(
             USER_AGENT_FILTER_LOGGER_DOMAIN,
             "Starting user agent filter middleware..."
@@ -98,7 +101,11 @@ impl Middleware for UserAgentFilterMiddleware {
         if is_allowed {
             next(ctx, body).await
         } else {
-            error_log!(USER_AGENT_FILTER_LOGGER_DOMAIN, "Forbidden user-agent: {}", ua);
+            error_log!(
+                USER_AGENT_FILTER_LOGGER_DOMAIN,
+                "Forbidden user-agent: {}",
+                ua
+            );
             ResponseBuilder::with_status_code(StatusCode::FORBIDDEN)
         }
     }

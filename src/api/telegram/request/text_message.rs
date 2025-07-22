@@ -39,7 +39,8 @@ impl TextMessage {
     /// - `parse_mode: "MarkdownV2"`
     /// - `chat_id` from parameter
     pub fn to_json_value(&self, chat_id: String) -> Value {
-        let mut value = serde_json::to_value(self).expect("Failed to serialize TextMessage");
+        let mut value = serde_json::to_value(self)
+            .expect("Failed to serialize TextMessage");
 
         if let Some(obj) = value.as_object_mut() {
             obj.entry("parse_mode")

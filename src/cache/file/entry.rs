@@ -1,12 +1,6 @@
-use std::{
-    path::PathBuf,
-    sync::Arc
-};
+use std::{path::PathBuf, sync::Arc};
 
-use tokio::{
-    fs::File as TokioFile,
-    sync::RwLock
-};
+use tokio::{fs::File as TokioFile, sync::RwLock};
 
 #[derive(Clone, Debug)]
 pub struct Entry {

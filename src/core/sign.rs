@@ -4,7 +4,7 @@ use std::{
 };
 
 use hyper::Uri;
-use serde::{Deserialize};
+use serde::Deserialize;
 
 use crate::backend::proxy_mode::ProxyMode;
 use crate::{FORWARD_LOGGER_DOMAIN, debug_log};

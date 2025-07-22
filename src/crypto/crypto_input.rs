@@ -1,5 +1,5 @@
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 
 /// Input type for cryptographic operations.
 #[derive(Debug)]

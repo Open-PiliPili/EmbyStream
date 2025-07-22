@@ -49,7 +49,11 @@ impl Gateway {
         }
     }
 
-    pub fn with_tls(mut self, cert_path: Option<PathBuf>, key_path: Option<PathBuf>) -> Self {
+    pub fn with_tls(
+        mut self,
+        cert_path: Option<PathBuf>,
+        key_path: Option<PathBuf>,
+    ) -> Self {
         if let (Some(cert), Some(key)) = (cert_path, key_path) {
             if cert.exists() && key.exists() {
                 debug_log!(
@@ -81,14 +85,17 @@ impl Gateway {
         self.handler = Some(handler);
     }
 
-    pub async fn listen(&mut self) -> Result<(), Box<dyn StdError + Send + Sync>> {
+    pub async fn listen(
+        &mut self,
+    ) -> Result<(), Box<dyn StdError + Send + Sync>> {
         aws_lc_rs::default_provider()
             .install_default()
             .expect("Failed to install rustls crypto provider");
 
         let addr: SocketAddr = self.addr.parse()?;
         let listener = TcpListener::bind(&addr).await?;
-        let handler = self.handler.clone().unwrap_or_else(Self::default_handler);
+        let handler =
+            self.handler.clone().unwrap_or_else(Self::default_handler);
         let middlewares = Arc::new(std::mem::take(&mut self.middlewares));
 
         self.run_server(listener, handler, middlewares).await
@@ -101,12 +108,22 @@ impl Gateway {
         middlewares: Arc<Vec<Box<dyn Middleware>>>,
     ) -> Result<(), Box<dyn StdError + Send + Sync>> {
         let addr = listener.local_addr()?;
-        if let (Some(cert_path), Some(key_path)) = (&self.cert_path, &self.key_path) {
-            match self.load_tls_config(Path::new(cert_path), Path::new(key_path)) {
+        if let (Some(cert_path), Some(key_path)) =
+            (&self.cert_path, &self.key_path)
+        {
+            match self
+                .load_tls_config(Path::new(cert_path), Path::new(key_path))
+            {
                 Ok(tls_config) => {
                     let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
-                    self.run_https_server(&addr, listener, handler, middlewares, tls_acceptor)
-                        .await
+                    self.run_https_server(
+                        &addr,
+                        listener,
+                        handler,
+                        middlewares,
+                        tls_acceptor,
+                    )
+                    .await
                 }
                 Err(e) => {
                     warn_log!(
@@ -143,7 +160,9 @@ impl Gateway {
 
             tokio::spawn(async move {
                 let io = TokioIo::new(stream);
-                if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
+                if let Err(err) =
+                    http1::Builder::new().serve_connection(io, service).await
+                {
                     if !Self::is_ignorable_connection_error(&err) {
                         error_log!(
                             GATEWAY_LOGGER_DOMAIN,
@@ -182,14 +201,19 @@ impl Gateway {
             let service = Svc::new(handler.clone(), middlewares.clone());
 
             tokio::spawn(async move {
-                debug_log!(GATEWAY_LOGGER_DOMAIN, "Shake hands for {}", peer_addr);
+                debug_log!(
+                    GATEWAY_LOGGER_DOMAIN,
+                    "Shake hands for {}",
+                    peer_addr
+                );
 
                 match tls_acceptor.accept(stream).await {
                     Ok(tls_stream) => {
                         let (_, conn) = tls_stream.get_ref();
-                        let alpn_protocol = conn
-                            .alpn_protocol()
-                            .map_or("None", |p| str::from_utf8(p).unwrap_or("Invalid UTF-8"));
+                        let alpn_protocol =
+                            conn.alpn_protocol().map_or("None", |p| {
+                                str::from_utf8(p).unwrap_or("Invalid UTF-8")
+                            });
 
                         debug_log!(
                             GATEWAY_LOGGER_DOMAIN,
@@ -205,11 +229,14 @@ impl Gateway {
                             peer_addr
                         );
 
-                        if let Err(err) = hyper_conn_auto::Builder::new(TokioExecutor::new())
-                            .serve_connection(io, service)
-                            .await
+                        if let Err(err) =
+                            hyper_conn_auto::Builder::new(TokioExecutor::new())
+                                .serve_connection(io, service)
+                                .await
                         {
-                            if !Self::is_ignorable_connection_error(err.as_ref()) {
+                            if !Self::is_ignorable_connection_error(
+                                err.as_ref(),
+                            ) {
                                 error_log!(
                                     GATEWAY_LOGGER_DOMAIN,
                                     "Error occurred while processing HTTPS connection from {}: {:?}",
@@ -237,13 +264,15 @@ impl Gateway {
         cert_path: &Path,
         key_path: &Path,
     ) -> Result<ServerConfig, Box<dyn StdError + Send + Sync>> {
-        let cert_file = File::open(cert_path)
-            .map_err(|e| format!("failed to open cert file {:?}: {}", cert_path, e))?;
-        let certs =
-            rustls_pemfile::certs(&mut BufReader::new(cert_file)).collect::<Result<Vec<_>, _>>()?;
+        let cert_file = File::open(cert_path).map_err(|e| {
+            format!("failed to open cert file {:?}: {}", cert_path, e)
+        })?;
+        let certs = rustls_pemfile::certs(&mut BufReader::new(cert_file))
+            .collect::<Result<Vec<_>, _>>()?;
 
-        let key_file = File::open(key_path)
-            .map_err(|e| format!("failed to open key file {:?}: {}", key_path, e))?;
+        let key_file = File::open(key_path).map_err(|e| {
+            format!("failed to open key file {:?}: {}", key_path, e)
+        })?;
         let key = rustls_pemfile::private_key(&mut BufReader::new(key_file))?
             .ok_or("no private key found in file")?;
 
@@ -257,7 +286,9 @@ impl Gateway {
     fn default_handler() -> Handler {
         Arc::new(
             |_ctx: Context, _body: Option<Incoming>| -> Response<BoxBodyType> {
-                ResponseBuilder::with_status_code(StatusCode::INTERNAL_SERVER_ERROR)
+                ResponseBuilder::with_status_code(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
             },
         )
     }
@@ -273,7 +304,8 @@ impl Gateway {
                     return true;
                 }
             }
-            if let Some(hyper_err) = current_err.downcast_ref::<hyper::Error>() {
+            if let Some(hyper_err) = current_err.downcast_ref::<hyper::Error>()
+            {
                 if hyper_err.is_canceled() || hyper_err.is_closed() {
                     return true;
                 }

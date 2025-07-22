@@ -9,7 +9,11 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn new(uri: Uri, original_headers: HeaderMap, request_start_time: Instant) -> Self {
+    pub fn new(
+        uri: Uri,
+        original_headers: HeaderMap,
+        request_start_time: Instant,
+    ) -> Self {
         Self {
             uri,
             original_headers,

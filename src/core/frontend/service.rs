@@ -138,7 +138,10 @@ impl AppForwardService {
         Ok(forward_info)
     }
 
-    async fn get_signed_uri(&self, forward_info: &ForwardInfo) -> Result<Uri, AppForwardError> {
+    async fn get_signed_uri(
+        &self,
+        forward_info: &ForwardInfo,
+    ) -> Result<Uri, AppForwardError> {
         let sign_value = self.get_encrypt_sign(forward_info).await?;
         let config = self.get_forward_config().await;
 
@@ -147,7 +150,8 @@ impl AppForwardService {
             "Get signed url by backend_url: {:?}",
             &config.backend_url
         );
-        let mut url = Url::parse(&config.backend_url).map_err(|_| AppForwardError::InvalidUri)?;
+        let mut url = Url::parse(&config.backend_url)
+            .map_err(|_| AppForwardError::InvalidUri)?;
 
         url.query_pairs_mut()
             .append_pair("sign", &sign_value)
@@ -163,7 +167,10 @@ impl AppForwardService {
         url_str.parse().map_err(|_| AppForwardError::InvalidUri)
     }
 
-    async fn get_encrypt_sign(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
+    async fn get_encrypt_sign(
+        &self,
+        params: &ForwardInfo,
+    ) -> Result<String, AppForwardError> {
         let encrypt_map = self.get_sign(params).await?.to_map();
         debug_log!(
             FORWARD_LOGGER_DOMAIN,
@@ -182,11 +189,16 @@ impl AppForwardService {
 
         match crypto_result {
             CryptoOutput::Encrypted(sign_value) => Ok(sign_value),
-            CryptoOutput::Dictionary(_) => Err(AppForwardError::EncryptSignatureFailed),
+            CryptoOutput::Dictionary(_) => {
+                Err(AppForwardError::EncryptSignatureFailed)
+            }
         }
     }
 
-    async fn get_sign(&self, params: &ForwardInfo) -> Result<Sign, AppForwardError> {
+    async fn get_sign(
+        &self,
+        params: &ForwardInfo,
+    ) -> Result<Sign, AppForwardError> {
         let encrypt_cache = self.state.get_encrypt_cache().await;
         let cache_key = self.encrypt_key(&params)?;
 
@@ -200,7 +212,9 @@ impl AppForwardService {
         debug_log!(FORWARD_LOGGER_DOMAIN, "Sign path: {:?}", path);
 
         let uri: Uri = Uri::from_path_or_url(path).map_err(|e| match e {
-            UriExtError::FileNotFound(path) => AppForwardError::FileNotFound(path),
+            UriExtError::FileNotFound(path) => {
+                AppForwardError::FileNotFound(path)
+            }
             UriExtError::InvalidUri => AppForwardError::InvalidUri,
             UriExtError::IoError(e) => AppForwardError::IoError(e),
         })?;
@@ -225,16 +239,15 @@ impl AppForwardService {
         Ok(sign)
     }
 
-    async fn reparse_if_strm(&self, path: &str) -> Result<String, AppForwardError> {
+    async fn reparse_if_strm(
+        &self,
+        path: &str,
+    ) -> Result<String, AppForwardError> {
         if !path.ends_with(".strm") {
             return Ok(path.to_string());
         }
 
-        debug_log!(
-            FORWARD_LOGGER_DOMAIN,
-            "Detected strm file: {}",
-            path
-        );
+        debug_log!(FORWARD_LOGGER_DOMAIN, "Detected strm file: {}", path);
 
         let strm_cache = self.state.get_strm_file_cache().await;
         let strm_cache_key = self.strm_key(path)?;
@@ -315,7 +328,11 @@ impl AppForwardService {
         rewriter.rewrite(path).await
     }
 
-    fn build_redirect_info(&self, url: Uri, original_headers: &HeaderMap) -> RedirectInfo {
+    fn build_redirect_info(
+        &self,
+        url: Uri,
+        original_headers: &HeaderMap,
+    ) -> RedirectInfo {
         let mut final_headers = original_headers.clone();
 
         final_headers.remove(header::HOST);
@@ -326,15 +343,25 @@ impl AppForwardService {
         }
     }
 
-    fn encrypt_key(&self, params: &ForwardInfo) -> Result<String, AppForwardError> {
+    fn encrypt_key(
+        &self,
+        params: &ForwardInfo,
+    ) -> Result<String, AppForwardError> {
         self.md5_key(&params.item_id, &params.media_source_id)
     }
 
-    fn forward_info_key(&self, params: &PathParams) -> Result<String, AppForwardError> {
+    fn forward_info_key(
+        &self,
+        params: &PathParams,
+    ) -> Result<String, AppForwardError> {
         self.md5_key(&params.item_id, &params.media_source_id)
     }
 
-    fn md5_key(&self, item_id: &str, media_source_id: &str) -> Result<String, AppForwardError> {
+    fn md5_key(
+        &self,
+        item_id: &str,
+        media_source_id: &str,
+    ) -> Result<String, AppForwardError> {
         if item_id.is_empty() || media_source_id.is_empty() {
             return Err(AppForwardError::InvalidMediaSource);
         }
@@ -389,7 +416,11 @@ impl ForwardService for AppForwardService {
             .get_forward_info(&path_params, &request)
             .await
             .map_err(|e| {
-                error_log!(FORWARD_LOGGER_DOMAIN, "Routing forward info error: {:?}", e);
+                error_log!(
+                    FORWARD_LOGGER_DOMAIN,
+                    "Routing forward info error: {:?}",
+                    e
+                );
                 StatusCode::BAD_REQUEST
             })?;
 

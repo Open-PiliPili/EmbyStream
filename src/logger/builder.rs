@@ -2,11 +2,7 @@ use std::fmt::Debug;
 use time::UtcOffset;
 
 use tracing_subscriber::{
-    fmt,
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    EnvFilter,
-    Registry,
+    EnvFilter, Registry, fmt, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
 use super::{LogLevel, LogRotation};
@@ -135,7 +131,8 @@ impl LoggerBuilder {
             .unwrap_or_else(|_| EnvFilter::new(self.max_level.to_string()));
 
         // Configure file appender with rotation
-        let file_appender = self.rolling
+        let file_appender = self
+            .rolling
             .create_file_appender(self.directory, self.file_name_prefix);
 
         // Determine if the log level is DEBUG or more verbose

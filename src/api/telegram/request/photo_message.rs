@@ -26,7 +26,9 @@ impl Display for PhotoInput {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             PhotoInput::Url(url) => write!(f, "[URL] {}", url),
-            PhotoInput::FilePath(path) => write!(f, "[File] {}", path.display()),
+            PhotoInput::FilePath(path) => {
+                write!(f, "[File] {}", path.display())
+            }
         }
     }
 }
@@ -69,7 +71,10 @@ impl PhotoMessage {
 
         match self.photo {
             PhotoInput::FilePath(path) => {
-                let files = vec![(path.to_string_lossy().into_owned(), "photo".to_string())];
+                let files = vec![(
+                    path.to_string_lossy().into_owned(),
+                    "photo".to_string(),
+                )];
                 NetworkTask::RequestMultipartWithFiles(fields, files)
             }
             PhotoInput::Url(url) => {

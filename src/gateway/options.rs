@@ -13,7 +13,12 @@ pub struct OptionsMiddleware;
 
 #[async_trait]
 impl Middleware for OptionsMiddleware {
-    async fn handle(&self, ctx: Context, body: Option<Incoming>, next: Next) -> Response<BoxBodyType> {
+    async fn handle(
+        &self,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next,
+    ) -> Response<BoxBodyType> {
         debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting options middleware...");
 
         if ctx.method == hyper::Method::OPTIONS {

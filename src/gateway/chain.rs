@@ -8,11 +8,15 @@ use hyper::{
 
 use crate::gateway::{context::Context, response::BoxBodyType};
 
-pub type Handler = Arc<dyn Fn(Context, Option<Incoming>) -> Response<BoxBodyType> + Send + Sync>;
+pub type Handler = Arc<
+    dyn Fn(Context, Option<Incoming>) -> Response<BoxBodyType> + Send + Sync,
+>;
 
-type ResponseFuture = Pin<Box<dyn Future<Output = Response<BoxBodyType>> + Send>>;
+type ResponseFuture =
+    Pin<Box<dyn Future<Output = Response<BoxBodyType>> + Send>>;
 
-pub type Next = Box<dyn FnOnce(Context, Option<Incoming>) -> ResponseFuture + Send>;
+pub type Next =
+    Box<dyn FnOnce(Context, Option<Incoming>) -> ResponseFuture + Send>;
 
 #[async_trait]
 pub trait Middleware: Send + Sync {
@@ -37,7 +41,10 @@ pub struct Chain {
 }
 
 impl Chain {
-    pub fn new(middlewares: Vec<Box<dyn Middleware>>, handler: Handler) -> Self {
+    pub fn new(
+        middlewares: Vec<Box<dyn Middleware>>,
+        handler: Handler,
+    ) -> Self {
         Self {
             middlewares,
             handler,
@@ -49,7 +56,10 @@ impl Chain {
         self
     }
 
-    pub async fn run(self, req: Request<body::Incoming>) -> Response<BoxBodyType> {
+    pub async fn run(
+        self,
+        req: Request<body::Incoming>,
+    ) -> Response<BoxBodyType> {
         let (parts, body) = req.into_parts();
         let ctx = Context::new(
             parts.uri,
@@ -58,17 +68,20 @@ impl Chain {
             std::time::Instant::now(),
         );
 
-        let handler_action: Next =
-            Box::new(move |ctx, body| Box::pin(async move { (self.handler)(ctx, body) }));
+        let handler_action: Next = Box::new(move |ctx, body| {
+            Box::pin(async move { (self.handler)(ctx, body) })
+        });
 
-        let chain_entry =
-            self.middlewares
-                .into_iter()
-                .rfold(handler_action, |next_action, middleware| {
-                    Box::new(move |ctx, body| {
-                        Box::pin(async move { middleware.handle(ctx, body, next_action).await })
+        let chain_entry = self.middlewares.into_iter().rfold(
+            handler_action,
+            |next_action, middleware| {
+                Box::new(move |ctx, body| {
+                    Box::pin(async move {
+                        middleware.handle(ctx, body, next_action).await
                     })
-                });
+                })
+            },
+        );
 
         chain_entry(ctx, Some(body)).await
     }
