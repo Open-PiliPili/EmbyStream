@@ -29,7 +29,7 @@ impl Backend {
         let uri_str = if should_show_port {
             format!("{}:{}/{}", clean_url, self.port, clean_path)
         } else {
-            format!("{}/{}", clean_url, clean_path)
+            format!("{clean_url}/{clean_path}")
         };
 
         uri_str.parse().expect("Failed to parse backend URI")

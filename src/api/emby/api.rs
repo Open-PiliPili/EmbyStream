@@ -59,7 +59,7 @@ impl NetworkTarget for API {
 
     fn path(&self) -> String {
         match &self.operation {
-            Operation::GetUser { user_id } => format!("emby/Users/{}", user_id),
+            Operation::GetUser { user_id } => format!("emby/Users/{user_id}"),
             Operation::PlaybackInfo { item_id, .. } => {
                 format!("emby/Items/{}/PlaybackInfo", item_id)
             }

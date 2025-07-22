@@ -265,7 +265,7 @@ impl Gateway {
         key_path: &Path,
     ) -> Result<ServerConfig, Box<dyn StdError + Send + Sync>> {
         let cert_file = File::open(cert_path).map_err(|e| {
-            format!("failed to open cert file {:?}: {}", cert_path, e)
+            format!("failed to open cert file {cert_path:?}: {e}")
         })?;
         let certs = rustls_pemfile::certs(&mut BufReader::new(cert_file))
             .collect::<Result<Vec<_>, _>>()?;

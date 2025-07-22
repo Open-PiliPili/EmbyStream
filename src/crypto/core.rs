@@ -16,9 +16,11 @@ impl Crypto {
     ///
     /// * `operation` - The operation to perform (Encrypt or Decrypt).
     /// * `input` - For Encrypt: HashMap<String, String>; for Decrypt: Base64-encoded string.
-    /// * `key` - The 16-byte encryption/decryption key.
-    /// * `iv` - The initialization vector as a UTF-8 string, must be at least 6 characters long.
-    ///          when encoded to UTF-8, used for AES-128-CBC decryption.
+    /// * `key` - A string slice that will be used as the encryption key.
+    ///   The key will be converted to bytes, padded with `0` if shorter than 16 bytes,
+    ///   or truncated if longer than 16 bytes.
+    /// * `iv` - An optional 16-byte initialization vector. If not provided, a default IV of `[0; 16]` is used.
+    ///   when encoded to UTF-8, used for AES-128-CBC decryption.
     ///
     /// # Returns
     ///
