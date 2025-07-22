@@ -58,7 +58,7 @@ async fn run_app(
 fn setup_figlet() {
     if let Ok(standard_font) = FIGfont::standard() {
         if let Some(figure) = standard_font.convert("EMBYSTREAM") {
-            println!("{}", figure);
+            println!("{figure}");
         }
     }
 }
