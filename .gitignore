@@ -37,3 +37,4 @@ logs/
 # === Config files ===
 config/
 !src/config/
+!template/config/
