@@ -1,0 +1,36 @@
+name: Continuous Integration Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run Clippy linter
+        run: cargo clippy -- -D warnings
+
+      - name: Check if code compiles
+        run: cargo check
+
+      - name: Build project
+        run: cargo build

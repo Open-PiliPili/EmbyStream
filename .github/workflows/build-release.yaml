@@ -1,0 +1,76 @@
+name: Build and Release Binaries on Tag
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-and-package:
+    name: Build & Package for ${{ matrix.target_name }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            target_name: amd64
+            asset_name: embystream-amd64-linux.tar.gz
+          - target: aarch64-unknown-linux-musl
+            target_name: aarch64
+            asset_name: embystream-aarch64-linux.tar.gz
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Strip binary to reduce size
+        run: strip target/${{ matrix.target }}/release/embystream
+
+      - name: Create package archive
+        run: tar -czvf ${{ matrix.asset_name }} -C target/${{ matrix.target }}/release embystream
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+          retention-days: 30
+
+  create-github-release:
+    name: Create GitHub Release
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create checksum file
+        run: |
+          cd artifacts
+          for dir in */; do
+            find "$dir" -type f -name "*.tar.gz" -exec sha512sum {} + >> ../embystream.sha512sum
+          done
+          cd ..
+
+      - name: Create Release and Upload Assets
+        uses: ncipollo/release-action@v1
+        with:
+          artifact: "artifacts/**/*.tar.gz,embystream.sha512sum"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
