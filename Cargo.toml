@@ -7,6 +7,9 @@ rust-version = "1.85"
 authors = ["Open-PiliPili <openpilipili@gmail.com>"]
 description = "Another Emby streaming application (frontend/backend separation) written in Rust."
 
+[profile.release]
+strip = true
+
 [dependencies]
 anyhow = "1.0.98"
 async-trait = "0.1.88"

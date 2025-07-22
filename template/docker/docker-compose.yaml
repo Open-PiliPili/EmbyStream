@@ -1,0 +1,20 @@
+services:
+  embystream:
+    image: openpilipili/embystream:latest
+    container_name: ${CONTAINER_NAME:-embystream}
+    environment:
+      - TZ=Asia/Shanghai
+      - PUID=1000
+      - PGID=1000
+      - UMASK=022
+    volumes:
+      - ./config/config.toml:/config/embystream/config.toml
+    privileged: true
+    restart: unless-stopped
+    ports:
+      - "50001:50001"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
