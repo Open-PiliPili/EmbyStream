@@ -65,7 +65,7 @@ impl AesDecrypt {
 
         // Initialize cipher
         let cipher =
-            Aes128CbcDecryptor::new(&GenericArray::from_slice(&key), iv);
+            Aes128CbcDecryptor::new(GenericArray::from_slice(&key), iv);
 
         // Copy ciphertext to mutable buffer for in-place decryption
         let mut buffer = ciphertext.to_vec();

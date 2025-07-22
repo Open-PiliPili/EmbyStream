@@ -6,6 +6,15 @@ pub struct ClientBuilder<T> {
     _phantom: std::marker::PhantomData<T>,
 }
 
+impl<T> Default for ClientBuilder<T>
+where
+    T: BuildableClient,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> ClientBuilder<T>
 where
     T: BuildableClient,

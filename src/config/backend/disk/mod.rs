@@ -1,3 +1,3 @@
-pub mod disk;
+pub mod types;
 
-pub use disk::Disk;
+pub use types::Disk;

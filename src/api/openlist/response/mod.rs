@@ -1,3 +1,3 @@
-pub mod response;
+pub mod types;
 
-pub use response::{FileData, FileResponse, LinkData, LinkResponse};
+pub use types::{FileData, FileResponse, LinkData, LinkResponse};

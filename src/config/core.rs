@@ -117,42 +117,40 @@ impl Config {
             return Err(ConfigError::MissingConfig("Frontend".to_string()));
         }
 
-        let backend_config;
-
-        if stream_mode == &StreamMode::Frontend
+        let needs_backend = stream_mode == &StreamMode::Frontend
             || stream_mode == &StreamMode::Backend
-            || stream_mode == &StreamMode::Dual
-        {
+            || stream_mode == &StreamMode::Dual;
+
+        let backend_config = if needs_backend {
             if raw_config.backend.is_none() {
                 return Err(ConfigError::MissingConfig("Backend".to_string()));
             }
 
             let backend_type = raw_config.general.backend_type.as_str();
-            let config =
-                match backend_type.to_lowercase().as_str() {
-                    "disk" => BackendConfig::Disk(raw_config.disk.ok_or_else(
-                        || ConfigError::MissingConfig("Disk".to_string()),
-                    )?),
-                    "openlist" => BackendConfig::OpenList(
-                        raw_config.open_list.ok_or_else(|| {
-                            ConfigError::MissingConfig("OpenList".to_string())
-                        })?,
-                    ),
-                    "direct_link" => BackendConfig::DirectLink(
-                        raw_config.direct_link.ok_or_else(|| {
-                            ConfigError::MissingConfig("DirectLink".to_string())
-                        })?,
-                    ),
-                    other => {
-                        return Err(ConfigError::InvalidBackendType(
-                            other.to_string(),
-                        ));
-                    }
-                };
-            backend_config = Some(config);
+
+            let config = match backend_type.to_lowercase().as_str() {
+                "disk" => Ok(BackendConfig::Disk(raw_config.disk.ok_or_else(
+                    || ConfigError::MissingConfig("Disk".to_string()),
+                )?)),
+                "openlist" => Ok(BackendConfig::OpenList(
+                    raw_config.open_list.ok_or_else(|| {
+                        ConfigError::MissingConfig("OpenList".to_string())
+                    })?,
+                )),
+                "direct_link" => Ok(BackendConfig::DirectLink(
+                    raw_config.direct_link.ok_or_else(|| {
+                        ConfigError::MissingConfig("DirectLink".to_string())
+                    })?,
+                )),
+                other => {
+                    Err(ConfigError::InvalidBackendType(other.to_string()))
+                }
+            };
+
+            Some(config?)
         } else {
-            backend_config = None;
-        }
+            None
+        };
 
         Ok(Config {
             path: path.to_path_buf(),

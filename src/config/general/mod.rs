@@ -1,3 +1,3 @@
-pub mod general;
+pub mod types;
 
-pub use general::{General, StreamMode, UserAgent};
+pub use types::{General, StreamMode, UserAgent};

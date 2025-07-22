@@ -8,6 +8,12 @@ pub struct SystemInfo {
     pub environment: Environment,
 }
 
+impl Default for SystemInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SystemInfo {
     pub fn new() -> Self {
         SystemInfo {

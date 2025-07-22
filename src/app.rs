@@ -4,7 +4,7 @@ use tokio::sync::{OnceCell, RwLock as TokioRwLock};
 
 use crate::{
     cache::{FileCache, GeneralCache},
-    config::config::Config,
+    config::core::Config,
 };
 
 pub struct AppState {

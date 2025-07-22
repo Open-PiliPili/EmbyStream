@@ -1,3 +1,3 @@
-pub mod direct;
+pub mod types;
 
-pub use direct::DirectLink;
+pub use types::DirectLink;

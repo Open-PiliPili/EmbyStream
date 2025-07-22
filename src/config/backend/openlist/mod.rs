@@ -1,3 +1,3 @@
-pub mod openlist;
+pub mod types;
 
-pub use openlist::OpenList;
+pub use types::OpenList;

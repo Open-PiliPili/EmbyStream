@@ -1,6 +1,12 @@
 /// Privacy utilities for handling sensitive data.
 pub struct Privacy;
 
+impl Default for Privacy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Privacy {
     /// Creates a new Privacy instance.
     pub fn new() -> Self {

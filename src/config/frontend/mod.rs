@@ -1,3 +1,3 @@
-pub mod frontend;
+pub mod types;
 
-pub use frontend::Frontend;
+pub use types::Frontend;

@@ -96,7 +96,7 @@ impl Middleware for UserAgentFilterMiddleware {
             .map(|s| s.to_lowercase());
 
         let ua = ua_lower.as_deref().unwrap_or("");
-        let is_allowed = self.is_ua_allowed(&ua).await;
+        let is_allowed = self.is_ua_allowed(ua).await;
 
         if is_allowed {
             next(ctx, body).await

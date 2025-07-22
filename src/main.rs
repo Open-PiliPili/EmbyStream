@@ -12,11 +12,11 @@ use embystream::{
 use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
     cli::{Cli, Commands, RunArgs},
-    config::{config::Config, general::StreamMode},
+    config::{core::Config, general::StreamMode},
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
         CorsMiddleware, LoggerMiddleware, OptionsMiddleware, chain::Handler,
-        context::Context, gateway::Gateway, response::ResponseBuilder,
+        context::Context, core::Gateway, response::ResponseBuilder,
         ua_filter::UserAgentFilterMiddleware,
     },
     logger::{LogLevel, Logger},

@@ -1,6 +1,5 @@
 /// Default domain used for logging macros when no custom domain is provided.
 /// This helps categorize log messages consistently across the application.
-
 pub const CONFIG_LOGGER_DOMAIN: &str = "CONFIG";
 pub const CRYPTO_LOGGER_DOMAIN: &str = "CRYPTO";
 pub const CRYPTO_CACHE_LOGGER_DOMAIN: &str = "CRYPTO-CACHE";

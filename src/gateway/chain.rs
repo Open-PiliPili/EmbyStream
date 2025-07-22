@@ -51,7 +51,7 @@ impl Chain {
         }
     }
 
-    pub fn add(mut self, middleware: Box<dyn Middleware>) -> Self {
+    pub fn add_middleware(mut self, middleware: Box<dyn Middleware>) -> Self {
         self.middlewares.push(middleware);
         self
     }

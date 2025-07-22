@@ -47,7 +47,7 @@ impl Cache {
     pub fn get<V: 'static + Clone>(&self, key: &str) -> Option<V> {
         self.inner
             .get(key)
-            .and_then(|value| value.downcast_ref::<V>().map(|v| v.clone()))
+            .and_then(|value| value.downcast_ref::<V>().cloned())
     }
 
     /// Removes a key-value pair from the cache.
@@ -58,5 +58,9 @@ impl Cache {
     /// Returns the current number of entries in the cache.
     pub fn len(&self) -> u64 {
         self.inner.entry_count()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }

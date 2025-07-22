@@ -122,8 +122,8 @@ impl LoggerBuilder {
             "[year]-[month padding:zero]-[day padding:zero] [hour]:[minute]:[second].[subsecond digits:6]",
         )
             .expect("Failed to parse time format");
-        let time_offset = UtcOffset::current_local_offset()
-            .unwrap_or_else(|_| UtcOffset::UTC);
+        let time_offset =
+            UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC);
         let timer = fmt::time::OffsetTime::new(time_offset, timer_fmt);
 
         // Try to get filter from env, fallback to configured level

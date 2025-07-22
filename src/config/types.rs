@@ -7,7 +7,7 @@ use crate::config::{
     http2::Http2,
 };
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Default)]
 pub struct PathRewriteConfig {
     #[serde(default)]
     pub enable: bool,
@@ -26,31 +26,12 @@ impl PathRewriteConfig {
     }
 }
 
-impl Default for PathRewriteConfig {
-    fn default() -> Self {
-        Self {
-            enable: false,
-            pattern: String::new(),
-            replacement: String::new(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct AntiReverseProxyConfig {
     #[serde(default)]
     pub enable: bool,
     #[serde(default, rename = "host")]
     pub trusted_host: String,
-}
-
-impl Default for AntiReverseProxyConfig {
-    fn default() -> Self {
-        Self {
-            enable: false,
-            trusted_host: String::new(),
-        }
-    }
 }
 
 impl AntiReverseProxyConfig {

@@ -1,15 +1,10 @@
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Default, Copy, PartialEq, Deserialize)]
 pub enum ProxyMode {
     #[serde(rename = "proxy")]
+    #[default]
     Proxy,
     #[serde(rename = "redirect")]
     Redirect,
-}
-
-impl Default for ProxyMode {
-    fn default() -> Self {
-        ProxyMode::Proxy
-    }
 }

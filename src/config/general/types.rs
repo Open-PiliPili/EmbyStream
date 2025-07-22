@@ -3,18 +3,13 @@ use std::fmt;
 use hyper::Uri;
 use serde::Deserialize;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum StreamMode {
+    #[default]
     Frontend,
     Backend,
     Dual,
-}
-
-impl Default for StreamMode {
-    fn default() -> Self {
-        StreamMode::Frontend
-    }
 }
 
 impl fmt::Display for StreamMode {
@@ -51,7 +46,7 @@ impl General {
         let uri_str = if should_show_port {
             format!("{}:{}", clean_url, self.emby_port)
         } else {
-            format!("{}", clean_url)
+            clean_url.to_string()
         };
 
         uri_str.parse().expect("Failed to parse backend URI")

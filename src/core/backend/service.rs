@@ -175,7 +175,7 @@ impl AppStreamService {
             .fetch_file_path(
                 Uri::to_path_or_url_string(&openlist_config.uri()),
                 &openlist_config.token,
-                Uri::to_path_or_url_string(&uri),
+                Uri::to_path_or_url_string(uri),
             )
             .await;
 

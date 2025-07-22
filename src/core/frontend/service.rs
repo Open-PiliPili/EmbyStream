@@ -81,7 +81,7 @@ impl AppForwardService {
         request: &AppForwardRequest,
     ) -> Result<ForwardInfo, AppForwardError> {
         let forward_info_cache = self.state.get_forward_info_cache().await;
-        let cache_key = self.forward_info_key(&path_params)?;
+        let cache_key = self.forward_info_key(path_params)?;
         if let Some(cached_forward_info) = forward_info_cache.get(&cache_key) {
             debug_log!(
                 FORWARD_LOGGER_DOMAIN,
@@ -200,7 +200,7 @@ impl AppForwardService {
         params: &ForwardInfo,
     ) -> Result<Sign, AppForwardError> {
         let encrypt_cache = self.state.get_encrypt_cache().await;
-        let cache_key = self.encrypt_key(&params)?;
+        let cache_key = self.encrypt_key(params)?;
 
         if let Some(sign) = encrypt_cache.get(&cache_key) {
             debug_log!(FORWARD_LOGGER_DOMAIN, "Sign cache hit: {:?}", sign);

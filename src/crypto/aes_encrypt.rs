@@ -62,7 +62,7 @@ impl AesEncrypt {
 
         // Initialize cipher
         let cipher =
-            Aes128CbcEncryptor::new(&GenericArray::from_slice(&key), &iv);
+            Aes128CbcEncryptor::new(GenericArray::from_slice(&key), iv);
 
         // Encrypt the JSON string with PKCS7 padding
         let plaintext = json.as_bytes();
@@ -76,7 +76,7 @@ impl AesEncrypt {
             })?;
 
         // Encode to Base64
-        let encoded = BASE64.encode(&ciphertext);
+        let encoded = BASE64.encode(ciphertext);
         debug_log!(
             CRYPTO_LOGGER_DOMAIN,
             "Encryption successful, produced Base64 string"

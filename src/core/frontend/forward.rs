@@ -21,7 +21,7 @@ use crate::{
 };
 
 static NORMAL_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(&concat!(
+    Regex::new(concat!(
         r"(?i)^/(?:emby/)?videos/", // 1. Path prefix
         r"([a-zA-Z0-9_-]+)",        // 2. Item ID capture
         r"(?:",                     // 3. Start path alternatives
@@ -34,7 +34,7 @@ static NORMAL_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
 });
 
 static HLS_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(&concat!(
+    Regex::new(concat!(
         r"(?i)^/(?:emby/)?videos/", // 1. Path prefix
         r"([a-zA-Z0-9_-]+)",        // 2. Item ID capture
         r"/hls\d*/",                // 3. HLS path prefix

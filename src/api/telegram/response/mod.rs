@@ -1,3 +1,3 @@
-pub mod response;
+pub mod types;
 
-pub use response::{MessageResult, Response};
+pub use types::{MessageResult, Response};
