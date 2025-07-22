@@ -50,7 +50,7 @@ impl NetworkTarget for API {
         let mut headers = vec![
             ("accept".into(), "application/json".to_string()),
             ("origin".into(), remote_url.to_string()),
-            ("referer".into(), format!("{}/", remote_url)),
+            ("referer".into(), format!("{remote_url}/")),
         ];
 
         if let Some(forward_headers) = &self.forward_headers {

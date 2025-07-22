@@ -32,6 +32,6 @@ impl Display for HttpMethod {
             HttpMethod::Put => "PUT",
             HttpMethod::Delete => "DELETE",
         };
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }

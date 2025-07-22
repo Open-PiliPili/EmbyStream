@@ -18,7 +18,7 @@ impl fmt::Display for CryptoInput {
                     if !first {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}: {}", key, value)?;
+                    write!(f, "{key}: {value}")?;
                     first = false;
                 }
                 write!(f, " }}")
@@ -28,7 +28,7 @@ impl fmt::Display for CryptoInput {
                 if s.len() > 50 {
                     write!(f, "Encrypted({}...)", &s[..50])
                 } else {
-                    write!(f, "Encrypted({})", s)
+                    write!(f, "Encrypted({s})")
                 }
             }
         }

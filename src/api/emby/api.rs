@@ -61,7 +61,7 @@ impl NetworkTarget for API {
         match &self.operation {
             Operation::GetUser { user_id } => format!("emby/Users/{user_id}"),
             Operation::PlaybackInfo { item_id, .. } => {
-                format!("emby/Items/{}/PlaybackInfo", item_id)
+                format!("emby/Items/{item_id}/PlaybackInfo")
             }
         }
     }
@@ -94,7 +94,7 @@ impl NetworkTarget for API {
         vec![
             ("accept".into(), "application/json".into()),
             ("origin".into(), base_url.clone()),
-            ("referer".into(), format!("{}/", base_url)),
+            ("referer".into(), format!("{base_url}/")),
             ("user-agent".into(), sys_info.get_user_agent()),
         ]
     }

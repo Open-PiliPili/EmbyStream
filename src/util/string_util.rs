@@ -12,6 +12,6 @@ impl StringUtil {
             return "".to_string();
         }
         let digest = md5::compute(input.as_bytes());
-        format!("{:x}", digest)
+        format!("{digest:x}")
     }
 }

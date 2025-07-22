@@ -365,7 +365,7 @@ impl AppForwardService {
         if item_id.is_empty() || media_source_id.is_empty() {
             return Err(AppForwardError::InvalidMediaSource);
         }
-        let input = format!("{}:{}", item_id, media_source_id).to_lowercase();
+        let input = format!("{item_id}:{media_source_id}").to_lowercase();
         Ok(StringUtil::md5(&input))
     }
 

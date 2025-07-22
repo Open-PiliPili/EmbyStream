@@ -28,11 +28,11 @@ impl<T: Display> Display for Response<T> {
         write!(f, "Status: {}", if self.ok { "OK" } else { "Failed" })?;
 
         if let Some(desc) = &self.description {
-            write!(f, ", Description: {}", desc)?;
+            write!(f, ", Description: {desc}")?;
         }
 
         if let Some(res) = &self.result {
-            write!(f, ", Result: {}", res)?;
+            write!(f, ", Result: {res}")?;
         }
 
         Ok(())
@@ -63,7 +63,7 @@ impl Display for MessageResult {
         write!(f, "MessageID: {}, Chat: {}", self.message_id, self.chat)?;
 
         if let Some(text) = &self.text {
-            write!(f, ", Text: {}", text)?;
+            write!(f, ", Text: {text}")?;
         }
 
         Ok(())
@@ -99,11 +99,11 @@ impl Display for Chat {
         write!(f, "ID: {}, Type: {}", self.id, self.chat_type)?;
 
         if let Some(name) = &self.first_name {
-            write!(f, ", Name: {}", name)?;
+            write!(f, ", Name: {name}")?;
         }
 
         if let Some(username) = &self.username {
-            write!(f, ", Username: @{}", username)?;
+            write!(f, ", Username: @{username}")?;
         }
 
         Ok(())
@@ -120,9 +120,9 @@ impl Chat {
     /// 4. Chat type + ID
     pub fn display_name(&self) -> String {
         match (&self.first_name, &self.username) {
-            (Some(name), Some(user)) => format!("{} (@{})", name, user),
+            (Some(name), Some(user)) => format!("{name} (@{user})"),
             (Some(name), None) => name.clone(),
-            (None, Some(user)) => format!("@{}", user),
+            (None, Some(user)) => format!("@{user}"),
             (None, None) => format!("{} {}", self.chat_type, self.id),
         }
     }

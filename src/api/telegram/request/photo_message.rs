@@ -25,7 +25,7 @@ impl Display for PhotoInput {
     /// Formats the photo input for display purposes.
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            PhotoInput::Url(url) => write!(f, "[URL] {}", url),
+            PhotoInput::Url(url) => write!(f, "[URL] {url}"),
             PhotoInput::FilePath(path) => {
                 write!(f, "[File] {}", path.display())
             }
@@ -114,7 +114,7 @@ impl Display for PhotoMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "PhotoMessage(photo: {}", self.photo)?;
         if let Some(caption) = &self.caption {
-            write!(f, ", caption: {}", caption)?;
+            write!(f, ", caption: {caption}")?;
         }
         write!(f, ")")
     }

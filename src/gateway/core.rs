@@ -271,7 +271,7 @@ impl Gateway {
             .collect::<Result<Vec<_>, _>>()?;
 
         let key_file = File::open(key_path).map_err(|e| {
-            format!("failed to open key file {:?}: {}", key_path, e)
+            format!("failed to open key file {key_path:?}: {e}")
         })?;
         let key = rustls_pemfile::private_key(&mut BufReader::new(key_file))?
             .ok_or("no private key found in file")?;

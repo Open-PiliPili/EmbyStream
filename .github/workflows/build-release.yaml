@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*.*.*'
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build-and-package:
     name: Build & Package for ${{ matrix.target_name }}

@@ -16,7 +16,7 @@ impl fmt::Display for CryptoOutput {
                 if s.len() > 50 {
                     write!(f, "Encrypted({}...)", &s[..50])
                 } else {
-                    write!(f, "Encrypted({})", s)
+                    write!(f, "Encrypted({s})")
                 }
             }
             CryptoOutput::Dictionary(dict) => {
@@ -26,7 +26,7 @@ impl fmt::Display for CryptoOutput {
                     if !first {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}: {}", key, value)?;
+                    write!(f, "{key}: {value}")?;
                     first = false;
                 }
                 write!(f, " }}")

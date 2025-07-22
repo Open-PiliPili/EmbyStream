@@ -57,7 +57,7 @@ impl CurlPlugin {
                 let escaped_value =
                     valid_str.replace('"', "\\\"").replace("'", "\\'");
                 curl_command
-                    .push_str(&format!("-H \"{}: {}\" ", name, escaped_value));
+                    .push_str(&format!("-H \"{name}: {escaped_value}\" "));
             }
         }
 
@@ -82,7 +82,7 @@ impl CurlPlugin {
             };
 
             if !body_str.is_empty() {
-                curl_command.push_str(&format!(" -d '{}'", body_str));
+                curl_command.push_str(&format!(" -d '{body_str}'"));
             }
         }
 
