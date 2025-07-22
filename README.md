@@ -37,7 +37,7 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
     - `disk`: For locally mounted storage.
     - `openlist` (beta): For integration with OpenList.
     - `direct_link` (beta): For direct links or CDN streaming.
-- **STRM Format Support**: Perfectly compatible with `.strm` files, integrating seamlessly with plugins like "Shenyi".
+- **STRM Format Support**: Perfectly compatible with `.strm` files, integrating seamlessly with plugins like "[StrmAssistant](https://github.com/sjtuross/StrmAssistant/wiki)".
 - **Link Encryption**: Secures data transmission with link encryption.
 - **User-Agent Filtering**: Includes both allowlist and denylist modes for precise access control.
 - **Anti-Reverse Proxy Filtering** (beta): Prevents unauthorized playback by restricting access to a specified host.
