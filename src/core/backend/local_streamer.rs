@@ -15,7 +15,8 @@ use crate::{
     error_log,
 };
 
-const CHUNK_SIZE: usize = 128 * 1024;
+const KB: usize = 1024;
+const MB: usize = 1024 * KB;
 
 pub(crate) struct LocalStreamer;
 
@@ -105,7 +106,8 @@ impl LocalStreamer {
         );
 
         let limited_reader = file.take(len);
-        let stream = ReaderStream::with_capacity(limited_reader, CHUNK_SIZE)
+        let chunk_size = Self::get_chunk_size_for_streaming(true);
+        let stream = ReaderStream::with_capacity(limited_reader, chunk_size)
             .map_ok(Frame::data)
             .map_err(Into::into);
 
@@ -150,7 +152,8 @@ impl LocalStreamer {
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        let stream = ReaderStream::with_capacity(file, CHUNK_SIZE)
+        let chunk_size = Self::get_chunk_size_for_streaming(false);
+        let stream = ReaderStream::with_capacity(file, chunk_size)
             .map_ok(Frame::data)
             .map_err(Into::into);
 
@@ -172,6 +175,11 @@ impl LocalStreamer {
         };
 
         Ok(AppStreamResult::Stream(response))
+    }
+
+    #[inline]
+    fn get_chunk_size_for_streaming(is_seek: bool) -> usize {
+        if is_seek { 4 * MB } else { 256 * KB }
     }
 }
 
