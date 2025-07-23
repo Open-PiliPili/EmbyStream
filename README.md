@@ -100,7 +100,7 @@ docker-compose pull && docker-compose up -d
 
 ### Binaries
 
-You can download pre-compiled binaries for macOS and Linux from the [**GitHub Releases**](https://www.google.com/search?q=https://github.com/Open-PiliPili/EmbyStream/releases) page. Simply unzip the file and add the `embystream` executable to your `$PATH`.
+You can download pre-compiled binaries for macOS and Linux from the [**GitHub Releases**](https://github.com/Open-PiliPili/EmbyStream/tags) page. Simply unzip the file and add the `embystream` executable to your `$PATH`.
 
 ## PART 4. CLI
 
@@ -237,6 +237,6 @@ Configuration for the `direct_link` backend type.
 
 ## PART 6. License
 
-Copyright (c) 2024 open-pilipili.
+Copyright (c) 2025 open-pilipili.
 
 EmbyStream is licensed under the **GPL-V3 License**. See the [official GPL-V3 license text](https://www.gnu.org/licenses/gpl-3.0.html) for more details.

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, path::PathBuf, sync::Arc, time::Instant};
+use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
 
 use futures_util::TryStreamExt;
 use http_body_util::{BodyExt, StreamBody};
@@ -6,16 +6,16 @@ use hyper::body::Frame;
 use hyper::{HeaderMap, StatusCode, header};
 use lazy_static::lazy_static;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio_util::io::ReaderStream;
 
-use super::{
-    chunk_stream::AdaptiveChunkStream, response::Response,
-    result::Result as AppStreamResult,
-};
+use super::{response::Response, result::Result as AppStreamResult};
 use crate::cache::FileMetadata;
 use crate::{
     AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, debug_log,
     error_log,
 };
+
+const CHUNK_SIZE: usize = 128 * 1024;
 
 pub(crate) struct LocalStreamer;
 
@@ -24,7 +24,6 @@ impl LocalStreamer {
         state: Arc<AppState>,
         path: PathBuf,
         range_header: Option<String>,
-        start_time: Instant,
     ) -> Result<AppStreamResult, StatusCode> {
         if !path.is_file() {
             return Err(StatusCode::NOT_FOUND);
@@ -51,15 +50,10 @@ impl LocalStreamer {
         };
 
         if let Some(range_value) = range_header {
-            Self::stream_partial_content(
-                &file_entry,
-                &metadata,
-                &range_value,
-                start_time,
-            )
-            .await
+            Self::stream_partial_content(&file_entry, &metadata, &range_value)
+                .await
         } else {
-            Self::stream_full_file(&file_entry, &metadata, start_time).await
+            Self::stream_full_file(&file_entry, &metadata).await
         }
     }
 
@@ -67,7 +61,6 @@ impl LocalStreamer {
         file_entry: &FileEntry,
         file_metadata: &FileMetadata,
         range_value: &str,
-        start_time: Instant,
     ) -> Result<AppStreamResult, StatusCode> {
         debug_log!(
             LOCAL_STREAMER_LOGGER_DOMAIN,
@@ -112,10 +105,9 @@ impl LocalStreamer {
         );
 
         let limited_reader = file.take(len);
-        let stream =
-            AdaptiveChunkStream::new(limited_reader, file_length, start_time)
-                .map_ok(Frame::data)
-                .map_err(Into::into);
+        let stream = ReaderStream::with_capacity(limited_reader, CHUNK_SIZE)
+            .map_ok(Frame::data)
+            .map_err(Into::into);
 
         let mut headers = HeaderMap::new();
         let content_type = get_content_type(file_metadata.format.as_str());
@@ -145,7 +137,6 @@ impl LocalStreamer {
     async fn stream_full_file(
         file_entry: &FileEntry,
         file_metadata: &FileMetadata,
-        start_time: Instant,
     ) -> Result<AppStreamResult, StatusCode> {
         debug_log!(
             LOCAL_STREAMER_LOGGER_DOMAIN,
@@ -158,9 +149,8 @@ impl LocalStreamer {
             .try_clone()
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let file_length = file_metadata.file_size;
 
-        let stream = AdaptiveChunkStream::new(file, file_length, start_time)
+        let stream = ReaderStream::with_capacity(file, CHUNK_SIZE)
             .map_ok(Frame::data)
             .map_err(Into::into);
 

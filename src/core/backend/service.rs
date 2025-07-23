@@ -287,7 +287,6 @@ impl StreamService for AppStreamService {
                     self.state.clone(),
                     path,
                     request.content_range(),
-                    request.request_start_time,
                 )
                 .await
             }
