@@ -1,3 +1,3 @@
 pub mod types;
 
-pub use types::{General, StreamMode, UserAgent};
+pub use types::{Emby, General, StreamMode, UserAgent};

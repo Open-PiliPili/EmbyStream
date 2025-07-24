@@ -5,9 +5,8 @@ use hyper::{HeaderMap, StatusCode, Uri, header};
 use tokio::sync::OnceCell;
 
 use super::{
-    local_streamer::LocalStreamer, proxy_mode::ProxyMode,
-    remote_streamer::RemoteStreamer, result::Result as AppStreamResult,
-    source::Source, types::BackendConfig,
+    proxy_mode::ProxyMode, remote_streamer::RemoteStreamer,
+    result::Result as AppStreamResult, source::Source, types::BackendConfig,
 };
 use crate::core::redirect_info::RedirectInfo;
 use crate::{AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log};
@@ -73,13 +72,15 @@ impl AppStreamService {
         uri = self.fetch_remote_uri_if_openlist(&uri).await?;
 
         if sign.is_local() {
-            let local_path = PathBuf::from(Uri::to_path_or_url_string(&uri));
+            let path = PathBuf::from(Uri::to_path_or_url_string(&uri));
+            let id = params.id;
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
-                "Routing to local path {:?}",
-                local_path
+                "Routing to local path {:?} for id: {:?}",
+                path,
+                id
             );
-            Ok(Source::Local(local_path))
+            Ok(Source::Local { id, path })
         } else {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
@@ -250,6 +251,32 @@ impl AppStreamService {
         }
     }
 
+    fn build_hls_redirect_info(
+        &self,
+        id: &str,
+    ) -> Result<AppStreamResult, StatusCode> {
+        let manifest_url_str = format!("/Videos/{}/master.m3u8", id);
+
+        match manifest_url_str.parse() {
+            Ok(target_url) => {
+                let redirect_info = RedirectInfo {
+                    target_url,
+                    final_headers: HeaderMap::new(),
+                };
+                Ok(AppStreamResult::Redirect(redirect_info))
+            }
+            Err(e) => {
+                error_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Failed to parse manifest URL '{}': {}",
+                    manifest_url_str,
+                    e
+                );
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    }
+
     fn decrypt_key(
         &self,
         params: &SignParams,
@@ -276,19 +303,25 @@ impl StreamService for AppStreamService {
         request: AppStreamRequest,
     ) -> Result<AppStreamResult, StatusCode> {
         let source = self.decrypt_and_route(&request).await.map_err(|e| {
-            error_log!("Routing stream error: {:?}", e);
+            error_log!(STREAM_LOGGER_DOMAIN, "Routing stream error: {:?}", e);
             StatusCode::BAD_REQUEST
         })?;
         info_log!(STREAM_LOGGER_DOMAIN, "Routing stream source: {:?}", source);
 
         match source {
-            Source::Local(path) => {
-                LocalStreamer::stream(
-                    self.state.clone(),
-                    path,
-                    request.content_range(),
-                )
-                .await
+            Source::Local { id, path } => {
+                if id.is_empty() {
+                    error_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "Item ID is missing from the sign"
+                    );
+                    return Err(StatusCode::BAD_REQUEST);
+                }
+
+                let has_info_cache = self.state.get_hls_info_cache().await;
+                has_info_cache.insert(id.clone(), path);
+
+                self.build_hls_redirect_info(&id)
             }
             Source::Remote { uri, mode } => match mode {
                 ProxyMode::Redirect => {

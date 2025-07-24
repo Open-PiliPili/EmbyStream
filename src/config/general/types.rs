@@ -25,6 +25,7 @@ impl fmt::Display for StreamMode {
 #[derive(Clone, Debug, Deserialize)]
 pub struct General {
     pub log_level: String,
+    pub log_root_path: String,
     pub memory_mode: String,
     pub expired_seconds: u64,
     #[serde(default)]
@@ -32,19 +33,23 @@ pub struct General {
     pub backend_type: String,
     pub encipher_key: String,
     pub encipher_iv: String,
-    pub emby_url: String,
-    pub emby_port: String,
-    pub emby_api_key: String,
+    pub transcode_root_path: String,
 }
 
-impl General {
-    pub fn emby_uri(&self) -> Uri {
-        let should_show_port =
-            !(self.emby_port == "443" || self.emby_port == "80");
-        let clean_url = self.emby_url.trim_end_matches('/');
+#[derive(Clone, Debug, Deserialize)]
+pub struct Emby {
+    pub url: String,
+    pub port: String,
+    pub token: String,
+}
+
+impl Emby {
+    pub fn get_uri(&self) -> Uri {
+        let should_show_port = !(self.port == "443" || self.port == "80");
+        let clean_url = self.url.trim_end_matches('/');
 
         let uri_str = if should_show_port {
-            format!("{}:{}", clean_url, self.emby_port)
+            format!("{}:{}", clean_url, self.port)
         } else {
             clean_url.to_string()
         };

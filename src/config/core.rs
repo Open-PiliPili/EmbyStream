@@ -18,6 +18,7 @@ use super::{
     types::RawConfig,
 };
 use crate::cli::RunArgs;
+use crate::config::general::types::Emby;
 use crate::{CONFIG_LOGGER_DOMAIN, error_log, info_log};
 
 const CONFIG_DIR_NAME: &str = "embystream";
@@ -34,6 +35,7 @@ pub struct Config {
     #[serde(skip)]
     pub path: PathBuf,
     pub general: General,
+    pub emby: Emby,
     pub user_agent: UserAgent,
     pub frontend: Option<Frontend>,
     pub backend: Option<Backend>,
@@ -155,6 +157,7 @@ impl Config {
         Ok(Config {
             path: path.to_path_buf(),
             general: raw_config.general,
+            emby: raw_config.emby,
             user_agent: raw_config.user_agent,
             frontend: raw_config.frontend,
             backend: raw_config.backend,

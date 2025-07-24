@@ -14,6 +14,9 @@ const PSEUDO_HOST: &str = "local-file.invalid";
 #[derive(Debug, Deserialize)]
 pub struct SignParams {
     #[serde(default)]
+    pub(crate) id: String,
+
+    #[serde(default)]
     pub(crate) sign: String,
 
     #[serde(default)]
@@ -23,6 +26,7 @@ pub struct SignParams {
 impl Default for SignParams {
     fn default() -> Self {
         Self {
+            id: "".into(),
             sign: "".into(),
             proxy_mode: ProxyMode::default(),
         }

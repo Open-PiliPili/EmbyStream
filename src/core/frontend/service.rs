@@ -150,10 +150,14 @@ impl AppForwardService {
             "Get signed url by backend_url: {:?}",
             &config.backend_url
         );
+
+        let id =
+            self.md5_key(&forward_info.item_id, &forward_info.media_source_id)?;
         let mut url = Url::parse(&config.backend_url)
             .map_err(|_| AppForwardError::InvalidUri)?;
 
         url.query_pairs_mut()
+            .append_pair("id", id.as_str())
             .append_pair("sign", &sign_value)
             .append_pair("proxy_mode", &config.proxy_mode);
 
@@ -394,8 +398,8 @@ impl AppForwardService {
                         backend_url: backend.uri().to_string(),
                         crypto_key: config.general.encipher_key.clone(),
                         crypto_iv: config.general.encipher_iv.clone(),
-                        emby_server_url: config.general.emby_uri().to_string(),
-                        emby_api_key: config.general.emby_api_key.to_string(),
+                        emby_server_url: config.emby.get_uri().to_string(),
+                        emby_api_key: config.emby.token.to_string(),
                         path_rewrite: frontend.path_rewrite.clone(),
                     })
                 })

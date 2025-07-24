@@ -1,4 +1,4 @@
-pub mod local_streamer;
+pub mod hls_server;
 pub mod proxy_mode;
 pub mod remote_streamer;
 pub mod response;

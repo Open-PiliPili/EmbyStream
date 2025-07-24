@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use hyper::{HeaderMap, Uri, header};
+use hyper::{HeaderMap, Uri};
 
 pub struct Request {
     pub uri: Uri,
@@ -19,12 +19,5 @@ impl Request {
             original_headers,
             request_start_time,
         }
-    }
-
-    pub(crate) fn content_range(&self) -> Option<String> {
-        self.original_headers
-            .get(header::RANGE)
-            .and_then(|v| v.to_str().ok())
-            .map(String::from)
     }
 }

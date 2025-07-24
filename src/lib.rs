@@ -9,6 +9,7 @@ pub mod crypto;
 pub mod domain;
 pub mod error;
 pub mod gateway;
+pub mod hls;
 pub mod logger;
 pub mod macros;
 pub mod network;

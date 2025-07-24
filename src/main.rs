@@ -10,7 +10,10 @@ use embystream::{
     info_log,
 };
 use embystream::{
-    backend::{service::AppStreamService, stream::StreamMiddleware},
+    backend::{
+        hls_server::HlsMiddleware, service::AppStreamService,
+        stream::StreamMiddleware,
+    },
     cli::{Cli, Commands, RunArgs},
     config::{core::Config, general::StreamMode},
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
@@ -116,7 +119,10 @@ fn setup_load_config(run_args: &RunArgs) -> Config {
 fn setup_logger(config: &Config) {
     let level =
         LogLevel::from_str(&config.general.log_level).unwrap_or(LogLevel::Info);
-    Logger::builder().with_level(level).build();
+    Logger::builder()
+        .with_level(level)
+        .with_directory(&config.general.log_root_path)
+        .build();
 }
 
 async fn setup_cache(config: &Config) -> Arc<AppState> {
@@ -207,6 +213,7 @@ async fn setup_backend_gateway(
         )))
         .add_middleware(Box::new(CorsMiddleware))
         .add_middleware(Box::new(OptionsMiddleware))
+        .add_middleware(Box::new(HlsMiddleware::new(app_state.clone())))
         .add_middleware(Box::new(StreamMiddleware::new(
             &backend.path,
             service,
