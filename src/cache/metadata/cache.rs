@@ -7,42 +7,21 @@ use std::{
 use moka::future::Cache;
 use tokio::fs::metadata as TokioMetadata;
 
-use crate::cache::file::{Entry, Error, Metadata, pool::FileEntryPool};
+use crate::cache::metadata::{Error, Metadata};
 
 #[derive(Clone)]
-pub struct FileCache {
-    entry_pools: Cache<PathBuf, Arc<FileEntryPool>>,
+pub struct MetadataCache {
     metadata: Cache<PathBuf, Metadata>,
 }
 
-impl FileCache {
+impl MetadataCache {
     pub fn new(max_capacity: u64, time_to_live: u64) -> Self {
-        let entry_pools = Cache::builder()
-            .max_capacity(max_capacity)
-            .time_to_live(Duration::from_secs(time_to_live))
-            .build();
-
         let metadata = Cache::builder()
             .max_capacity(max_capacity)
             .time_to_live(Duration::from_secs(time_to_live))
             .build();
 
-        Self {
-            entry_pools,
-            metadata,
-        }
-    }
-
-    pub async fn fetch_entry(&self, path: &Path) -> Result<Entry, Error> {
-        let pool = self
-            .entry_pools
-            .try_get_with(path.to_path_buf(), async {
-                Ok(Arc::new(FileEntryPool::new(path.to_path_buf())))
-            })
-            .await
-            .map_err(|e: Arc<Error>| e.as_ref().clone())?;
-
-        pool.get_or_create_entry().await
+        Self { metadata }
     }
 
     pub async fn fetch_metadata(&self, path: &Path) -> Result<Metadata, Error> {
@@ -76,10 +55,6 @@ impl FileCache {
             })
             .await
             .map_err(|e: Arc<Error>| e.as_ref().clone())
-    }
-
-    pub fn get_pool_count(&self) -> u64 {
-        self.entry_pools.entry_count()
     }
 
     pub fn get_metadata_count(&self) -> u64 {

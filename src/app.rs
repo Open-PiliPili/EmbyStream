@@ -3,13 +3,13 @@ use std::ops::Deref as DerefTrait;
 use tokio::sync::{OnceCell, RwLock as TokioRwLock};
 
 use crate::{
-    cache::{FileCache, GeneralCache},
+    cache::{GeneralCache, MetadataCache},
     config::core::Config,
 };
 
 pub struct AppState {
     config: TokioRwLock<Config>,
-    file_cache: OnceCell<FileCache>,
+    metadata_cache: OnceCell<MetadataCache>,
     encrypt_cache: OnceCell<GeneralCache>,
     decrypt_cache: OnceCell<GeneralCache>,
     strm_file_cache: OnceCell<GeneralCache>,
@@ -21,7 +21,7 @@ impl AppState {
     pub async fn new(config: Config) -> Self {
         Self {
             config: TokioRwLock::new(config),
-            file_cache: OnceCell::new(),
+            metadata_cache: OnceCell::new(),
             encrypt_cache: OnceCell::new(),
             decrypt_cache: OnceCell::new(),
             strm_file_cache: OnceCell::new(),
@@ -43,10 +43,10 @@ impl AppState {
         }
     }
 
-    pub async fn get_file_cache(&self) -> &FileCache {
+    pub async fn get_metadata_cache(&self) -> &MetadataCache {
         let (capacity, ttl) = self.get_cache_settings().await;
-        self.file_cache
-            .get_or_init(|| async move { FileCache::new(capacity, ttl) })
+        self.metadata_cache
+            .get_or_init(|| async move { MetadataCache::new(capacity, ttl) })
             .await
     }
 

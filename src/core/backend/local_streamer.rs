@@ -1,10 +1,16 @@
-use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use futures_util::TryStreamExt;
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::{HeaderMap, StatusCode, header};
 use lazy_static::lazy_static;
+use tokio::fs::File as TokioFile;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
@@ -12,10 +18,7 @@ use super::{
     response::Response, result::Result as AppStreamResult, types::ContentRange,
 };
 use crate::cache::FileMetadata;
-use crate::{
-    AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, error_log,
-    info_log,
-};
+use crate::{AppState, LOCAL_STREAMER_LOGGER_DOMAIN, error_log, info_log};
 
 pub(crate) struct LocalStreamer;
 
@@ -29,17 +32,7 @@ impl LocalStreamer {
             return Err(StatusCode::NOT_FOUND);
         }
 
-        let cache = state.get_file_cache().await;
-
-        let Ok(file_entry) = cache.fetch_entry(&path).await else {
-            error_log!(
-                LOCAL_STREAMER_LOGGER_DOMAIN,
-                "Failed to obtain cache entry for the route: {:?}",
-                &path
-            );
-            return Err(StatusCode::NOT_FOUND);
-        };
-
+        let cache = state.get_metadata_cache().await;
         let Ok(file_metadata) = cache.fetch_metadata(&path).await else {
             error_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
@@ -60,48 +53,41 @@ impl LocalStreamer {
                 StatusCode::OK
             };
 
-        Self::stream_file(
-            &file_entry,
-            &file_metadata,
-            content_range,
-            status_code,
-        )
-        .await
+        Self::stream_file(&path, &file_metadata, content_range, status_code)
+            .await
     }
 
     async fn stream_file(
-        file_entry: &FileEntry,
+        path: &Path,
         file_metadata: &FileMetadata,
         content_range: ContentRange,
         status_code: StatusCode,
     ) -> Result<AppStreamResult, StatusCode> {
-        let mut file = file_entry
-            .handle
-            .read()
-            .await
-            .try_clone()
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        info_log!(
+            LOCAL_STREAMER_LOGGER_DOMAIN,
+            "Streaming file status {:?}, range: {:?}",
+            status_code,
+            content_range,
+        );
+
+        let mut file = TokioFile::open(path).await.map_err(|e| {
+            error_log!(
+                LOCAL_STREAMER_LOGGER_DOMAIN,
+                "Failed to open file {:?}: {}",
+                path,
+                e
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
         file.seek(io::SeekFrom::Start(content_range.start))
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        info_log!(
-            LOCAL_STREAMER_LOGGER_DOMAIN,
-            "Streaming file with status {:?}, seek content_range: {:?}",
-            status_code,
-            content_range,
-        );
-
         let limited_reader = file.take(content_range.length());
-        const MB: usize = 1024 * 1024;
-        let buffer: usize = if status_code == StatusCode::PARTIAL_CONTENT {
-            4 * MB
-        } else {
-            1 * MB
-        };
-        let stream = ReaderStream::with_capacity(limited_reader, buffer)
+        let is_seek = status_code == StatusCode::PARTIAL_CONTENT;
+        let chunk_size = Self::get_chunk_size_for_streaming(is_seek);
+        let stream = ReaderStream::with_capacity(limited_reader, chunk_size)
             .map_ok(Frame::data)
             .map_err(Into::into);
 
@@ -157,6 +143,13 @@ impl LocalStreamer {
             end,
             total_size,
         }
+    }
+
+    #[inline]
+    fn get_chunk_size_for_streaming(is_seek: bool) -> usize {
+        const KB: usize = 1024;
+        const MB: usize = 1024 * KB;
+        if is_seek { 4 * MB } else { 256 * KB }
     }
 }
 
