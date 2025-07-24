@@ -83,33 +83,18 @@ impl LocalStreamer {
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        const PREROLL_BUFFER_SIZE: u64 = 2 * 1024 * 1024;
-
-        let actual_seek_position = if status_code == StatusCode::PARTIAL_CONTENT
-        {
-            content_range.start.saturating_sub(PREROLL_BUFFER_SIZE)
-        } else {
-            content_range.start
-        };
-
-        let actual_end_position = content_range.end;
-        let actual_content_length =
-            actual_end_position - actual_seek_position + 1;
-
-        file.seek(io::SeekFrom::Start(actual_seek_position))
+        file.seek(io::SeekFrom::Start(content_range.start))
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         info_log!(
             LOCAL_STREAMER_LOGGER_DOMAIN,
-            "Streaming file with status {:?}, seek start: {}, end: {}, length: {}",
+            "Streaming file with status {:?}, seek content_range: {:?}",
             status_code,
-            actual_seek_position,
-            actual_end_position,
-            actual_content_length
+            content_range,
         );
 
-        let limited_reader = file.take(actual_content_length);
+        let limited_reader = file.take(content_range.length());
         let stream = ReaderStream::new(limited_reader)
             .map_ok(Frame::data)
             .map_err(Into::into);
@@ -123,11 +108,11 @@ impl LocalStreamer {
 
         if status_code == StatusCode::PARTIAL_CONTENT {
             headers
-                .insert(header::CONTENT_LENGTH, actual_content_length.into());
+                .insert(header::CONTENT_LENGTH, content_range.length().into());
             let range_str = format!(
                 "bytes {}-{}/{}",
-                actual_seek_position,
-                actual_end_position,
+                content_range.start,
+                content_range.end,
                 content_range.total_size
             );
             headers.insert(header::CONTENT_RANGE, range_str.parse().unwrap());
