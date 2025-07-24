@@ -95,7 +95,13 @@ impl LocalStreamer {
         );
 
         let limited_reader = file.take(content_range.length());
-        let stream = ReaderStream::new(limited_reader)
+        const MB: usize = 1024 * 1024;
+        let buffer: usize = if status_code == StatusCode::PARTIAL_CONTENT {
+            4 * MB
+        } else {
+            1 * MB
+        };
+        let stream = ReaderStream::with_capacity(limited_reader, buffer)
             .map_ok(Frame::data)
             .map_err(Into::into);
 
