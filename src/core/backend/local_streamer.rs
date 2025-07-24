@@ -8,15 +8,14 @@ use lazy_static::lazy_static;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
-use super::{response::Response, result::Result as AppStreamResult};
+use super::{
+    response::Response, result::Result as AppStreamResult, types::ContentRange,
+};
 use crate::cache::FileMetadata;
 use crate::{
-    AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, debug_log,
-    error_log,
+    AppState, LOCAL_STREAMER_LOGGER_DOMAIN, cache::FileEntry, error_log,
+    info_log,
 };
-
-const KB: usize = 1024;
-const MB: usize = 1024 * KB;
 
 pub(crate) struct LocalStreamer;
 
@@ -41,7 +40,7 @@ impl LocalStreamer {
             return Err(StatusCode::NOT_FOUND);
         };
 
-        let Ok(metadata) = cache.fetch_metadata(&path).await else {
+        let Ok(file_metadata) = cache.fetch_metadata(&path).await else {
             error_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
                 "Failed to obtain cache metadata for the route: {:?}",
@@ -50,136 +49,123 @@ impl LocalStreamer {
             return Err(StatusCode::NOT_FOUND);
         };
 
-        if let Some(range_value) = range_header {
-            Self::stream_partial_content(&file_entry, &metadata, &range_value)
-                .await
-        } else {
-            Self::stream_full_file(&file_entry, &metadata).await
-        }
+        let content_range = Self::parse_content_range(
+            range_header.as_deref(),
+            file_metadata.file_size,
+        );
+        let status_code =
+            if range_header.is_some() && !content_range.is_full_range() {
+                StatusCode::PARTIAL_CONTENT
+            } else {
+                StatusCode::OK
+            };
+
+        Self::stream_file(
+            &file_entry,
+            &file_metadata,
+            content_range,
+            status_code,
+        )
+        .await
     }
 
-    async fn stream_partial_content(
+    async fn stream_file(
         file_entry: &FileEntry,
         file_metadata: &FileMetadata,
-        range_value: &str,
+        content_range: ContentRange,
+        status_code: StatusCode,
     ) -> Result<AppStreamResult, StatusCode> {
-        debug_log!(
-            LOCAL_STREAMER_LOGGER_DOMAIN,
-            "Start stream partial content, metadata: {:?}, range_value: {:?}",
-            file_metadata,
-            range_value
-        );
-
-        let Ok(parsed) = http_range_header::parse_range_header(range_value)
-        else {
-            return Err(StatusCode::RANGE_NOT_SATISFIABLE);
-        };
-
-        let file_length = file_metadata.file_size;
-        let Ok(validated_ranges) = parsed.validate(file_length) else {
-            return Err(StatusCode::RANGE_NOT_SATISFIABLE);
-        };
-
-        let Some(range) = validated_ranges.first() else {
-            return Err(StatusCode::RANGE_NOT_SATISFIABLE);
-        };
-
-        let start = range.start();
-        let end = range.end();
-        let len = end - start + 1;
-
-        let handle = file_entry.handle.read().await;
-        let mut file = handle
+        let mut file = file_entry
+            .handle
+            .read()
+            .await
             .try_clone()
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        file.seek(io::SeekFrom::Start(*start))
+
+        const PREROLL_BUFFER_SIZE: u64 = 2 * 1024 * 1024;
+
+        let actual_seek_position = if status_code == StatusCode::PARTIAL_CONTENT
+        {
+            content_range.start.saturating_sub(PREROLL_BUFFER_SIZE)
+        } else {
+            content_range.start
+        };
+
+        let actual_end_position = content_range.end;
+        let actual_content_length =
+            actual_end_position - actual_seek_position + 1;
+
+        file.seek(io::SeekFrom::Start(actual_seek_position))
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        debug_log!(
+        info_log!(
             LOCAL_STREAMER_LOGGER_DOMAIN,
-            "Successfully seeked stream partial content, start: {}, end: {}, len: {}",
+            "Streaming file with status {:?}, seek start: {}, end: {}, length: {}",
+            status_code,
+            actual_seek_position,
+            actual_end_position,
+            actual_content_length
+        );
+
+        let limited_reader = file.take(actual_content_length);
+        let stream = ReaderStream::new(limited_reader)
+            .map_ok(Frame::data)
+            .map_err(Into::into);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::CONTENT_TYPE,
+            get_content_type(&file_metadata.format).parse().unwrap(),
+        );
+        headers.insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
+
+        if status_code == StatusCode::PARTIAL_CONTENT {
+            headers
+                .insert(header::CONTENT_LENGTH, actual_content_length.into());
+            let range_str = format!(
+                "bytes {}-{}/{}",
+                actual_seek_position,
+                actual_end_position,
+                content_range.total_size
+            );
+            headers.insert(header::CONTENT_RANGE, range_str.parse().unwrap());
+        } else {
+            headers.insert(
+                header::CONTENT_LENGTH,
+                content_range.total_size.into(),
+            );
+        }
+
+        let response = Response {
+            status: status_code,
+            headers,
+            body: BodyExt::boxed(StreamBody::new(stream)),
+        };
+
+        Ok(AppStreamResult::Stream(response))
+    }
+
+    fn parse_content_range(
+        range_header: Option<&str>,
+        total_size: u64,
+    ) -> ContentRange {
+        let (start, end) = range_header
+            .and_then(|header_value| {
+                http_range_header::parse_range_header(header_value).ok()
+            })
+            .and_then(|parsed| parsed.validate(total_size).ok())
+            .and_then(|validated| {
+                validated.first().map(|r| (*r.start(), *r.end()))
+            })
+            .unwrap_or((0, total_size.saturating_sub(1)));
+
+        ContentRange {
             start,
             end,
-            len
-        );
-
-        let limited_reader = file.take(len);
-        let chunk_size = Self::get_chunk_size_for_streaming(true);
-        let stream = ReaderStream::with_capacity(limited_reader, chunk_size)
-            .map_ok(Frame::data)
-            .map_err(Into::into);
-
-        let mut headers = HeaderMap::new();
-        let content_type = get_content_type(file_metadata.format.as_str());
-        let content_range =
-            format!("bytes {}-{}/{}", start, end, file_metadata.file_size);
-
-        headers.insert(header::CONTENT_LENGTH, len.into());
-        if let Ok(accept_ranges) = content_range.parse() {
-            headers.insert(header::ACCEPT_RANGES, accept_ranges);
+            total_size,
         }
-        if let Ok(content_type) = content_type.parse() {
-            headers.insert(header::CONTENT_TYPE, content_type);
-        }
-        if let Ok(content_range) = content_range.parse() {
-            headers.insert(header::CONTENT_RANGE, content_range);
-        }
-
-        let response = Response {
-            status: StatusCode::PARTIAL_CONTENT,
-            headers,
-            body: BodyExt::boxed(StreamBody::new(stream)),
-        };
-
-        Ok(AppStreamResult::Stream(response))
-    }
-
-    async fn stream_full_file(
-        file_entry: &FileEntry,
-        file_metadata: &FileMetadata,
-    ) -> Result<AppStreamResult, StatusCode> {
-        debug_log!(
-            LOCAL_STREAMER_LOGGER_DOMAIN,
-            "Start stream full content, metadata: {:?}",
-            file_metadata
-        );
-
-        let handle = file_entry.handle.read().await;
-        let file = handle
-            .try_clone()
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-        let chunk_size = Self::get_chunk_size_for_streaming(false);
-        let stream = ReaderStream::with_capacity(file, chunk_size)
-            .map_ok(Frame::data)
-            .map_err(Into::into);
-
-        let mut headers = HeaderMap::new();
-        let content_type = get_content_type(file_metadata.format.as_str());
-
-        headers.insert(header::CONTENT_LENGTH, file_metadata.file_size.into());
-        if let Ok(accept_ranges) = "bytes".parse() {
-            headers.insert(header::ACCEPT_RANGES, accept_ranges);
-        }
-        if let Ok(content_type) = content_type.parse() {
-            headers.insert(header::CONTENT_TYPE, content_type);
-        }
-
-        let response = Response {
-            status: StatusCode::OK,
-            headers,
-            body: BodyExt::boxed(StreamBody::new(stream)),
-        };
-
-        Ok(AppStreamResult::Stream(response))
-    }
-
-    #[inline]
-    fn get_chunk_size_for_streaming(is_seek: bool) -> usize {
-        if is_seek { 4 * MB } else { 256 * KB }
     }
 }
 
