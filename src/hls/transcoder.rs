@@ -11,7 +11,7 @@ pub fn transmux_to_dash(
 ) -> Result<(), String> {
     ffmpeg::init().map_err(|e| e.to_string())?;
 
-    let manifest_path = output_dir.join("playlist.m3u8");
+    let manifest_path = output_dir.join("master.m3u8");
     fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
 
     let mut ictx =
