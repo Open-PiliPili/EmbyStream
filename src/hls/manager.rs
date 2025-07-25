@@ -64,12 +64,21 @@ impl HlsManager {
             }
         }
 
-        playlist::generate_m3u8_playlist(
+        if let Err(e) = playlist::generate_m3u8_playlist(
             original_path,
             &output_dir,
             &self.config,
         )
-        .await?;
+        .await
+        {
+            error_log!(
+                HLS_STREAM_LOGGER_DOMAIN,
+                "Failed to generate M3U8 playlist for {:?}: {}",
+                original_path,
+                e
+            );
+            return Err(e);
+        }
 
         let mut child_process = codec::transmux_to_hls_segments(
             original_path,

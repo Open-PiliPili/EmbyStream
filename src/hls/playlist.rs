@@ -4,7 +4,8 @@ use tokio::process::Command;
 
 use super::types::FfprobeOutput;
 use crate::{
-    HLS_STREAM_LOGGER_DOMAIN, cache::transcoding::HlsConfig, info_log,
+    HLS_STREAM_LOGGER_DOMAIN, cache::transcoding::HlsConfig, debug_log,
+    info_log,
 };
 
 pub async fn generate_m3u8_playlist(
@@ -12,6 +13,11 @@ pub async fn generate_m3u8_playlist(
     output_dir: &Path,
     config: &HlsConfig,
 ) -> Result<(), String> {
+    debug_log!(
+        HLS_STREAM_LOGGER_DOMAIN,
+        "Starting m3u8 playlist for input path: {:?}",
+        input_path
+    );
     let input_str = input_path.to_str().ok_or("Invalid input path")?;
 
     let output = Command::new("ffprobe")
