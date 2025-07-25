@@ -157,6 +157,7 @@ async fn serve_static_file(file_path: &Path) -> Response<BoxBodyType> {
                 match file_path.extension().and_then(|s| s.to_str()) {
                     Some("m3u8") => "application/vnd.apple.mpegurl",
                     Some("ts") => "video/mp2t",
+                    Some("vtt") => "text/vtt",
                     _ => "application/octet-stream",
                 };
 

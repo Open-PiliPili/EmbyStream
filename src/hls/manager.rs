@@ -74,7 +74,7 @@ impl HlsManager {
                 "Spawning HLS transmux for: {:?}",
                 &path_clone
             );
-            match transcoder::transmux_to_dash(
+            match transcoder::transmux_av_streams_to_hls(
                 &path_clone,
                 &dir_clone,
                 &config_clone,
