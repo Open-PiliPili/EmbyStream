@@ -1,17 +1,18 @@
-use std::{path::Path, process::Stdio};
+use std::{fs, path::Path, process::Stdio};
 
-use tokio::process::Command as TokioCommand;
+use tokio::process::{Child, Command};
 
 use crate::{
-    HLS_STREAM_LOGGER_DOMAIN, cache::transcoding::HlsConfig, info_log,
+    HLS_STREAM_LOGGER_DOMAIN, cache::transcoding::HlsConfig, debug_log,
+    info_log,
 };
 
 pub async fn transmux_to_hls_vod(
     input_path: &Path,
     output_dir: &Path,
     config: &HlsConfig,
-) -> Result<tokio::process::Child, String> {
-    std::fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
+) -> Result<Child, String> {
+    fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
 
     let manifest_path = output_dir.join("master.m3u8");
     let input_str = input_path.to_str().ok_or("Invalid input path")?;
@@ -29,7 +30,7 @@ pub async fn transmux_to_hls_vod(
         input_str
     );
 
-    let mut command = TokioCommand::new("ffmpeg");
+    let mut command = Command::new("ffmpeg");
     command
         .arg("-i")
         .arg(input_str)
@@ -50,6 +51,18 @@ pub async fn transmux_to_hls_vod(
         .arg(output_str)
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
+
+    let command_string = format!(
+        "Executing FFmpeg: {} {}",
+        command.as_std().get_program().to_string_lossy(),
+        command
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    debug_log!(HLS_STREAM_LOGGER_DOMAIN, command_string);
 
     let child = command.spawn().map_err(|e| e.to_string())?;
 
