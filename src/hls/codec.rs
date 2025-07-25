@@ -32,6 +32,7 @@ pub async fn transmux_to_hls_live_simulation(
 
     let mut command = Command::new("ffmpeg");
     command
+        .arg("-y")
         .arg("-i")
         .arg(input_str)
         .arg("-map")

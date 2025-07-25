@@ -6,8 +6,10 @@ use std::{
 
 use dashmap::DashMap;
 use lazy_static::lazy_static;
-
-use tokio::sync::{Mutex, RwLock as TokioRwLock};
+use tokio::{
+    io::{AsyncBufReadExt, BufReader as TokioBufReader},
+    sync::{Mutex, RwLock as TokioRwLock},
+};
 
 use super::codec;
 use crate::{
@@ -75,7 +77,7 @@ impl HlsManager {
         let new_task = Arc::new(TokioRwLock::new(TranscodingTask {
             status: HlsTranscodingStatus::InProgress,
             last_accessed: Instant::now(),
-            process: Arc::new(tokio::sync::Mutex::new(child_process)),
+            process: Arc::new(Mutex::new(child_process)),
         }));
 
         status_cache
@@ -84,12 +86,24 @@ impl HlsManager {
 
         let path_clone_for_status_update = original_path.to_path_buf();
         tokio::spawn(async move {
-            let process_guard = new_task.read().await;
-            let mut process_mutex_guard = process_guard.process.lock().await;
+            let process_arc = {
+                let task_read = new_task.read().await;
+                task_read.process.clone()
+            };
 
-            let status = process_mutex_guard.wait().await;
+            let mut reader = TokioBufReader::new(stderr).lines();
+            let mut stderr_output = String::new();
+            while let Ok(Some(line)) = reader.next_line().await {
+                stderr_output.push_str(&line);
+                stderr_output.push('\n');
+            }
+
+            let status = {
+                let mut process_guard = process_arc.lock().await;
+                process_guard.wait().await
+            };
+
             let mut task_write = new_task.write().await;
-
             match status {
                 Ok(exit_status) if exit_status.success() => {
                     task_write.status = HlsTranscodingStatus::Completed;
@@ -101,16 +115,12 @@ impl HlsManager {
                 }
                 Ok(exit_status) => {
                     task_write.status = HlsTranscodingStatus::Failed;
-                    use tokio::io::AsyncReadExt;
-                    let mut reader = tokio::io::BufReader::new(stderr);
-                    let mut err_output = String::new();
-                    reader.read_to_string(&mut err_output).await.ok();
                     error_log!(
                         HLS_STREAM_LOGGER_DOMAIN,
-                        "HLS transmux failed for: {:?} with status {} and error: {}",
+                        "HLS transmux failed for: {:?} with status {}. Stderr:\n{}",
                         &path_clone_for_status_update,
                         exit_status,
-                        err_output
+                        stderr_output
                     );
                 }
                 Err(e) => {
