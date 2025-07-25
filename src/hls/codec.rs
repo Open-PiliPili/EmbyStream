@@ -33,6 +33,8 @@ pub async fn transmux_to_hls_segments(
         .arg("0:v:0?")
         .arg("-map")
         .arg("0:a:0?")
+        .arg("-map")
+        .arg("0:s:0?")
         .arg("-c")
         .arg("copy")
         .arg("-f")
