@@ -15,7 +15,7 @@ use super::{codec, playlist};
 use crate::{
     AppState, HLS_STREAM_LOGGER_DOMAIN,
     cache::transcoding::{HlsConfig, HlsTranscodingStatus, TranscodingTask},
-    error_log, info_log,
+    debug_log, error_log, info_log,
     util::StringUtil,
 };
 
@@ -39,6 +39,15 @@ impl HlsManager {
         original_path: &PathBuf,
     ) -> Result<PathBuf, String> {
         let manifest_path = self.get_manifest_path(original_path)?;
+        if manifest_path.exists() {
+            info_log!(
+                HLS_STREAM_LOGGER_DOMAIN,
+                "Found existing M3U8 on disk, serving from cache: {:?}",
+                manifest_path
+            );
+            return Ok(manifest_path);
+        }
+
         let output_dir = manifest_path.parent().unwrap().to_path_buf();
         let status_cache = self.state.get_hls_transcoding_cache().await;
 
@@ -133,9 +142,13 @@ impl HlsManager {
                     task_write.status = HlsTranscodingStatus::Failed;
                     error_log!(
                         HLS_STREAM_LOGGER_DOMAIN,
-                        "HLS transmux failed for: {:?} with status {}. Stderr:\n{}",
+                        "HLS transmux failed for: {:?} with status {}.",
                         &path_clone_for_status_update,
-                        exit_status,
+                        exit_status
+                    );
+                    debug_log!(
+                        HLS_STREAM_LOGGER_DOMAIN,
+                        "Stderr:\n{}",
                         stderr_output
                     );
                 }
