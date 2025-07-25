@@ -14,12 +14,13 @@ use tokio::time::sleep;
 
 use crate::{AppState, STREAM_LOGGER_DOMAIN, error_log};
 use crate::{
+    cache::transcoding::HlsConfig,
     gateway::{
         chain::{Middleware, Next},
         context::Context,
         response::{BoxBodyType, ResponseBuilder},
     },
-    hls::{HlsConfig, HlsManager},
+    hls::HlsManager,
 };
 
 lazy_static! {
@@ -52,7 +53,7 @@ impl HlsMiddleware {
 
     async fn ensure_hls_stream(
         &self,
-        original_path: &Path,
+        original_path: &PathBuf,
     ) -> Result<PathBuf, String> {
         let transcode_root_path =
             self.state.get_hls_path_cache().await.to_path_buf();

@@ -1,16 +1,13 @@
-use std::{ops::Deref as DerefTrait, path::PathBuf, sync::Arc};
+use std::{ops::Deref as DerefTrait, path::PathBuf};
 
-use dashmap::DashMap;
 use directories::BaseDirs;
 use tokio::{
     fs as TokioFs,
     sync::{OnceCell, RwLock as TokioRwLock},
 };
 
-use crate::hls::HlsTranscodingStatus;
-
 use crate::{
-    cache::{GeneralCache, MetadataCache},
+    cache::{GeneralCache, MetadataCache, TranscodingCache},
     config::core::Config,
 };
 
@@ -28,8 +25,7 @@ pub struct AppState {
     open_list_cache: OnceCell<GeneralCache>,
     hls_info_cache: OnceCell<GeneralCache>,
     hls_path_cache: OnceCell<PathBuf>,
-    hls_transcoding_cache:
-        OnceCell<Arc<DashMap<PathBuf, HlsTranscodingStatus>>>,
+    hls_transcoding_cache: OnceCell<TranscodingCache>,
 }
 
 impl AppState {
@@ -110,11 +106,9 @@ impl AppState {
             .await
     }
 
-    pub async fn get_hls_transcoding_cache(
-        &self,
-    ) -> &Arc<DashMap<PathBuf, HlsTranscodingStatus>> {
+    pub async fn get_hls_transcoding_cache(&self) -> &TranscodingCache {
         self.hls_transcoding_cache
-            .get_or_init(|| async { Arc::new(DashMap::new()) })
+            .get_or_init(|| async move { TranscodingCache::new(100, 120) })
             .await
     }
 

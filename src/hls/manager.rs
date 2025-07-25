@@ -1,19 +1,20 @@
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Instant,
 };
 
 use dashmap::DashMap;
 use lazy_static::lazy_static;
-use tokio::{sync::Mutex, task};
 
-use super::{
-    transcoder,
-    types::{HlsConfig, HlsTranscodingStatus},
-};
+use tokio::sync::{Mutex, RwLock as TokioRwLock};
+
+use super::codec;
 use crate::{
-    AppState, HLS_LOGGER_DOMAIN, error_log, info_log, util::StringUtil,
+    AppState, HLS_STREAM_LOGGER_DOMAIN,
+    cache::transcoding::{HlsConfig, HlsTranscodingStatus, TranscodingTask},
+    error_log, info_log,
+    util::StringUtil,
 };
 
 lazy_static! {
@@ -33,16 +34,16 @@ impl HlsManager {
 
     pub async fn ensure_stream(
         &self,
-        original_path: &Path,
+        original_path: &PathBuf,
     ) -> Result<PathBuf, String> {
         let manifest_path = self.get_manifest_path(original_path)?;
-        let status_map = self.state.get_hls_transcoding_cache().await;
+        let status_cache = self.state.get_hls_transcoding_cache().await;
 
-        if status_map
-            .get(original_path)
-            .is_some_and(|s| *s.value() == HlsTranscodingStatus::Completed)
-        {
-            return Ok(manifest_path);
+        if let Some(task_lock) = status_cache.get(original_path).await {
+            let task = task_lock.read().await;
+            if task.status == HlsTranscodingStatus::Completed {
+                return Ok(manifest_path.clone());
+            }
         }
 
         let lock = TRANSCODING_LOCKS
@@ -51,53 +52,72 @@ impl HlsManager {
             .clone();
         let _guard = lock.lock().await;
 
-        if status_map
-            .get(original_path)
-            .is_some_and(|s| *s.value() == HlsTranscodingStatus::Completed)
-        {
-            return Ok(manifest_path);
+        if let Some(task_lock) = status_cache.get(original_path).await {
+            let task = task_lock.read().await;
+            if task.status != HlsTranscodingStatus::Failed {
+                return Ok(manifest_path.clone());
+            }
         }
 
-        status_map.insert(
-            original_path.to_path_buf(),
-            HlsTranscodingStatus::InProgress,
-        );
-
-        let path_clone = original_path.to_path_buf();
         let dir_clone = manifest_path.parent().unwrap().to_path_buf();
-        let config_clone = self.config.clone();
-        let status_map_clone = status_map.clone();
+        let mut child_process =
+            codec::transmux_to_hls_vod(original_path, &dir_clone, &self.config)
+                .await?;
 
-        task::spawn_blocking(move || {
-            info_log!(
-                HLS_LOGGER_DOMAIN,
-                "Spawning HLS transmux for: {:?}",
-                &path_clone
-            );
-            match transcoder::transmux_av_streams_to_hls(
-                &path_clone,
-                &dir_clone,
-                &config_clone,
-            ) {
-                Ok(_) => {
+        let stderr = child_process
+            .stderr
+            .take()
+            .expect("Failed to capture stderr");
+
+        let new_task = Arc::new(TokioRwLock::new(TranscodingTask {
+            status: HlsTranscodingStatus::InProgress,
+            last_accessed: Instant::now(),
+            process: Arc::new(tokio::sync::Mutex::new(child_process)),
+        }));
+
+        status_cache
+            .insert(original_path.to_path_buf(), new_task.clone())
+            .await;
+
+        let path_clone_for_status_update = original_path.to_path_buf();
+        tokio::spawn(async move {
+            let process_guard = new_task.read().await;
+            let mut process_mutex_guard = process_guard.process.lock().await;
+
+            let status = process_mutex_guard.wait().await;
+            let mut task_write = new_task.write().await;
+
+            match status {
+                Ok(exit_status) if exit_status.success() => {
+                    task_write.status = HlsTranscodingStatus::Completed;
                     info_log!(
-                        HLS_LOGGER_DOMAIN,
+                        HLS_STREAM_LOGGER_DOMAIN,
                         "HLS transmux completed for: {:?}",
-                        &path_clone
+                        &path_clone_for_status_update
                     );
-                    status_map_clone
-                        .insert(path_clone, HlsTranscodingStatus::Completed);
+                }
+                Ok(exit_status) => {
+                    task_write.status = HlsTranscodingStatus::Failed;
+                    use tokio::io::AsyncReadExt;
+                    let mut reader = tokio::io::BufReader::new(stderr);
+                    let mut err_output = String::new();
+                    reader.read_to_string(&mut err_output).await.ok();
+                    error_log!(
+                        HLS_STREAM_LOGGER_DOMAIN,
+                        "HLS transmux failed for: {:?} with status {} and error: {}",
+                        &path_clone_for_status_update,
+                        exit_status,
+                        err_output
+                    );
                 }
                 Err(e) => {
+                    task_write.status = HlsTranscodingStatus::Failed;
                     error_log!(
-                        HLS_LOGGER_DOMAIN,
-                        "HLS transmux failed for: {:?}, error: {}",
-                        &path_clone,
+                        HLS_STREAM_LOGGER_DOMAIN,
+                        "HLS process wait failed for: {:?}, error: {}",
+                        &path_clone_for_status_update,
                         e
                     );
-                    status_map_clone
-                        .insert(path_clone, HlsTranscodingStatus::Failed);
-                    fs::remove_dir_all(&dir_clone).ok();
                 }
             }
         });
@@ -110,21 +130,16 @@ impl HlsManager {
         original_path: &Path,
     ) -> Result<PathBuf, String> {
         let path_str = original_path.to_str().ok_or_else(|| {
-            format!(
-                "File path contains invalid UTF-8 characters: {:?}",
-                original_path
-            )
+            format!("Invalid UTF-8 in path: {:?}", original_path)
         })?;
-
         if path_str.is_empty() {
-            return Err("File path cannot be empty".to_string());
+            return Err("File path is empty".to_string());
         }
-
         let file_hash = StringUtil::md5(path_str);
         Ok(self
             .config
             .transcode_root_path
             .join(file_hash)
-            .join("playlist.mpd"))
+            .join("master.m3u8"))
     }
 }
