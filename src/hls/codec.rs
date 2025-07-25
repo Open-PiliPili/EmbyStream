@@ -1,4 +1,4 @@
-use std::{fs, path::Path, process::Stdio};
+use std::{path::Path, process::Stdio};
 
 use tokio::process::{Child, Command};
 
@@ -7,17 +7,11 @@ use crate::{
     info_log,
 };
 
-pub async fn transmux_to_hls_live_simulation(
+pub async fn transmux_to_hls_segments(
     input_path: &Path,
     output_dir: &Path,
     config: &HlsConfig,
 ) -> Result<Child, String> {
-    fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
-
-    let manifest_path = output_dir.join("master.m3u8");
-    let input_str = input_path.to_str().ok_or("Invalid input path")?;
-    let output_str = manifest_path.to_str().ok_or("Invalid output path")?;
-
     let segment_filename_str = output_dir
         .join("segment%05d.ts")
         .to_str()
@@ -26,32 +20,30 @@ pub async fn transmux_to_hls_live_simulation(
 
     info_log!(
         HLS_STREAM_LOGGER_DOMAIN,
-        "Starting HLS VOD transcoding for: {}",
-        input_str
+        "Starting HLS VOD transcoding for: {:?}",
+        input_path
     );
 
     let mut command = Command::new("ffmpeg");
     command
         .arg("-y")
         .arg("-i")
-        .arg(input_str)
+        .arg(input_path.to_str().unwrap())
         .arg("-map")
-        .arg("0:v?")
+        .arg("0:v:0?")
         .arg("-map")
-        .arg("0:a?")
+        .arg("0:a:0?")
         .arg("-c")
         .arg("copy")
         .arg("-f")
-        .arg("hls")
-        .arg("-hls_time")
+        .arg("segment")
+        .arg("-segment_time")
         .arg(config.segment_duration_seconds.to_string())
-        .arg("-hls_list_size")
+        .arg("-segment_format")
+        .arg("mpegts")
+        .arg("-segment_list_size")
         .arg("0")
-        .arg("-hls_flags")
-        .arg("delete_segments")
-        .arg("-hls_segment_filename")
         .arg(&segment_filename_str)
-        .arg(output_str)
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
 

@@ -7,11 +7,11 @@ use std::{
 use dashmap::DashMap;
 use lazy_static::lazy_static;
 use tokio::{
-    io::{AsyncBufReadExt, BufReader as TokioBufReader},
+    io::{AsyncReadExt, BufReader as TokioBufReader},
     sync::{Mutex, RwLock as TokioRwLock},
 };
 
-use super::codec;
+use super::{codec, playlist};
 use crate::{
     AppState, HLS_STREAM_LOGGER_DOMAIN,
     cache::transcoding::{HlsConfig, HlsTranscodingStatus, TranscodingTask},
@@ -39,6 +39,7 @@ impl HlsManager {
         original_path: &PathBuf,
     ) -> Result<PathBuf, String> {
         let manifest_path = self.get_manifest_path(original_path)?;
+        let output_dir = manifest_path.parent().unwrap().to_path_buf();
         let status_cache = self.state.get_hls_transcoding_cache().await;
 
         if let Some(task_lock) = status_cache.get(original_path).await {
@@ -56,15 +57,23 @@ impl HlsManager {
 
         if let Some(task_lock) = status_cache.get(original_path).await {
             let task = task_lock.read().await;
-            if task.status != HlsTranscodingStatus::Failed {
+            if task.status != HlsTranscodingStatus::Failed
+                && manifest_path.exists()
+            {
                 return Ok(manifest_path.clone());
             }
         }
 
-        let dir_clone = manifest_path.parent().unwrap().to_path_buf();
-        let mut child_process = codec::transmux_to_hls_live_simulation(
+        playlist::generate_m3u8_playlist(
             original_path,
-            &dir_clone,
+            &output_dir,
+            &self.config,
+        )
+        .await?;
+
+        let mut child_process = codec::transmux_to_hls_segments(
+            original_path,
+            &output_dir,
             &self.config,
         )
         .await?;
@@ -91,12 +100,10 @@ impl HlsManager {
                 task_read.process.clone()
             };
 
-            let mut reader = TokioBufReader::new(stderr).lines();
+            let mut reader = TokioBufReader::new(stderr);
             let mut stderr_output = String::new();
-            while let Ok(Some(line)) = reader.next_line().await {
-                stderr_output.push_str(&line);
-                stderr_output.push('\n');
-            }
+
+            reader.read_to_string(&mut stderr_output).await.ok();
 
             let status = {
                 let mut process_guard = process_arc.lock().await;
