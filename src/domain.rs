@@ -3,7 +3,7 @@
 pub const CONFIG_LOGGER_DOMAIN: &str = "CONFIG";
 pub const CRYPTO_LOGGER_DOMAIN: &str = "CRYPTO";
 pub const CRYPTO_CACHE_LOGGER_DOMAIN: &str = "CRYPTO-CACHE";
-pub const HLS_LOGGER_DOMAIN: &str = "DASH";
+pub const HLS_LOGGER_DOMAIN: &str = "HLS";
 pub const DEFAULT_LOGGER_DOMAIN: &str = "GENERAL";
 pub const FILE_CACHE_LOGGER_DOMAIN: &str = "FILE-CACHE";
 pub const FORWARD_LOGGER_DOMAIN: &str = "FORWARD";
