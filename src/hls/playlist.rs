@@ -84,6 +84,15 @@ pub async fn generate_m3u8_playlist(
 
     playlist_content.push_str("#EXT-X-ENDLIST\n");
 
+    if let Err(e) = fs::create_dir_all(output_dir) {
+        let err_msg = format!(
+            "Failed to create output directory {:?}: {}",
+            output_dir, e
+        );
+        error_log!(HLS_STREAM_LOGGER_DOMAIN, "{}", err_msg);
+        return Err(err_msg);
+    }
+
     let manifest_path = output_dir.join("master.m3u8");
     debug_log!(
         HLS_STREAM_LOGGER_DOMAIN,
