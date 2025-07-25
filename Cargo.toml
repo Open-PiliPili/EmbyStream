@@ -68,3 +68,4 @@ tracing-subscriber = { version = "0.3.19", features = [
     "json"
 ] }
 url = "2.5.4"
+which = "8.0.0"

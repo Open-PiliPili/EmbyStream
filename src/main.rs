@@ -3,6 +3,7 @@ use std::{error::Error, str::FromStr, sync::Arc};
 use clap::Parser;
 use figlet_rs::FIGfont;
 use hyper::{StatusCode, body::Incoming};
+use which::which;
 
 use embystream::gateway::reverse_proxy_filter::ReverseProxyFilterMiddleware;
 use embystream::{
@@ -45,6 +46,7 @@ async fn run_app(
     let config = setup_load_config(run_args);
     setup_logger(&config);
     setup_print_info(&config);
+    check_dependencies(&config).await?;
 
     let app_state = setup_cache(&config).await;
     let frontend_state = app_state.clone();
@@ -127,6 +129,50 @@ fn setup_logger(config: &Config) {
 async fn setup_cache(config: &Config) -> Arc<AppState> {
     let app_state = AppState::new(config.clone()).await;
     Arc::new(app_state)
+}
+
+async fn check_dependencies(
+    config: &Config,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    info_log!(
+        INIT_LOGGER_DOMAIN,
+        "Checking for required external dependencies..."
+    );
+
+    let mode = config.general.clone().stream_mode;
+    if !matches!(mode, StreamMode::Backend | StreamMode::Dual) {
+        debug_log!(
+            INIT_LOGGER_DOMAIN,
+            "Skipping check dependencies - backend stream mode not enabled"
+        );
+        return Ok(());
+    }
+
+    match which("ffmpeg") {
+        Ok(path) => {
+            info_log!(INIT_LOGGER_DOMAIN, "Found ffmpeg at: {:?}", path)
+        }
+        Err(_) => {
+            error_log!(
+                INIT_LOGGER_DOMAIN,
+                "FATAL: ffmpeg not found in PATH. Please install ffmpeg to continue."
+            );
+            return Err("ffmpeg not found".into());
+        }
+    }
+    match which("ffprobe") {
+        Ok(path) => {
+            info_log!(INIT_LOGGER_DOMAIN, "Found ffprobe at: {:?}", path)
+        }
+        Err(_) => {
+            error_log!(
+                INIT_LOGGER_DOMAIN,
+                "FATAL: ffprobe not found in PATH. Please install ffmpeg to continue."
+            );
+            return Err("ffprobe not found".into());
+        }
+    }
+    Ok(())
 }
 
 async fn setup_frontend_gateway(
