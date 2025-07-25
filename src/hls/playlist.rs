@@ -5,7 +5,7 @@ use tokio::process::Command;
 use super::types::FfprobeOutput;
 use crate::{
     HLS_STREAM_LOGGER_DOMAIN, cache::transcoding::HlsConfig, debug_log,
-    info_log,
+    error_log, info_log,
 };
 
 pub async fn generate_m3u8_playlist(
@@ -85,7 +85,21 @@ pub async fn generate_m3u8_playlist(
     playlist_content.push_str("#EXT-X-ENDLIST\n");
 
     let manifest_path = output_dir.join("master.m3u8");
-    fs::write(&manifest_path, playlist_content).map_err(|e| e.to_string())?;
+    debug_log!(
+        HLS_STREAM_LOGGER_DOMAIN,
+        "Writing final M3U8 playlist to: {:?}",
+        manifest_path
+    );
+
+    if let Err(e) = fs::write(&manifest_path, playlist_content) {
+        error_log!(
+            HLS_STREAM_LOGGER_DOMAIN,
+            "Failed to write M3U8 file to disk: {}",
+            e
+        );
+        return Err(e.to_string());
+    }
+
     info_log!(
         HLS_STREAM_LOGGER_DOMAIN,
         "Instantly generated M3U8 playlist via ffprobe at: {:?}",

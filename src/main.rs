@@ -141,7 +141,7 @@ async fn check_dependencies(
 
     let mode = config.general.clone().stream_mode;
     if !matches!(mode, StreamMode::Backend | StreamMode::Dual) {
-        debug_log!(
+        info_log!(
             INIT_LOGGER_DOMAIN,
             "Skipping check dependencies - backend stream mode not enabled"
         );
@@ -182,7 +182,7 @@ async fn setup_frontend_gateway(
     let mode = config.general.stream_mode;
 
     if !matches!(mode, StreamMode::Frontend | StreamMode::Dual) {
-        debug_log!(
+        info_log!(
             INIT_LOGGER_DOMAIN,
             "Skipping frontend gateway setup - stream mode not enabled"
         );
@@ -227,7 +227,7 @@ async fn setup_backend_gateway(
     let mode = config.general.clone().stream_mode;
 
     if !matches!(mode, StreamMode::Backend | StreamMode::Dual) {
-        debug_log!(
+        info_log!(
             INIT_LOGGER_DOMAIN,
             "Skipping backend gateway setup - stream mode not enabled"
         );
