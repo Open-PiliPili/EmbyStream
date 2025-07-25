@@ -25,8 +25,7 @@ pub fn transmux_av_streams_to_hls(
     opts.set("hls_time", &config.segment_duration_seconds.to_string());
     opts.set("hls_list_size", "0");
     opts.set("hls_segment_filename", &hls_segment_filename);
-    opts.set("hls_flags", "independent_segments");
-    opts.set("master_pl_name", "master.m3u8");
+    opts.set("hls_playlist_type", "vod");
 
     let mut octx = ffmpeg::format::output_as_with(&manifest_path, "hls", opts)
         .map_err(|e| e.to_string())?;
@@ -34,9 +33,7 @@ pub fn transmux_av_streams_to_hls(
     let stream_mapping = DashMap::new();
     let mut out_stream_index = 0;
 
-    // --- Corrected Logic ---
     for in_stream in ictx.streams() {
-        // Access parameters() to get stream info
         let medium = in_stream.parameters().medium();
         if medium == ffmpeg::media::Type::Video
             || medium == ffmpeg::media::Type::Audio
