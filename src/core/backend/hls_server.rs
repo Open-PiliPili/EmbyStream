@@ -12,7 +12,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use tokio::time::sleep;
 
-use crate::{AppState, STREAM_LOGGER_DOMAIN, error_log};
+use crate::{AppState, HLS_STREAM_LOGGER_DOMAIN, error_log, info_log};
 use crate::{
     cache::transcoding::HlsConfig,
     gateway::{
@@ -50,21 +50,6 @@ impl HlsMiddleware {
     async fn get_original_path(&self, id: &str) -> Option<PathBuf> {
         self.state.get_hls_info_cache().await.get::<PathBuf>(id)
     }
-
-    async fn ensure_hls_stream(
-        &self,
-        original_path: &PathBuf,
-    ) -> Result<PathBuf, String> {
-        let transcode_root_path =
-            self.state.get_hls_path_cache().await.to_path_buf();
-        let hls_config = HlsConfig {
-            transcode_root_path,
-            segment_duration_seconds: 6,
-        };
-        let hls_manager = HlsManager::new(self.state.clone(), hls_config);
-        hls_manager.ensure_stream(original_path).await?;
-        hls_manager.get_manifest_path(original_path)
-    }
 }
 
 #[async_trait]
@@ -84,7 +69,7 @@ impl Middleware for HlsMiddleware {
             Some(path) => path,
             None => {
                 error_log!(
-                    STREAM_LOGGER_DOMAIN,
+                    HLS_STREAM_LOGGER_DOMAIN,
                     "No path mapping for ID: {}",
                     item_id
                 );
@@ -94,36 +79,49 @@ impl Middleware for HlsMiddleware {
             }
         };
 
-        let manifest_path = match self.ensure_hls_stream(&original_path).await {
-            Ok(path) => path,
-            Err(e) => {
-                error_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "HLS stream ensuring failed for ID {}: {}",
-                    item_id,
-                    e
-                );
-                return ResponseBuilder::with_status_code(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                );
-            }
+        let transcode_root_path =
+            self.state.get_hls_path_cache().await.to_path_buf();
+        let hls_config = HlsConfig {
+            transcode_root_path,
+            segment_duration_seconds: 10,
         };
+        let hls_manager = HlsManager::new(self.state.clone(), hls_config);
 
-        let cache_dir = manifest_path.parent().unwrap();
+        let manifest_path =
+            match hls_manager.ensure_stream(&original_path).await {
+                Ok(path) => path,
+                Err(e) => {
+                    error_log!(
+                        HLS_STREAM_LOGGER_DOMAIN,
+                        "Failed to ensure HLS stream: {}",
+                        e
+                    );
+                    return ResponseBuilder::with_status_code(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                    );
+                }
+            };
+
         let requested_file_path =
-            cache_dir.join(requested_file.replace("hls/", ""));
+            manifest_path.parent().unwrap().join(requested_file);
+        info_log!(
+            HLS_STREAM_LOGGER_DOMAIN,
+            "Client requested file: {:?}",
+            requested_file_path
+        );
 
-        const MAX_RETRIES: u32 = 10;
+        const MAX_RETRIES: u32 = 20;
         const RETRY_DELAY: Duration = Duration::from_millis(500);
 
-        if let Some(found_path) =
-            wait_for_file(&requested_file_path, MAX_RETRIES, RETRY_DELAY).await
-        {
-            return serve_static_file(&found_path).await;
+        for _ in 0..MAX_RETRIES {
+            if requested_file_path.exists() {
+                return serve_static_file(&requested_file_path).await;
+            }
+            sleep(RETRY_DELAY).await;
         }
 
         error_log!(
-            STREAM_LOGGER_DOMAIN,
+            HLS_STREAM_LOGGER_DOMAIN,
             "HLS segment not found after waiting: {:?}",
             requested_file_path
         );
@@ -133,20 +131,6 @@ impl Middleware for HlsMiddleware {
     fn clone_box(&self) -> Box<dyn Middleware> {
         Box::new(self.clone())
     }
-}
-
-async fn wait_for_file(
-    path: &Path,
-    retries: u32,
-    delay: Duration,
-) -> Option<PathBuf> {
-    for _ in 0..retries {
-        if path.exists() {
-            return Some(path.to_path_buf());
-        }
-        sleep(delay).await;
-    }
-    None
 }
 
 async fn serve_static_file(file_path: &Path) -> Response<BoxBodyType> {
@@ -176,7 +160,7 @@ async fn serve_static_file(file_path: &Path) -> Response<BoxBodyType> {
         }
         Err(e) => {
             error_log!(
-                STREAM_LOGGER_DOMAIN,
+                HLS_STREAM_LOGGER_DOMAIN,
                 "Failed to read HLS static file {:?}: {}",
                 file_path,
                 e

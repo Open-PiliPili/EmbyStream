@@ -7,7 +7,7 @@ use crate::{
     info_log,
 };
 
-pub async fn transmux_to_hls_vod(
+pub async fn transmux_to_hls_live_simulation(
     input_path: &Path,
     output_dir: &Path,
     config: &HlsConfig,
@@ -44,8 +44,10 @@ pub async fn transmux_to_hls_vod(
         .arg("hls")
         .arg("-hls_time")
         .arg(config.segment_duration_seconds.to_string())
-        .arg("-hls_playlist_type")
-        .arg("vod")
+        .arg("-hls_list_size")
+        .arg("0")
+        .arg("-hls_flags")
+        .arg("delete_segments")
         .arg("-hls_segment_filename")
         .arg(&segment_filename_str)
         .arg(output_str)

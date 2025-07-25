@@ -60,9 +60,12 @@ impl HlsManager {
         }
 
         let dir_clone = manifest_path.parent().unwrap().to_path_buf();
-        let mut child_process =
-            codec::transmux_to_hls_vod(original_path, &dir_clone, &self.config)
-                .await?;
+        let mut child_process = codec::transmux_to_hls_live_simulation(
+            original_path,
+            &dir_clone,
+            &self.config,
+        )
+        .await?;
 
         let stderr = child_process
             .stderr
