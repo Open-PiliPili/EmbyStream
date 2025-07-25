@@ -1,0 +1,21 @@
+# .cargo/config.toml
+
+# --- Settings for Apple Silicon Macs ---
+
+# Set rustflags for the target
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))']
+rustflags = ["-L", "/opt/homebrew/lib"]
+
+# In a separate table, set environment variables for the SAME target
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.env]
+FFMPEG_DIR = "/opt/homebrew"
+
+# --- Settings for Intel-based Macs ---
+
+# Set rustflags for the target
+[target.'cfg(all(target_os = "macos", target_arch = "x86_64"))']
+rustflags = ["-L", "/usr/local/lib"]
+
+# In a separate table, set environment variables for the SAME target
+[target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.env]
+FFMPEG_DIR = "/usr/local"

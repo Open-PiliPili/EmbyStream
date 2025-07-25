@@ -24,8 +24,6 @@ impl fmt::Display for StreamMode {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct General {
-    pub log_level: String,
-    pub log_root_path: String,
     pub memory_mode: String,
     pub expired_seconds: u64,
     #[serde(default)]
@@ -33,7 +31,12 @@ pub struct General {
     pub backend_type: String,
     pub encipher_key: String,
     pub encipher_iv: String,
-    pub transcode_root_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Log {
+    pub level: String,
+    pub root_path: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -56,6 +59,11 @@ impl Emby {
 
         uri_str.parse().expect("Failed to parse backend URI")
     }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Transcode {
+    pub root_path: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

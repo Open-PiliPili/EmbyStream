@@ -1,10 +1,15 @@
 # Application Configuration File
 # All values in this file are case-sensitive
 
-[General]
-# Application log level (options: "trace", "debug", "info", "warn", "error")
-log_level = "info"
+[Log]
+# Sets the application's logging verbosity.
+# Available options (from least to most verbose): "error", "warn", "info", "debug", "trace"
+level = "info"
 
+# Specifies the directory where log files will be stored.
+root_path = "/var/logs/embystream"
+
+[General]
 # Memory usage profile (options: "low", "middle", "high")
 # - low: Minimal memory usage, reduced performance
 # - middle: Balanced memory and performance (recommended)
@@ -30,16 +35,25 @@ backend_type = "disk"
 
 # Encryption key for secure communications (6-16 bytes)
 # WARNING: Change this from the default value in production
-encipher_key = "Q4eCbawEp3sCvDvx" # Replace encipher key
+encipher_key = "Q4eCbawEp3sCvDvx" # Replace encipher key, must the same as frontend
 
 # Encryption iv for secure communications (6-16 bytes)
 # WARNING: Change this from the default value in production
-encipher_iv = "a3cH2abhxnu9hGo5" # Replace encipher iv
+encipher_iv = "a3cH2abhxnu9hGo5" # Replace encipher iv, must the same as frontend
 
-# Emby server configuration
-emby_url = "http://127.0.0.1"                                  # Base URL of your Emby server
-emby_port = "8096"                                             # Replace Port for Emby server
-emby_api_key = "nmbp7mpixze8ghdfgki6yrijkeq5zuao"              # Replace API key for Emby (leave empty if not using)
+[Emby]
+# Base URL of your Emby server
+url = "http://127.0.0.1"
+
+# Port for Emby server
+port = "8096"
+
+# API key for Emby (leave empty if not using)
+token = "nmbp7mpixze8ghdfgki6yrijkeq5zuao"
+
+[Transcode]
+# Defines the working directory for temporary storage of transcoded video segments.
+root_path = "/mnt/embystream/transcoding_temp"
 
 [UserAgent]
 # UserAgent filtering mode (options: "allow", "deny", "none")
@@ -66,7 +80,7 @@ ssl_key_file = ""
 
 [Frontend]
 # Frontend web server configuration
-listen_port = 60001  # Replace port for the frontend web interface
+listen_port = 60001  # Port for the frontend web interface, option
 
 [Frontend.PathRewrite]
 enable = false
@@ -82,11 +96,11 @@ host = ""
 
 [Backend]
 # Backend server configuration
-listen_port = 60001                                    # Port for the stream service, option
-base_url = "https://backend.example.com"               # Replace base URL for stream service
-path = "stream"                                        # Path component for stream URLs
-port = "443"                                           # HTTPS port for stream service
-proxy_mode = "proxy"                                   # Backend proxy mode for media streaming (options: "proxy", "redirect")
+listen_port = 60001            # Replace port for the stream service
+base_url = ""                  # Base URL for stream service
+path = "stream"                # Path component for stream URLs
+port = "443"                   # HTTPS port for stream service
+proxy_mode = "proxy"           # Backend proxy mode for media streaming (options: "proxy", "redirect")
 
 [Backend.PathRewrite]
 enable = false                 # Set to true to enable this feature.

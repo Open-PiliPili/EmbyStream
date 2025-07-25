@@ -16,7 +16,7 @@ use crate::{
 
 const CONFIG_DIR_NAME: &str = "embystream";
 const ROOT_CONFIG_PATH: &str = "/root/.config/embystream";
-const TRANSCODE_SUBDIR_NAME: &str = "transcode";
+const TRANSCODE_SUBDIR_NAME: &str = "transcoding_temp";
 
 pub struct AppState {
     config: TokioRwLock<Config>,
@@ -123,7 +123,7 @@ impl AppState {
             .get_or_init(|| async {
                 let config = self.get_config().await;
                 let mut path =
-                    PathBuf::from(config.general.transcode_root_path.clone());
+                    PathBuf::from(config.transcode.root_path.clone());
 
                 if path.as_os_str().is_empty() {
                     let base_dirs =

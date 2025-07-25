@@ -1,0 +1,25 @@
+# .cargo/config.toml
+
+# ==================================
+# macOS Configurations
+# ==================================
+
+# --- Settings for Apple Silicon Macs ---
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))']
+rustflags = ["-L", "/opt/homebrew/lib"]
+
+# --- Settings for Intel-based Macs ---
+[target.'cfg(all(target_os = "macos", target_arch = "x86_64"))']
+rustflags = ["-L", "/usr/local/lib"]
+
+# ==================================
+# Linux Configurations
+# ==================================
+
+# --- Settings for Linux on ARM64 (e.g., AWS Graviton) ---
+[target.'cfg(all(target_os = "linux", target_arch = "aarch64"))']
+rustflags = ["-L", "/usr/lib/aarch64-linux-gnu"]
+
+# --- Settings for Linux on Intel/AMD 64-bit ---
+[target.'cfg(all(target_os = "linux", target_arch = "x86_64"))']
+rustflags = ["-L", "/usr/local/lib"]

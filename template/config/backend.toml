@@ -1,10 +1,15 @@
 # Application Configuration File
 # All values in this file are case-sensitive
 
-[General]
-# Application log level (options: "trace", "debug", "info", "warn", "error")
-log_level = "info"
+[Log]
+# Sets the application's logging verbosity.
+# Available options (from least to most verbose): "error", "warn", "info", "debug", "trace"
+level = "info"
 
+# Specifies the directory where log files will be stored.
+root_path = "/var/logs/embystream"
+
+[General]
 # Memory usage profile (options: "low", "middle", "high")
 # - low: Minimal memory usage, reduced performance
 # - middle: Balanced memory and performance (recommended)
@@ -36,10 +41,19 @@ encipher_key = "Q4eCbawEp3sCvDvx" # Replace encipher key, must the same as front
 # WARNING: Change this from the default value in production
 encipher_iv = "a3cH2abhxnu9hGo5" # Replace encipher iv, must the same as frontend
 
-# Emby server configuration
-emby_url = "http://127.0.0.1"                                  # Replace base URL of your Emby server, option
-emby_port = "8096"                                             # Replace port for Emby server, option
-emby_api_key = "nmbp7mpixze8ghdfgki6yrijkeq5zuao"              # Replace aPI key for Emby (leave empty if not using), option
+[Emby]
+# Base URL of your Emby server
+url = "http://127.0.0.1"
+
+# Port for Emby server
+port = "8096"
+
+# API key for Emby (leave empty if not using)
+token = "nmbp7mpixze8ghdfgki6yrijkeq5zuao"
+
+[Transcode]
+# Defines the working directory for temporary storage of transcoded video segments.
+root_path = "/mnt/embystream/transcoding_temp"
 
 [UserAgent]
 # UserAgent filtering mode (options: "allow", "deny", "none")

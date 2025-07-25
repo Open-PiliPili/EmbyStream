@@ -85,7 +85,7 @@ fn setup_print_info(config: &Config) {
     info_log!(
         INIT_LOGGER_DOMAIN,
         "Log level: {}",
-        config.general.log_level.as_str()
+        config.log.level.as_str()
     );
     info_log!(
         INIT_LOGGER_DOMAIN,
@@ -117,11 +117,10 @@ fn setup_load_config(run_args: &RunArgs) -> Config {
 }
 
 fn setup_logger(config: &Config) {
-    let level =
-        LogLevel::from_str(&config.general.log_level).unwrap_or(LogLevel::Info);
+    let level = LogLevel::from_str(&config.log.level).unwrap_or(LogLevel::Info);
     Logger::builder()
         .with_level(level)
-        .with_directory(&config.general.log_root_path)
+        .with_directory(&config.log.root_path)
         .build();
 }
 

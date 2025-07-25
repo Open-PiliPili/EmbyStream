@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::config::{
     backend::{Backend, direct::DirectLink, disk::Disk, openlist::OpenList},
     frontend::Frontend,
-    general::{Emby, General, UserAgent},
+    general::{Emby, General, Log, Transcode, UserAgent},
     http2::Http2,
 };
 
@@ -69,8 +69,12 @@ impl AntiReverseProxyConfig {
 pub struct RawConfig {
     #[serde(rename = "General")]
     pub general: General,
+    #[serde(rename = "Log")]
+    pub log: Log,
     #[serde(rename = "Emby")]
     pub emby: Emby,
+    #[serde(rename = "Transcode")]
+    pub transcode: Transcode,
     #[serde(rename = "UserAgent")]
     pub user_agent: UserAgent,
     #[serde(rename = "Http2")]
