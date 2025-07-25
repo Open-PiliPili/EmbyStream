@@ -18,8 +18,7 @@ use super::{
     types::RawConfig,
 };
 use crate::cli::RunArgs;
-use crate::config::general::types::Emby;
-use crate::config::general::{Log, Transcode};
+use crate::config::general::{Log, Transcode, types::Emby};
 use crate::{CONFIG_LOGGER_DOMAIN, config_error_log, config_info_log};
 
 const CONFIG_DIR_NAME: &str = "embystream";
