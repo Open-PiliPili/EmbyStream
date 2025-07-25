@@ -1,8 +1,10 @@
-use dashmap::DashMap;
-use ffmpeg_next as ffmpeg;
 use std::{fs, path::Path};
 
+use dashmap::DashMap;
+use ffmpeg_next as ffmpeg;
+
 use super::types::HlsConfig;
+use crate::{HLS_LOGGER_DOMAIN, debug_log, error_log};
 
 pub fn transmux_av_streams_to_hls(
     input_path: &Path,
@@ -61,6 +63,19 @@ pub fn transmux_av_streams_to_hls(
                     .write_interleaved(&mut octx)
                     .map_err(|e| e.to_string())?;
             }
+        }
+    }
+
+    match fs::read_to_string(&manifest_path) {
+        Ok(content) => {
+            debug_log!(
+                HLS_LOGGER_DOMAIN,
+                "Final m3u8 content after write_trailer:\n---\n{}\n---",
+                content
+            );
+        }
+        Err(e) => {
+            error_log!(HLS_LOGGER_DOMAIN, "Failed to read final m3u8: {}", e);
         }
     }
 
