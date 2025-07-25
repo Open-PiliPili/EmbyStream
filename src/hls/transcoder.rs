@@ -1,6 +1,6 @@
-use std::{fs, path::Path};
 use dashmap::DashMap;
 use ffmpeg_next as ffmpeg;
+use std::{fs, path::Path};
 
 use super::types::HlsConfig;
 
@@ -15,9 +15,11 @@ pub fn transmux_av_streams_to_hls(
     let manifest_path = output_dir.join("master.m3u8");
     fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
 
-    let mut ictx = ffmpeg::format::input(&input_path).map_err(|e| e.to_string())?;
+    let mut ictx =
+        ffmpeg::format::input(&input_path).map_err(|e| e.to_string())?;
 
-    let hls_segment_filename = output_dir.join("segment%d_").to_str().unwrap().to_string();
+    let hls_segment_filename =
+        output_dir.join("segment%d_").to_str().unwrap().to_string();
 
     let mut opts = ffmpeg::Dictionary::new();
     opts.set("hls_time", &config.segment_duration_seconds.to_string());
@@ -25,7 +27,6 @@ pub fn transmux_av_streams_to_hls(
     opts.set("hls_segment_filename", &hls_segment_filename);
     opts.set("hls_flags", "independent_segments");
     opts.set("master_pl_name", "master.m3u8");
-
 
     let mut octx = ffmpeg::format::output_as_with(&manifest_path, "hls", opts)
         .map_err(|e| e.to_string())?;
@@ -37,7 +38,9 @@ pub fn transmux_av_streams_to_hls(
     for in_stream in ictx.streams() {
         // Access parameters() to get stream info
         let medium = in_stream.parameters().medium();
-        if medium == ffmpeg::media::Type::Video || medium == ffmpeg::media::Type::Audio {
+        if medium == ffmpeg::media::Type::Video
+            || medium == ffmpeg::media::Type::Audio
+        {
             let mut out_stream = octx
                 .add_stream(ffmpeg::codec::Id::None)
                 .map_err(|e| e.to_string())?;
@@ -57,7 +60,9 @@ pub fn transmux_av_streams_to_hls(
             if let Some(out_stream) = octx.stream(*out_stream_idx) {
                 packet.rescale_ts(stream.time_base(), out_stream.time_base());
                 packet.set_stream(*out_stream_idx);
-                packet.write_interleaved(&mut octx).map_err(|e| e.to_string())?;
+                packet
+                    .write_interleaved(&mut octx)
+                    .map_err(|e| e.to_string())?;
             }
         }
     }
