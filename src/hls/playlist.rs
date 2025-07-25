@@ -40,6 +40,12 @@ pub async fn generate_m3u8_playlist(
 
     let ffprobe_data: FfprobeOutput = serde_json::from_slice(&output.stdout)
         .map_err(|e| format!("Failed to parse ffprobe JSON output: {}", e))?;
+    debug_log!(
+        HLS_STREAM_LOGGER_DOMAIN,
+        "ffprobe successfully parsed: {:?} for input path: {:?}",
+        ffprobe_data,
+        input_path
+    );
 
     let duration_secs = ffprobe_data.format.duration;
     let segment_duration = config.segment_duration_seconds as f64;
