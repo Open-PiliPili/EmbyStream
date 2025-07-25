@@ -12,7 +12,9 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use tokio::time::sleep;
 
-use crate::{AppState, HLS_STREAM_LOGGER_DOMAIN, error_log, info_log};
+use crate::{
+    AppState, HLS_STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log,
+};
 use crate::{
     cache::transcoding::HlsConfig,
     gateway::{
@@ -60,13 +62,35 @@ impl Middleware for HlsMiddleware {
         body: Option<Incoming>,
         next: Next,
     ) -> Response<BoxBodyType> {
+        debug_log!(
+            HLS_STREAM_LOGGER_DOMAIN,
+            "HLS middleware received request for: {}",
+            ctx.path
+        );
+
         let (item_id, requested_file) = match self.parse_path(&ctx.path) {
-            Some((id, file)) => (id, file),
+            Some((id, file)) => {
+                debug_log!(
+                    HLS_STREAM_LOGGER_DOMAIN,
+                    "Parsed path. Item ID: '{}', Requested File: '{}'",
+                    id,
+                    file
+                );
+                (id, file)
+            }
             None => return next(ctx, body).await,
         };
 
         let original_path = match self.get_original_path(item_id).await {
-            Some(path) => path,
+            Some(path) => {
+                info_log!(
+                    HLS_STREAM_LOGGER_DOMAIN,
+                    "Found original media path for ID '{}': {:?}",
+                    item_id,
+                    path
+                );
+                path
+            }
             None => {
                 error_log!(
                     HLS_STREAM_LOGGER_DOMAIN,
@@ -104,19 +128,29 @@ impl Middleware for HlsMiddleware {
 
         let requested_file_path =
             manifest_path.parent().unwrap().join(requested_file);
-        info_log!(
+        debug_log!(
             HLS_STREAM_LOGGER_DOMAIN,
-            "Client requested file: {:?}",
+            "Attempting to find and serve file at absolute path: {:?}",
             requested_file_path
         );
 
         const MAX_RETRIES: u32 = 20;
         const RETRY_DELAY: Duration = Duration::from_millis(500);
 
-        for _ in 0..MAX_RETRIES {
+        for i in 0..MAX_RETRIES {
             if requested_file_path.exists() {
+                debug_log!(
+                    HLS_STREAM_LOGGER_DOMAIN,
+                    "File found! Serving content of {:?}",
+                    requested_file_path
+                );
                 return serve_static_file(&requested_file_path).await;
             }
+            info_log!(
+                HLS_STREAM_LOGGER_DOMAIN,
+                "File not found on attempt {}. Waiting...",
+                i + 1
+            );
             sleep(RETRY_DELAY).await;
         }
 
@@ -146,9 +180,11 @@ async fn serve_static_file(file_path: &Path) -> Response<BoxBodyType> {
                     _ => "application/octet-stream",
                 };
 
-            builder = builder
-                .header(header::CONTENT_TYPE, content_type)
-                .header(header::CACHE_CONTROL, "public, max-age=31536000");
+            builder =
+                builder.header(header::CONTENT_TYPE, content_type).header(
+                    header::CACHE_CONTROL,
+                    "no-cache, no-store, must-revalidate",
+                );
 
             builder
                 .body(
