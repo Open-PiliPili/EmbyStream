@@ -1,6 +1,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
+    time::Instant,
 };
 
 use dashmap::DashMap;
@@ -102,7 +103,7 @@ impl HlsManager {
 
         let new_task = Arc::new(TokioRwLock::new(TranscodingTask {
             status: HlsTranscodingStatus::InProgress,
-            manifest_path: manifest_path.clone(),
+            last_accessed: Instant::now(),
             process: Arc::new(Mutex::new(child_process)),
         }));
 

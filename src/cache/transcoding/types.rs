@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use tokio::{process::Child, sync::Mutex};
 
@@ -18,6 +18,6 @@ pub enum HlsTranscodingStatus {
 #[derive(Clone, Debug)]
 pub struct TranscodingTask {
     pub status: HlsTranscodingStatus,
-    pub manifest_path: PathBuf,
+    pub last_accessed: Instant,
     pub process: Arc<Mutex<Child>>,
 }

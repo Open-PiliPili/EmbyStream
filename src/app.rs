@@ -51,18 +51,9 @@ impl AppState {
     async fn get_cache_settings(&self) -> (u64, u64) {
         let config = self.get_config().await;
         match config.general.memory_mode.as_str() {
-            "low" => (256, 60 * 60 * 2),
-            "high" => (512, 60 * 60 * 6),
-            _ => (512, 60 * 60 * 4),
-        }
-    }
-
-    async fn get_hls_cache_settings(&self) -> (u64, u64) {
-        let config = self.get_config().await;
-        match config.general.memory_mode.as_str() {
-            "low" => (128, 60 * 60),
-            "high" => (512, 60 * 60 * 4),
-            _ => (256, 60 * 60 * 2),
+            "low" => (128, 30 * 30),
+            "high" => (512, 60 * 60 * 2),
+            _ => (256, 60 * 60),
         }
     }
 
@@ -116,9 +107,8 @@ impl AppState {
     }
 
     pub async fn get_hls_transcoding_cache(&self) -> &TranscodingCache {
-        let (capacity, ttl) = self.get_hls_cache_settings().await;
         self.hls_transcoding_cache
-            .get_or_init(|| async move { TranscodingCache::new(capacity, ttl) })
+            .get_or_init(|| async move { TranscodingCache::new(100, 120) })
             .await
     }
 
