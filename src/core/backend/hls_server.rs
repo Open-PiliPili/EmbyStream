@@ -134,7 +134,18 @@ impl Middleware for HlsMiddleware {
             requested_file_path
         );
 
-        const MAX_RETRIES: u32 = 20;
+        if requested_file.ends_with(".m3u8") {
+            const MAX_RETRIES_M3U8: u32 = 10;
+            const RETRY_DELAY: Duration = Duration::from_millis(200);
+            for _ in 0..MAX_RETRIES_M3U8 {
+                if requested_file_path.exists() {
+                    return serve_static_file(&requested_file_path).await;
+                }
+                sleep(RETRY_DELAY).await;
+            }
+        }
+
+        const MAX_RETRIES: u32 = 40;
         const RETRY_DELAY: Duration = Duration::from_millis(500);
 
         for i in 0..MAX_RETRIES {

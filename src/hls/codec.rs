@@ -1,10 +1,9 @@
-use std::{path::Path, process::Stdio};
+use std::path::Path;
 
 use tokio::process::{Child, Command};
 
 use crate::{
-    HLS_STREAM_LOGGER_DOMAIN, cache::transcoding::HlsConfig, debug_log,
-    info_log,
+    HLS_STREAM_LOGGER_DOMAIN, cache::transcoding::HlsConfig, info_log,
 };
 
 pub async fn transmux_to_hls_segments(
@@ -12,18 +11,6 @@ pub async fn transmux_to_hls_segments(
     output_dir: &Path,
     config: &HlsConfig,
 ) -> Result<Child, String> {
-    let segment_filename_str = output_dir
-        .join("segment%05d.ts")
-        .to_str()
-        .ok_or("Invalid segment path")?
-        .to_string();
-
-    info_log!(
-        HLS_STREAM_LOGGER_DOMAIN,
-        "Starting HLS VOD transcoding for: {:?}",
-        input_path
-    );
-
     let mut command = Command::new("ffmpeg");
     command
         .arg("-y")
@@ -32,25 +19,29 @@ pub async fn transmux_to_hls_segments(
         .arg("-map")
         .arg("0:v:0?")
         .arg("-map")
-        .arg("0:a:0?")
+        .arg("0:a?")
         .arg("-map")
-        .arg("0:s:0?")
-        .arg("-c")
+        .arg("0:s?")
+        .arg("-c:v")
         .arg("copy")
+        .arg("-c:a")
+        .arg("copy")
+        .arg("-c:s")
+        .arg("webvtt")
         .arg("-f")
-        .arg("segment")
-        .arg("-segment_time")
+        .arg("hls")
+        .arg("-hls_time")
         .arg(config.segment_duration_seconds.to_string())
-        .arg("-segment_format")
-        .arg("mpegts")
-        .arg("-segment_list_size")
-        .arg("0")
-        .arg(&segment_filename_str)
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped());
+        .arg("-hls_playlist_type")
+        .arg("vod")
+        .arg("-hls_flags")
+        .arg("single_file")
+        .arg("-hls_segment_filename")
+        .arg(output_dir.join("video.ts").to_str().unwrap())
+        .arg(output_dir.join("video.m3u8"));
 
     let command_string = format!(
-        "Executing FFmpeg: {} {}",
+        "Executing FFmpeg Segments: {} {}",
         command.as_std().get_program().to_string_lossy(),
         command
             .as_std()
@@ -59,9 +50,9 @@ pub async fn transmux_to_hls_segments(
             .collect::<Vec<_>>()
             .join(" ")
     );
-    debug_log!(HLS_STREAM_LOGGER_DOMAIN, command_string);
+    info_log!(HLS_STREAM_LOGGER_DOMAIN, "{}", command_string);
 
-    let child = command.spawn().map_err(|e| e.to_string())?;
+    let child = command.spawn().map_err(|e| format!("Failed to execute ffmpeg. Is it installed and in your PATH? Error: {}", e))?;
 
     Ok(child)
 }

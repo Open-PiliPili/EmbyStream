@@ -73,12 +73,8 @@ impl HlsManager {
             }
         }
 
-        if let Err(e) = playlist::generate_m3u8_playlist(
-            original_path,
-            &output_dir,
-            &self.config,
-        )
-        .await
+        if let Err(e) =
+            playlist::generate_m3u8_playlist(original_path, &output_dir).await
         {
             error_log!(
                 HLS_STREAM_LOGGER_DOMAIN,
