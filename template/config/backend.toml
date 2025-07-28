@@ -83,7 +83,7 @@ ssl_key_file = ""
 # Frontend web server configuration
 listen_port = 60001  # Port for the frontend web interface, option
 
-[Frontend.PathRewrite]
+[[Frontend.PathRewrite]]
 enable = false
 pattern = ""
 replacement = ""
@@ -103,7 +103,7 @@ path = "stream"                # Path component for stream URLs
 port = "443"                   # HTTPS port for stream service
 proxy_mode = "proxy"           # Backend proxy mode for media streaming (options: "proxy", "redirect")
 
-[Backend.PathRewrite]
+[[Backend.PathRewrite]]
 enable = false                 # Set to true to enable this feature.
 pattern = ""                   # The regex pattern to search for.
 replacement = ""               # The replacement string. Use $1 for the first captured group.

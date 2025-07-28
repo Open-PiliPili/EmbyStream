@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{borrow::Cow, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use hyper::{HeaderMap, StatusCode, Uri, header};
@@ -22,7 +22,7 @@ use crate::{
     network::CurlPlugin,
     sign::{Sign, SignParams},
     system::SystemInfo,
-    util::{PathRewriter, StringUtil, UriExt},
+    util::{StringUtil, UriExt},
 };
 
 #[async_trait]
@@ -132,31 +132,36 @@ impl AppStreamService {
     }
 
     async fn rewrite_uri_if_needed(&self, uri: Uri) -> Uri {
-        let config = self.get_backend_config().await;
-        let uri_str = Uri::to_path_or_url_string(&uri);
-        let path_rewrite = config.backend.path_rewrite.clone();
+        let original_uri_str = Uri::to_path_or_url_string(&uri);
+        let path_rewrites = self.state.get_backend_path_rewrite_cache().await;
 
-        if !path_rewrite.is_need_rewrite(&uri_str) {
+        if path_rewrites.is_empty() {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
-                "Backend path rewriting is disabled. Skipping step."
+                "Backend path rewriting is empty. Skipping step."
             );
             return uri;
         }
 
         debug_log!(STREAM_LOGGER_DOMAIN, "Starting backend path rewrite.");
 
-        let rewriter =
-            PathRewriter::new(&path_rewrite.pattern, &path_rewrite.replacement);
+        let mut current_uri_str: Cow<str> = Cow::Borrowed(&original_uri_str);
+        for path_rewrite in path_rewrites.iter().rev() {
+            if !path_rewrite.enable {
+                continue;
+            }
+            current_uri_str =
+                path_rewrite.rewrite(&current_uri_str).await.into();
+        }
 
-        let new_uri_str = rewriter.rewrite(&uri_str).await;
         debug_log!(
             STREAM_LOGGER_DOMAIN,
             "Backend path rewrite completed. URI before: {:?}, URI after: {:?}",
             uri,
-            new_uri_str,
+            current_uri_str
         );
-        Uri::from_path_or_url(new_uri_str).unwrap_or(uri)
+
+        Uri::from_path_or_url(&current_uri_str).unwrap_or(uri)
     }
 
     async fn fetch_remote_uri_if_openlist(

@@ -5,10 +5,13 @@ use tokio::sync::{OnceCell, RwLock as TokioRwLock};
 use crate::{
     cache::{GeneralCache, MetadataCache},
     config::core::Config,
+    util::path_rewriter::PathRewriter,
 };
 
 pub struct AppState {
     config: TokioRwLock<Config>,
+    frontend_path_rewrite_cache: OnceCell<Vec<PathRewriter>>,
+    backend_path_rewrite_cache: OnceCell<Vec<PathRewriter>>,
     metadata_cache: OnceCell<MetadataCache>,
     encrypt_cache: OnceCell<GeneralCache>,
     decrypt_cache: OnceCell<GeneralCache>,
@@ -21,6 +24,8 @@ impl AppState {
     pub async fn new(config: Config) -> Self {
         Self {
             config: TokioRwLock::new(config),
+            frontend_path_rewrite_cache: OnceCell::new(),
+            backend_path_rewrite_cache: OnceCell::new(),
             metadata_cache: OnceCell::new(),
             encrypt_cache: OnceCell::new(),
             decrypt_cache: OnceCell::new(),
@@ -41,6 +46,54 @@ impl AppState {
             "high" => (512, 60 * 60 * 6),
             _ => (512, 60 * 60 * 4),
         }
+    }
+
+    pub async fn get_frontend_path_rewrite_cache(&self) -> &Vec<PathRewriter> {
+        let config = self.get_config().await;
+        self.frontend_path_rewrite_cache
+            .get_or_init(|| async move {
+                let frontend_config = match &config.frontend {
+                    Some(config) => config,
+                    None => return vec![],
+                };
+                frontend_config
+                    .clone()
+                    .path_rewrites
+                    .into_iter()
+                    .map(|path_rewrite| {
+                        PathRewriter::new(
+                            path_rewrite.enable,
+                            &path_rewrite.pattern,
+                            &path_rewrite.replacement,
+                        )
+                    })
+                    .collect()
+            })
+            .await
+    }
+
+    pub async fn get_backend_path_rewrite_cache(&self) -> &Vec<PathRewriter> {
+        let config = self.get_config().await;
+        self.backend_path_rewrite_cache
+            .get_or_init(|| async move {
+                let backend_config = match &config.backend {
+                    Some(config) => config,
+                    None => return vec![],
+                };
+                backend_config
+                    .clone()
+                    .path_rewrites
+                    .into_iter()
+                    .map(|path_rewrite| {
+                        PathRewriter::new(
+                            path_rewrite.enable,
+                            &path_rewrite.pattern,
+                            &path_rewrite.replacement,
+                        )
+                    })
+                    .collect()
+            })
+            .await
     }
 
     pub async fn get_metadata_cache(&self) -> &MetadataCache {

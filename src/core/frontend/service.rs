@@ -1,9 +1,3 @@
-use std::{
-    path::Path,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
 use async_trait::async_trait;
 use form_urlencoded;
 use hyper::{
@@ -11,6 +5,12 @@ use hyper::{
     header::{self, HeaderMap},
 };
 use reqwest::Url;
+use std::borrow::Cow;
+use std::{
+    path::Path,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tokio::fs::{self as TokioFS, metadata as TokioMetadata};
 use tokio::sync::OnceCell;
 
@@ -24,7 +24,7 @@ use crate::{
     },
     crypto::{Crypto, CryptoInput, CryptoOperation, CryptoOutput},
     network::CurlPlugin,
-    util::{PathRewriter, StringUtil, UriExt, UriExtError},
+    util::{StringUtil, UriExt, UriExtError},
 };
 
 const MAX_STRM_FILE_SIZE: u64 = 1024 * 1024;
@@ -315,17 +315,40 @@ impl AppForwardService {
     }
 
     async fn rewrite_if_needed(&self, path: &str) -> String {
-        let config = self.get_forward_config().await;
-        if !config.path_rewrite.is_need_rewrite(path) {
-            return path.to_string();
+        let path_rewrites = self.state.get_frontend_path_rewrite_cache().await;
+
+        if path_rewrites.is_empty() {
+            debug_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "Frontend path rewriting is empty. Skipping step."
+            );
+            return path.into();
         }
 
-        let rewriter = PathRewriter::new(
-            &config.path_rewrite.pattern,
-            &config.path_rewrite.replacement,
+        debug_log!(FORWARD_LOGGER_DOMAIN, "Starting frontend path rewrite.");
+
+        let mut current_uri_str: Cow<str> = Cow::Borrowed(path);
+        for path_rewrite in path_rewrites.iter().rev() {
+            if !path_rewrite.enable {
+                continue;
+            }
+            current_uri_str =
+                path_rewrite.rewrite(&current_uri_str).await.into();
+        }
+
+        let new_uri_str = current_uri_str.into_owned();
+
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Frontend path rewrite completed. URI before: {:?}, URI after: {:?}",
+            path,
+            new_uri_str
         );
 
-        rewriter.rewrite(path).await
+        match Uri::from_path_or_url(&new_uri_str) {
+            Ok(_) => new_uri_str,
+            Err(_) => path.into(),
+        }
     }
 
     fn build_redirect_info(
@@ -382,9 +405,6 @@ impl AppForwardService {
             self.config
                 .get_or_init(|| async {
                     let config = self.state.get_config().await;
-                    let frontend = config.frontend.as_ref().expect(
-                        "Attempted to access forward config, but backend is not configured",
-                    );
                     let backend = config.backend.as_ref().expect(
                         "Attempted to access backend config, but backend is not configured",
                     );
@@ -396,7 +416,6 @@ impl AppForwardService {
                         crypto_iv: config.general.encipher_iv.clone(),
                         emby_server_url: config.emby.get_uri().to_string(),
                         emby_api_key: config.emby.token.to_string(),
-                        path_rewrite: frontend.path_rewrite.clone(),
                     })
                 })
                 .await;

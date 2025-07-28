@@ -14,7 +14,7 @@ pub struct Backend {
     pub port: String,
     pub proxy_mode: String,
     #[serde(default, rename = "PathRewrite")]
-    pub path_rewrite: PathRewriteConfig,
+    pub path_rewrites: Vec<PathRewriteConfig>,
     #[serde(default, rename = "AntiReverseProxy")]
     pub anti_reverse_proxy: AntiReverseProxyConfig,
 }

@@ -5,14 +5,16 @@ use crate::{PATH_REWRITER_LOGGER_DOMAIN, error_log};
 
 #[derive(Clone, Debug)]
 pub struct PathRewriter {
+    pub enable: bool,
     pattern: String,
     replacement: String,
     regex: OnceCell<Regex>,
 }
 
 impl PathRewriter {
-    pub fn new(pattern: &str, replacement: &str) -> Self {
+    pub fn new(enable: bool, pattern: &str, replacement: &str) -> Self {
         Self {
+            enable,
             pattern: pattern.to_string(),
             replacement: replacement.to_string(),
             regex: OnceCell::new(),

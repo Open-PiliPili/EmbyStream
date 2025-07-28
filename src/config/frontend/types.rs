@@ -6,7 +6,7 @@ use crate::config::types::{AntiReverseProxyConfig, PathRewriteConfig};
 pub struct Frontend {
     pub listen_port: u16,
     #[serde(default, rename = "PathRewrite")]
-    pub path_rewrite: PathRewriteConfig,
+    pub path_rewrites: Vec<PathRewriteConfig>,
     #[serde(default, rename = "AntiReverseProxy")]
     pub anti_reverse_proxy: AntiReverseProxyConfig,
 }

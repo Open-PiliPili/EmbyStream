@@ -89,10 +89,39 @@ ssl_key_file = "ssl.key"
 # Frontend web server configuration
 listen_port = 60001  # Port for the frontend web interface
 
-[Frontend.PathRewrite]
+# ===================================================================
+# Frontend Path Rewrite Rules
+# ===================================================================
+#
+# You can define one or more rewrite rules for incoming request paths.
+# Rules are processed sequentially in the order they appear in this file.
+# The first rule that matches a path will be applied, giving topmost rules the highest priority.
+#
+# Each rule must be defined in a separate [[Frontend.PathRewrite]] block.
+# To add a new rule, simply copy an entire [[...]] block below, paste it
+# at the end, and modify its values.
+#
+# --- Rule 1: Example - Proxy all requests to a CDN ---
+# Description: Rewrites a path like "/path/video.mp4" to "https://my-cdn.com/path/video.mp4"
+[[Frontend.PathRewrite]]
+enable = true                 # Set to true to enable this rule.
+pattern = "^(/.*)$"           # The regex pattern to search for.
+replacement = "https://my-cdn.com$1" # The replacement string. Use $1 for the first captured group.
+
+# --- Rule 2: Example - Remove a specific base path ---
+# Description: Rewrites "/media/movies/video.mp4" to "/movies/video.mp4".
+# Note: This rule is currently disabled (enable = false).
+[[Frontend.PathRewrite]]
 enable = false
-pattern = ""
-replacement = ""
+pattern = "^/media(/.*)$"
+replacement = "$1"
+
+# --- Rule 3: Example - Map one API path to another ---
+# Description: Rewrites "/stream/file.mkv" to "/proxy/file.mkv".
+[[Frontend.PathRewrite]]
+enable = true
+pattern = "^/stream(/.*)$"
+replacement = "/proxy$1"
 
 # Backend-specific configurations
 # Only configure the section matching your chosen backend_type
@@ -105,22 +134,39 @@ path = "stream"                # Path component for stream URLs
 port = "443"                   # HTTPS port for stream service
 proxy_mode = "proxy"           # Backend proxy mode for media streaming (options: "proxy", "redirect")
 
-[Backend.PathRewrite]
-enable = false                 # Set to true to enable this feature.
-pattern = ""                   # The regex pattern to search for.
-replacement = ""               # The replacement string. Use $1 for the first captured group.
-# --- Examples ---
-# 1. Add a CDN host: /path/video.mp4 -> https://my-cdn.com/path/video.mp4
-#    pattern = "^(/.*)$"
-#    replacement = "https://my-cdn.com$1"
+# ===================================================================
+# Backend Path Rewrite Rules
+# ===================================================================
 #
-# 2. Remove a base path: /media/movies/video.mp4 -> /movies/video.mp4
-#    pattern = "^/media(/.*)$"
-#    replacement = "$1"
+# You can define one or more rewrite rules for incoming request paths.
+# Rules are processed sequentially in the order they appear in this file.
+# The first rule that matches a path will be applied, giving topmost rules the highest priority.
 #
-# 3. Replace a proxy path: /stream/video.mp4 -> /proxy/video.mp4
-#    pattern = "^/stream(/.*)$"
-#    replacement = "/proxy$1"
+# Each rule must be defined in a separate [[Frontend.PathRewrite]] block.
+# To add a new rule, simply copy an entire [[...]] block below, paste it
+# at the end, and modify its values.
+#
+# --- Rule 1: Example - Proxy all requests to a CDN ---
+# Description: Rewrites a path like "/path/video.mp4" to "https://my-cdn.com/path/video.mp4"
+[[Backend.PathRewrite]]
+enable = true                 # Set to true to enable this rule.
+pattern = "^(/.*)$"           # The regex pattern to search for.
+replacement = "https://my-cdn.com$1" # The replacement string. Use $1 for the first captured group.
+
+# --- Rule 2: Example - Remove a specific base path ---
+# Description: Rewrites "/media/movies/video.mp4" to "/movies/video.mp4".
+# Note: This rule is currently disabled (enable = false).
+[[Backend.PathRewrite]]
+enable = false
+pattern = "^/media(/.*)$"
+replacement = "$1"
+
+# --- Rule 3: Example - Map one API path to another ---
+# Description: Rewrites "/stream/file.mkv" to "/proxy/file.mkv".
+[[Backend.PathRewrite]]
+enable = true
+pattern = "^/stream(/.*)$"
+replacement = "/proxy$1"
 
 [Disk]
 # Disk backend configuration - for local or mounted storage
