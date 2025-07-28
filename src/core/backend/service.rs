@@ -84,7 +84,7 @@ impl AppStreamService {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "Routing to remote path {:?}",
-                Uri::to_path_or_url_string(&uri)
+                uri
             );
             Ok(Source::Remote {
                 uri,
