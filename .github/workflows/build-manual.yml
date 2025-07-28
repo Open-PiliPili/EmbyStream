@@ -40,6 +40,7 @@ jobs:
         run: |
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
           echo "CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CFLAGS_aarch64_unknown_linux_musl=-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0" >> $GITHUB_ENV
 
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }}
