@@ -394,8 +394,8 @@ impl AppForwardService {
                         backend_url: backend.uri().to_string(),
                         crypto_key: config.general.encipher_key.clone(),
                         crypto_iv: config.general.encipher_iv.clone(),
-                        emby_server_url: config.general.emby_uri().to_string(),
-                        emby_api_key: config.general.emby_api_key.to_string(),
+                        emby_server_url: config.emby.get_uri().to_string(),
+                        emby_api_key: config.emby.token.to_string(),
                         path_rewrite: frontend.path_rewrite.clone(),
                     })
                 })

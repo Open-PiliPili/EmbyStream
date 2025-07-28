@@ -1,4 +1,4 @@
-use std::{error::Error, str::FromStr, sync::Arc};
+use std::{error::Error, fs, path::Path, str::FromStr, sync::Arc};
 
 use clap::Parser;
 use figlet_rs::FIGfont;
@@ -40,7 +40,7 @@ async fn run_app(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     setup_figlet();
     let config = setup_load_config(run_args);
-    setup_logger(&config);
+    setup_logger(&config)?;
     setup_print_info(&config);
 
     let app_state = setup_cache(&config).await;
@@ -82,7 +82,7 @@ fn setup_print_info(config: &Config) {
     info_log!(
         INIT_LOGGER_DOMAIN,
         "Log level: {}",
-        config.general.log_level.as_str()
+        config.log.level.as_str()
     );
     info_log!(
         INIT_LOGGER_DOMAIN,
@@ -113,10 +113,18 @@ fn setup_load_config(run_args: &RunArgs) -> Config {
     }
 }
 
-fn setup_logger(config: &Config) {
-    let level =
-        LogLevel::from_str(&config.general.log_level).unwrap_or(LogLevel::Info);
-    Logger::builder().with_level(level).build();
+fn setup_logger(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let log_path = Path::new(&config.log.root_path);
+    fs::create_dir_all(log_path)?;
+
+    let level = LogLevel::from_str(&config.log.level).unwrap_or(LogLevel::Info);
+    Logger::builder()
+        .with_level(level)
+        .with_directory(&config.log.root_path)
+        .with_file_prefix(&config.log.prefix)
+        .build();
+
+    Ok(())
 }
 
 async fn setup_cache(config: &Config) -> Arc<AppState> {

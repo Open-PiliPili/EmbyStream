@@ -1,10 +1,19 @@
 # Application Configuration File
 # All values in this file are case-sensitive
+[Log]
+# Sets the application's logging verbosity.
+# Available options (from least to most verbose): "error", "warn", "info", "debug", "trace"
+level = "info"
+
+# The prefix of log files
+/// Returns a date string formatted as "prefix-YYYY-MM-DD" if a prefix is provided (e.g., "myapp-2025-07-28"),
+/// otherwise defaults to "YYYY-MM-DD".
+prefix = ""
+
+# Specifies the directory where log files will be stored.
+root_path = "/Users/hsuyelin/Downloads/logs"
 
 [General]
-# Application log level (options: "trace", "debug", "info", "warn", "error")
-log_level = "info"
-
 # Memory usage profile (options: "low", "middle", "high")
 # - low: Minimal memory usage, reduced performance
 # - middle: Balanced memory and performance (recommended)
@@ -36,10 +45,15 @@ encipher_key = "change_this_to_a_secure_key"
 # WARNING: Change this from the default value in production
 encipher_iv = "change_this_to_a_secure_iv"
 
+[Emby]
 # Emby server configuration
 emby_url = "http://127.0.0.1"  # Base URL of your Emby server
 emby_port = "8096"             # Port for Emby server
 emby_api_key = ""              # API key for Emby (leave empty if not using)
+
+[Transcode]
+# Defines the working directory for temporary storage of transcoded video segments.
+root_path = "/Users/hsuyelin/Downloads/embystream/transcode"
 
 [UserAgent]
 # UserAgent filtering mode (options: "allow", "deny", "none")

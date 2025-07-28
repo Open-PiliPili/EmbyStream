@@ -18,7 +18,8 @@ use super::{
     types::RawConfig,
 };
 use crate::cli::RunArgs;
-use crate::{CONFIG_LOGGER_DOMAIN, error_log, info_log};
+use crate::config::general::{Log, types::Emby};
+use crate::{CONFIG_LOGGER_DOMAIN, config_error_log, config_info_log};
 
 const CONFIG_DIR_NAME: &str = "embystream";
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -33,7 +34,9 @@ const ROOT_CONFIG_PATH: &str = "/root/.config/embystream";
 pub struct Config {
     #[serde(skip)]
     pub path: PathBuf,
+    pub log: Log,
     pub general: General,
+    pub emby: Emby,
     pub user_agent: UserAgent,
     pub frontend: Option<Frontend>,
     pub backend: Option<Backend>,
@@ -50,16 +53,25 @@ impl Config {
 
         if !config_path.exists() {
             Self::handle_missing_config(&config_path)?;
-            unreachable!();
+            process::exit(1);
         }
 
-        info_log!(
+        config_info_log!(
             CONFIG_LOGGER_DOMAIN,
             "Loading config file from: {}",
             config_path.display()
         );
 
-        let mut config = Self::load_from_path(&config_path)?;
+        let mut config =
+            Self::load_from_path(&config_path).unwrap_or_else(|e| {
+                config_error_log!(
+                    CONFIG_LOGGER_DOMAIN,
+                    "Failed to load or parse config file at '{}': {}",
+                    config_path.display(),
+                    e
+                );
+                process::exit(1);
+            });
 
         if let Some(cert_path) = &args.ssl_cert_file {
             config.http2.ssl_cert_file =
@@ -154,7 +166,9 @@ impl Config {
 
         Ok(Config {
             path: path.to_path_buf(),
+            log: raw_config.log,
             general: raw_config.general,
+            emby: raw_config.emby,
             user_agent: raw_config.user_agent,
             frontend: raw_config.frontend,
             backend: raw_config.backend,
@@ -202,7 +216,7 @@ impl Config {
         let template_path = Path::new(TEMPLATE_CONFIG_PATH);
 
         if !template_path.exists() {
-            error_log!(
+            config_error_log!(
                 CONFIG_LOGGER_DOMAIN,
                 "Missing template config file at {}",
                 template_path.display()
@@ -226,13 +240,13 @@ impl Config {
         fs::copy(template_path, target_path)
             .map_err(ConfigError::CopyTemplate)?;
 
-        info_log!(
+        config_info_log!(
             CONFIG_LOGGER_DOMAIN,
             "Created new config file at {} from template",
             target_path.display()
         );
 
-        error_log!(
+        config_error_log!(
             CONFIG_LOGGER_DOMAIN,
             "Please configure the new file and restart the application"
         );
