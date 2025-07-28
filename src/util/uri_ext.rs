@@ -1,7 +1,8 @@
 use std::{fs, io, path::Path};
 
 use hyper::Uri;
-use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
+use percent_encoding::{NON_ALPHANUMERIC, percent_encode, utf8_percent_encode};
+use reqwest::Url;
 use thiserror::Error;
 
 const PSEUDO_BASE_URI: &str = "http://local-file.invalid";
@@ -26,7 +27,31 @@ impl UriExt for Uri {
         let path_str = path.as_ref();
 
         if path_str.starts_with("http://") || path_str.starts_with("https://") {
-            return path_str.parse().map_err(|_| UriExtError::InvalidUri);
+            let mut url = match Url::parse(path_str) {
+                Ok(url) => url,
+                Err(_) => return Err(UriExtError::InvalidUri),
+            };
+
+            let new_path = url
+                .path_segments()
+                .map(|segments| {
+                    "/".to_string()
+                        + &segments
+                            .map(|s| {
+                                utf8_percent_encode(s, NON_ALPHANUMERIC)
+                                    .to_string()
+                            })
+                            .collect::<Vec<_>>()
+                            .join("/")
+                })
+                .unwrap_or_else(|| "/".to_string());
+
+            url.set_path(&new_path);
+
+            return url
+                .as_str()
+                .parse::<Uri>()
+                .map_err(|_| UriExtError::InvalidUri);
         }
 
         let path = Path::new(path_str);
@@ -89,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_to_pathbuf() {
-        let path = "****";
+        let path = "http://139.155.132.184:19798/static/http/139.155.132.184:19798/False//115open/Media/动画-特摄/日本动画/更衣人偶坠入爱河 (2022)/Season 1/更衣人偶坠入爱河 S01E09 1080p.CMCT.mkv";
 
         let uri = Uri::from_path_or_url(path);
         if let Ok(uri) = uri {
