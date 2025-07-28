@@ -11,14 +11,16 @@ env:
 jobs:
   build-and-package:
     name: Build & Package for ${{ matrix.target_name }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
           - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
             target_name: amd64
             asset_name: embystream-amd64-linux.tar.gz
           - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
             target_name: aarch64
             asset_name: embystream-aarch64-linux.tar.gz
 
@@ -32,19 +34,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y musl-tools
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-musl" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
-
-      - name: Configure cross-compiler for aarch64
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-        run: |
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CFLAGS_aarch64_unknown_linux_musl=-std=gnu11 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0" >> $GITHUB_ENV
+        run: sudo apt-get update -y && sudo apt-get install -y musl-tools
 
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }}
