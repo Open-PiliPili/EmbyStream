@@ -87,7 +87,7 @@ docker run -d \
   --log-opt max-size=50m \
   --log-opt max-file=3 \
   --restart unless-stopped \
-  embystream
+  openpilipili/embystream:latest
 ```
 
 ### With docker-compose

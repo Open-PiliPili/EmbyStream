@@ -12,7 +12,7 @@ level = "info"
 prefix = ""
 
 # Specifies the directory where log files will be stored.
-root_path = "/Users/hsuyelin/Downloads/logs"
+root_path = "/mnt/stream/logs"
 
 [General]
 # Memory usage profile (options: "low", "middle", "high")
