@@ -6,6 +6,11 @@
 # Available options (from least to most verbose): "error", "warn", "info", "debug", "trace"
 level = "info"
 
+# The prefix of log files
+# Returns a date string formatted as "prefix-YYYY-MM-DD" if a prefix is provided (e.g., "myapp-2025-07-28"),
+# otherwise defaults to "YYYY-MM-DD".
+prefix = ""
+
 # Specifies the directory where log files will be stored.
 root_path = "/var/logs/embystream"
 
