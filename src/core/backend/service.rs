@@ -137,14 +137,26 @@ impl AppStreamService {
         let path_rewrite = config.backend.path_rewrite.clone();
 
         if !path_rewrite.is_need_rewrite(&uri_str) {
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "Backend path rewriting is disabled. Skipping step."
+            );
             return uri;
         }
+
+        debug_log!(STREAM_LOGGER_DOMAIN, "Starting backend path rewrite.");
 
         let rewriter =
             PathRewriter::new(&path_rewrite.pattern, &path_rewrite.replacement);
 
         let new_uri_str = rewriter.rewrite(&uri_str).await;
-        new_uri_str.parse().unwrap_or(uri)
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "Backend path rewrite completed. URI before: {:?}, URI after: {:?}",
+            uri,
+            new_uri_str,
+        );
+        Uri::from_path_or_url(new_uri_str).unwrap_or(uri)
     }
 
     async fn fetch_remote_uri_if_openlist(
