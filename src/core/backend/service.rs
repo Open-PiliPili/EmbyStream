@@ -72,7 +72,7 @@ impl AppStreamService {
         uri = self.rewrite_uri_if_needed(uri).await;
         uri = self.fetch_remote_uri_if_openlist(&uri).await?;
 
-        if sign.is_local() {
+        if Uri::is_local(&uri) {
             let local_path = PathBuf::from(Uri::to_path_or_url_string(&uri));
             debug_log!(
                 STREAM_LOGGER_DOMAIN,

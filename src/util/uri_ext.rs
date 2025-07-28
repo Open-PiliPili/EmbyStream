@@ -20,6 +20,8 @@ pub enum UriExtError {
 pub trait UriExt {
     fn from_path_or_url<S: AsRef<str>>(path: S) -> Result<Uri, UriExtError>;
     fn to_path_or_url_string(&self) -> String;
+
+    fn is_local(&self) -> bool;
 }
 
 impl UriExt for Uri {
@@ -106,6 +108,14 @@ impl UriExt for Uri {
             })
             .unwrap_or_else(|| self.to_string())
     }
+
+    fn is_local(&self) -> bool {
+        if let Some(scheme) = self.host() {
+            return scheme.to_lowercase() == PSEUDO_BASE_URI;
+        }
+
+        self.host().is_none() && self.path().starts_with('/')
+    }
 }
 
 #[cfg(test)]
@@ -118,9 +128,18 @@ mod tests {
 
         let uri = Uri::from_path_or_url(path);
         if let Ok(uri) = uri {
-            println!("{:?}", uri);
+            println!("uri -> {:?}", uri);
         } else {
-            println!("{:?}", uri.unwrap_err());
+            println!("uri -> {:?}", uri.unwrap_err());
         }
+    }
+
+    #[test]
+    fn test_is_local() {
+        let path = "****";
+
+        let uri = Uri::from_path_or_url(path);
+        let is_local = Uri::is_local(&uri.unwrap());
+        println!("is_local -> {:?}", is_local);
     }
 }
