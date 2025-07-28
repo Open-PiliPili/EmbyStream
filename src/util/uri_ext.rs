@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_to_pathbuf() {
-        let path = "http://139.155.132.184:19798/static/http/139.155.132.184:19798/False//115open/Media/动画-特摄/日本动画/更衣人偶坠入爱河 (2022)/Season 1/更衣人偶坠入爱河 S01E09 1080p.CMCT.mkv";
+        let path = "****";
 
         let uri = Uri::from_path_or_url(path);
         if let Ok(uri) = uri {
