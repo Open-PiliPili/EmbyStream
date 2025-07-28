@@ -87,7 +87,7 @@ impl ReaderStream {
         if self.content_range.start > 0 {
             4 * MB
         } else {
-            256 * KB
+            2 * MB
         }
     }
 
