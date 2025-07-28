@@ -11,15 +11,15 @@ docker run -d \
   --log-opt max-size=50m \
   --log-opt max-file=3 \
   --restart unless-stopped \
-  embystream
+  openpilipili/embystream:latest
 
-命令解释:
--d: 后台运行容器
---name: 设置容器名称，如果环境变量 CONTAINER_NAME 未设置，则默认为 embystream
--p: 映射端口
--e: 设置环境变量 (时区, 用户ID, 组ID, 文件权限掩码)
--v: 挂载卷，将您的本地配置文件映射到容器内
---privileged: 给予容器特权模式
---log-opt: 设置日志驱动和选项
---restart: 设置容器的重启策略
-embystream: 运行的镜像名称
+Command Explanation:
+-d: Run the container in detached (background) mode
+--name: Set the container name; if the environment variable CONTAINER_NAME is not set, defaults to 'embystream'
+-p: Map ports
+-e: Set environment variables (timezone, user ID, group ID, file permission mask)
+-v: Mount volume; map your local configuration file into the container
+--privileged: Grant the container privileged mode
+--log-opt: Configure log driver and its options
+--restart: Set the container's restart policy
+embystream: The name of the image to run
