@@ -60,17 +60,16 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
 
 3. Copy the compiled binary to your system's PATH:
 
-    - **Linux:**
+    **Linux:**
+    ```shell
+    cp ./target/release/embystream /usr/bin
+    ```
 
-      ```shell
-      cp ./target/release/embystream /usr/bin
-      ```
+    **macOS:**
 
-    - **macOS:**
-
-      ```shell
-      cp ./target/release/embystream /usr/local/bin
-      ```
+    ```shell
+    cp ./target/release/embystream /usr/local/bin
+    ```
 
 ### With Docker Run
 
@@ -93,7 +92,7 @@ docker run -d \
 
 ### With docker-compose
 
-Reference: [docker-compose.yam](https://raw.githubusercontent.com/Open-PiliPili/EmbyStream/main/template/docker/docker-compose.yaml)
+Reference: [docker-compose.yaml](https://raw.githubusercontent.com/Open-PiliPili/EmbyStream/main/template/docker/docker-compose.yaml)
 ```shell
 docker-compose pull && docker-compose up -d
 ```
