@@ -1,4 +1,5 @@
 pub mod chain;
+pub mod client_filter;
 pub mod context;
 pub mod core;
 pub mod cors;
@@ -8,7 +9,6 @@ pub mod options;
 pub mod response;
 pub mod reverse_proxy_filter;
 pub mod svc;
-pub mod ua_filter;
 
 pub use chain::{Handler as MiddlewareHandler, Middleware, Next};
 pub use context::Context as MiddlewareContext;

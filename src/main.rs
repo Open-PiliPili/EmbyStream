@@ -16,8 +16,8 @@ use embystream::{
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
         CorsMiddleware, LoggerMiddleware, OptionsMiddleware, chain::Handler,
-        context::Context, core::Gateway, response::ResponseBuilder,
-        ua_filter::UserAgentFilterMiddleware,
+        client_filter::ClientAgentFilterMiddleware, context::Context,
+        core::Gateway, response::ResponseBuilder,
     },
     logger::{LogLevel, Logger},
     system::SystemInfo,
@@ -153,7 +153,7 @@ async fn setup_frontend_gateway(
 
     let mut gateway = Gateway::new(&addr)
         .add_middleware(Box::new(LoggerMiddleware))
-        .add_middleware(Box::new(UserAgentFilterMiddleware::new(
+        .add_middleware(Box::new(ClientAgentFilterMiddleware::new(
             app_state.clone(),
         )))
         .add_middleware(Box::new(ReverseProxyFilterMiddleware::new(
@@ -199,7 +199,7 @@ async fn setup_backend_gateway(
     let mut gateway = Gateway::new(&addr)
         .with_tls(config.get_ssl_cert_path(), config.get_ssl_key_path())
         .add_middleware(Box::new(LoggerMiddleware))
-        .add_middleware(Box::new(UserAgentFilterMiddleware::new(
+        .add_middleware(Box::new(ClientAgentFilterMiddleware::new(
             app_state.clone(),
         )))
         .add_middleware(Box::new(ReverseProxyFilterMiddleware::new(

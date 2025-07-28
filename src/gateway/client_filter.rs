@@ -4,7 +4,9 @@ use async_trait::async_trait;
 use hyper::{Response, StatusCode, body::Incoming, header};
 use tokio::sync::OnceCell;
 
-use crate::{AppState, USER_AGENT_FILTER_LOGGER_DOMAIN, debug_log, error_log};
+use crate::{
+    AppState, CLIENT_FILTER_LOGGER_DOMAIN, debug_log, error_log, info_log,
+};
 use crate::{
     config::general::UserAgent,
     gateway::{
@@ -14,13 +16,15 @@ use crate::{
     },
 };
 
+const HEADER_CLIENT_KEY: &str = "Client";
+
 #[derive(Clone)]
-pub struct UserAgentFilterMiddleware {
+pub struct ClientAgentFilterMiddleware {
     pub state: Arc<AppState>,
     pub config: OnceCell<Arc<UserAgent>>,
 }
 
-impl UserAgentFilterMiddleware {
+impl ClientAgentFilterMiddleware {
     pub fn new(state: Arc<AppState>) -> Self {
         Self {
             state,
@@ -28,25 +32,25 @@ impl UserAgentFilterMiddleware {
         }
     }
 
-    async fn is_ua_allowed(&self, ua: &str) -> bool {
-        if ua.is_empty() {
+    async fn is_client_allowed(&self, client: &str) -> bool {
+        if client.is_empty() {
             return false;
         }
 
-        let ua_config = self.get_ua_config().await;
-        let ua_lower = ua.to_lowercase();
+        let client_config = self.get_client_config().await;
+        let client_lower = client.to_lowercase();
 
-        match ua_config.is_allow_mode() {
+        match client_config.is_allow_mode() {
             true => {
-                ua_config.allow_ua.is_empty()
-                    || ua_config.allow_ua.iter().any(|rule| {
-                        self.is_ua_matching(&ua_lower, &rule.to_lowercase())
+                client_config.allow_ua.is_empty()
+                    || client_config.allow_ua.iter().any(|rule| {
+                        self.is_ua_matching(&client_lower, &rule.to_lowercase())
                     })
             }
             false => {
-                ua_config.deny_ua.is_empty()
-                    || !ua_config.deny_ua.iter().any(|rule| {
-                        self.is_ua_matching(&ua_lower, &rule.to_lowercase())
+                client_config.deny_ua.is_empty()
+                    || !client_config.deny_ua.iter().any(|rule| {
+                        self.is_ua_matching(&client_lower, &rule.to_lowercase())
                     })
             }
         }
@@ -63,7 +67,7 @@ impl UserAgentFilterMiddleware {
         }
     }
 
-    async fn get_ua_config(&self) -> Arc<UserAgent> {
+    async fn get_client_config(&self) -> Arc<UserAgent> {
         let config_arc = self
             .config
             .get_or_init(|| async {
@@ -77,7 +81,7 @@ impl UserAgentFilterMiddleware {
 }
 
 #[async_trait]
-impl Middleware for UserAgentFilterMiddleware {
+impl Middleware for ClientAgentFilterMiddleware {
     async fn handle(
         &self,
         ctx: Context,
@@ -85,27 +89,25 @@ impl Middleware for UserAgentFilterMiddleware {
         next: Next,
     ) -> Response<BoxBodyType> {
         debug_log!(
-            USER_AGENT_FILTER_LOGGER_DOMAIN,
+            CLIENT_FILTER_LOGGER_DOMAIN,
             "Starting user agent filter middleware..."
         );
 
         let ua_lower = ctx
             .headers
-            .get(header::USER_AGENT)
+            .get(HEADER_CLIENT_KEY)
+            .or_else(|| ctx.headers.get(header::USER_AGENT))
             .and_then(|value| value.to_str().ok())
             .map(|s| s.to_lowercase());
 
         let ua = ua_lower.as_deref().unwrap_or("");
-        let is_allowed = self.is_ua_allowed(ua).await;
+        let is_allowed = self.is_client_allowed(ua).await;
 
         if is_allowed {
+            info_log!(CLIENT_FILTER_LOGGER_DOMAIN, "Allowed client: {}", ua);
             next(ctx, body).await
         } else {
-            error_log!(
-                USER_AGENT_FILTER_LOGGER_DOMAIN,
-                "Forbidden user-agent: {}",
-                ua
-            );
+            error_log!(CLIENT_FILTER_LOGGER_DOMAIN, "Forbidden client: {}", ua);
             ResponseBuilder::with_status_code(StatusCode::FORBIDDEN)
         }
     }
