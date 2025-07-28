@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    io,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -10,12 +9,10 @@ use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::{HeaderMap, StatusCode, header};
 use lazy_static::lazy_static;
-use tokio::fs::File as TokioFile;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
-use tokio_util::io::ReaderStream;
 
 use super::{
-    response::Response, result::Result as AppStreamResult, types::ContentRange,
+    read_stream::ReaderStream, response::Response,
+    result::Result as AppStreamResult, types::ContentRange,
 };
 use crate::cache::FileMetadata;
 use crate::{AppState, LOCAL_STREAMER_LOGGER_DOMAIN, error_log, info_log};
@@ -70,24 +67,8 @@ impl LocalStreamer {
             content_range,
         );
 
-        let mut file = TokioFile::open(path).await.map_err(|e| {
-            error_log!(
-                LOCAL_STREAMER_LOGGER_DOMAIN,
-                "Failed to open file {:?}: {}",
-                path,
-                e
-            );
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-        file.seek(io::SeekFrom::Start(content_range.start))
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-        let limited_reader = file.take(content_range.length());
-        let is_seek = status_code == StatusCode::PARTIAL_CONTENT;
-        let chunk_size = Self::get_chunk_size_for_streaming(is_seek);
-        let stream = ReaderStream::with_capacity(limited_reader, chunk_size)
+        let stream = ReaderStream::new(path, content_range)
+            .into_stream()
             .map_ok(Frame::data)
             .map_err(Into::into);
 
@@ -143,13 +124,6 @@ impl LocalStreamer {
             end,
             total_size,
         }
-    }
-
-    #[inline]
-    fn get_chunk_size_for_streaming(is_seek: bool) -> usize {
-        const KB: usize = 1024;
-        const MB: usize = 1024 * KB;
-        if is_seek { 4 * MB } else { 256 * KB }
     }
 }
 

@@ -1,5 +1,6 @@
 pub mod local_streamer;
 pub mod proxy_mode;
+pub mod read_stream;
 pub mod remote_streamer;
 pub mod response;
 pub mod result;
