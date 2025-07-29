@@ -328,7 +328,7 @@ impl AppForwardService {
         debug_log!(FORWARD_LOGGER_DOMAIN, "Starting frontend path rewrite.");
 
         let mut current_uri_str: Cow<str> = Cow::Borrowed(path);
-        for path_rewrite in path_rewrites.iter().rev() {
+        for path_rewrite in path_rewrites {
             if !path_rewrite.enable {
                 continue;
             }

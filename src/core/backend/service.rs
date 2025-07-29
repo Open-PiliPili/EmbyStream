@@ -146,7 +146,7 @@ impl AppStreamService {
         debug_log!(STREAM_LOGGER_DOMAIN, "Starting backend path rewrite.");
 
         let mut current_uri_str: Cow<str> = Cow::Borrowed(&original_uri_str);
-        for path_rewrite in path_rewrites.iter().rev() {
+        for path_rewrite in path_rewrites {
             if !path_rewrite.enable {
                 continue;
             }
