@@ -168,6 +168,15 @@ impl AppStreamService {
         &self,
         uri: &Uri,
     ) -> Result<Uri, AppStreamError> {
+        if !Uri::is_local(uri) {
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "OpenList mode enabled: skipping backend processing for remote URI: {:?}",
+                uri
+            );
+            return Ok(uri.clone());
+        }
+
         let cache = self.state.get_open_list_cache().await;
         if let Some(cached_uri) = cache.get(&self.open_list_cache_key(uri)) {
             debug_log!(
@@ -184,13 +193,20 @@ impl AppStreamService {
             _ => return Ok(uri.clone()),
         };
 
+        let path = Uri::to_path_or_url_string(&openlist_config.uri());
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "Open list processing path: {:?}",
+            path
+        );
+
         let openlist_client = ClientBuilder::<OpenListClient>::new()
             .with_plugin(CurlPlugin)
             .build();
 
         let result = openlist_client
             .fetch_file_path(
-                Uri::to_path_or_url_string(&openlist_config.uri()),
+                path,
                 &openlist_config.token,
                 Uri::to_path_or_url_string(uri),
             )
@@ -205,9 +221,21 @@ impl AppStreamService {
                 )?;
                 cache.insert(self.open_list_cache_key(uri), new_uri.clone());
 
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Successfully fetched Openlist url: {:?}",
+                    new_uri
+                );
+
                 Ok(new_uri)
             }
             Err(e) => {
+                error_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Failed to fetch Openlist url: {:?}",
+                    e
+                );
+
                 Err(AppStreamError::UnexpectedOpenListError(e.to_string()))
             }
         }
