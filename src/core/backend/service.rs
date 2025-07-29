@@ -321,6 +321,11 @@ impl AppStreamService {
         if let Some(user_agent) = user_agent {
             if !user_agent.is_empty() {
                 if let Ok(parsed_header) = user_agent.parse() {
+                    debug_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "Insert user agent {:?} to header",
+                        user_agent
+                    );
                     final_headers.insert(header::USER_AGENT, parsed_header);
                 }
             }
