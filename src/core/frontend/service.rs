@@ -366,7 +366,7 @@ impl AppForwardService {
             new_uri_str
         );
 
-        match Uri::from_path_or_url(&new_uri_str) {
+        match Uri::force_from_path_or_url(&new_uri_str) {
             Ok(_) => new_uri_str,
             Err(_) => path.into(),
         }

@@ -154,14 +154,17 @@ impl AppStreamService {
                 path_rewrite.rewrite(&current_uri_str).await.into();
         }
 
+        let current_uri = Uri::force_from_path_or_url(&current_uri_str)
+            .unwrap_or(uri.clone());
+
         debug_log!(
             STREAM_LOGGER_DOMAIN,
             "Backend path rewrite completed. URI before: {:?}, URI after: {:?}",
             uri,
-            current_uri_str
+            current_uri
         );
 
-        Uri::from_path_or_url(&current_uri_str).unwrap_or(uri)
+        current_uri
     }
 
     async fn fetch_remote_uri_if_openlist(
@@ -193,7 +196,7 @@ impl AppStreamService {
             _ => return Ok(uri.clone()),
         };
 
-        let path = Uri::to_path_or_url_string(&openlist_config.uri());
+        let path = Uri::to_path_or_url_string(uri);
         debug_log!(
             STREAM_LOGGER_DOMAIN,
             "Open list processing path: {:?}",
