@@ -15,7 +15,7 @@ use tokio::fs::{self as TokioFS, metadata as TokioMetadata};
 use tokio::sync::OnceCell;
 
 use super::types::{ForwardConfig, ForwardInfo, PathParams};
-use crate::{AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log};
+use crate::{AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
     client::{ClientBuilder, EmbyClient},
     core::{
@@ -442,6 +442,12 @@ impl ForwardService for AppForwardService {
                 );
                 StatusCode::BAD_REQUEST
             })?;
+
+        info_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Start handle request forward info: {:?}",
+            forward_info
+        );
 
         let remote_uri = self
             .get_signed_uri(&forward_info)
