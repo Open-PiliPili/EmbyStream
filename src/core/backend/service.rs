@@ -209,9 +209,9 @@ impl AppStreamService {
 
         let result = openlist_client
             .fetch_file_path(
-                path,
+                &openlist_config.uri(),
                 &openlist_config.token,
-                Uri::to_path_or_url_string(uri),
+                path,
             )
             .await;
 
