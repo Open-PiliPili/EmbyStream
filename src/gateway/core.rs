@@ -90,7 +90,7 @@ impl Gateway {
         aws_lc_rs::default_provider()
             .install_default()
             .map_err(|e| {
-                format!("Failed to install rustls crypto provider: {:?}", e)
+                format!("Failed to install rustls crypto provider: {e:?}")
             })?;
         Ok(())
     }
