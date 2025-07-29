@@ -15,7 +15,7 @@ use super::{
     frontend::Frontend,
     general::{General, StreamMode, UserAgent},
     http2::Http2,
-    types::RawConfig,
+    types::{FallbackConfig, RawConfig},
 };
 use crate::cli::RunArgs;
 use crate::config::general::{Log, types::Emby};
@@ -42,6 +42,7 @@ pub struct Config {
     pub backend: Option<Backend>,
     pub backend_config: Option<BackendConfig>,
     pub http2: Http2,
+    pub fallback: FallbackConfig,
 }
 
 impl Config {
@@ -174,6 +175,7 @@ impl Config {
             backend: raw_config.backend,
             backend_config,
             http2: raw_config.http2.unwrap_or_default(),
+            fallback: raw_config.fallback,
         })
     }
 

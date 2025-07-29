@@ -1,3 +1,10 @@
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 use async_trait::async_trait;
 use form_urlencoded;
 use hyper::{
@@ -5,12 +12,6 @@ use hyper::{
     header::{self, HeaderMap},
 };
 use reqwest::Url;
-use std::borrow::Cow;
-use std::{
-    path::Path,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
 use tokio::fs::{self as TokioFS, metadata as TokioMetadata};
 use tokio::sync::OnceCell;
 
@@ -211,15 +212,35 @@ impl AppForwardService {
         path = self.rewrite_if_needed(path.as_str()).await;
         debug_log!(FORWARD_LOGGER_DOMAIN, "Sign path: {:?}", path);
 
-        let uri: Uri = Uri::from_path_or_url(path).map_err(|e| match e {
-            UriExtError::FileNotFound(path) => {
-                AppForwardError::FileNotFound(path)
-            }
-            UriExtError::InvalidUri => AppForwardError::InvalidUri,
-            UriExtError::IoError(e) => AppForwardError::IoError(e),
-        })?;
-        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        let config = self.get_forward_config().await;
+        let uri = Uri::from_path_or_url(&path)
+            .or_else(|e| match e {
+                UriExtError::FileNotFound(original_path) => {
+                    if let Some(fallback_path) = &config.fallback_video_path {
+                        info_log!(
+                            FORWARD_LOGGER_DOMAIN,
+                            "File not found: '{}'. Using fallback: '{}'",
+                            original_path,
+                            fallback_path
+                        );
+                        Uri::from_path_or_url(fallback_path)
+                    } else {
+                        Err(UriExtError::FileNotFound(original_path))
+                    }
+                }
+                _ => Err(e),
+            })
+            .map_err(|e| match e {
+                UriExtError::FileNotFound(p) => {
+                    AppForwardError::FileNotFound(p)
+                }
+                UriExtError::InvalidUri => AppForwardError::InvalidUri,
+                UriExtError::IoError(io_err) => {
+                    AppForwardError::IoError(io_err)
+                }
+            })?;
 
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         let expired_at = now + self.get_forward_config().await.expired_seconds;
         let sign = Sign {
             uri: Some(uri.clone()),
@@ -408,6 +429,20 @@ impl AppForwardService {
                     let backend = config.backend.as_ref().expect(
                         "Attempted to access backend config, but backend is not configured",
                     );
+
+                    let fallback_video_path = Some(&config.fallback.video_missing_path)
+                        .filter(|p| !p.is_empty())
+                        .map(PathBuf::from)
+                        .map(|path| {
+                            if path.is_absolute() {
+                                path
+                            } else {
+                                config.path.parent().unwrap_or_else(|| Path::new("")).join(path)
+                            }
+                        })
+                        .filter(|path| path.exists())
+                        .map(|path| path.to_string_lossy().into_owned());
+
                     Arc::new(ForwardConfig {
                         expired_seconds: config.general.expired_seconds,
                         proxy_mode: backend.proxy_mode.clone(),
@@ -416,6 +451,7 @@ impl AppForwardService {
                         crypto_iv: config.general.encipher_iv.clone(),
                         emby_server_url: config.emby.get_uri().to_string(),
                         emby_api_key: config.emby.token.to_string(),
+                        fallback_video_path,
                     })
                 })
                 .await;

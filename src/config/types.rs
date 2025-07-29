@@ -65,6 +65,12 @@ impl AntiReverseProxyConfig {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Default)]
+pub struct FallbackConfig {
+    #[serde(default)]
+    pub video_missing_path: String,
+}
+
 #[derive(Deserialize)]
 pub struct RawConfig {
     #[serde(rename = "General")]
@@ -87,4 +93,6 @@ pub struct RawConfig {
     pub open_list: Option<OpenList>,
     #[serde(rename = "DirectLink")]
     pub direct_link: Option<DirectLink>,
+    #[serde(rename = "Fallback", default)]
+    pub fallback: FallbackConfig,
 }
