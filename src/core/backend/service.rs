@@ -36,6 +36,7 @@ pub trait StreamService: Send + Sync {
 pub struct AppStreamService {
     pub state: Arc<AppState>,
     pub config: OnceCell<Arc<BackendConfig>>,
+    pub openlist_user_agent: OnceCell<Arc<String>>,
 }
 
 impl AppStreamService {
@@ -43,6 +44,7 @@ impl AppStreamService {
         Self {
             state,
             config: OnceCell::new(),
+            openlist_user_agent: OnceCell::new(),
         }
     }
 
@@ -266,12 +268,36 @@ impl AppStreamService {
                     crypto_key: config.general.encipher_key.clone(),
                     crypto_iv: config.general.encipher_iv.clone(),
                     backend: backend.clone(),
-                    backend_config: backend_config.clone(),
+                    backend_config: backend_config.clone()
                 })
             })
             .await;
 
         config_arc.clone()
+    }
+
+    async fn get_open_list_user_agent(&self) -> Arc<String> {
+        let backend_config = self.get_backend_config().await;
+
+        let open_list_user_agent_arc = self
+            .openlist_user_agent
+            .get_or_init(|| async {
+                let user_agent = match &backend_config.backend_config {
+                    StreamBackendConfig::OpenList(open_list) => {
+                        if !open_list.user_agent.is_empty() {
+                            open_list.user_agent.clone()
+                        } else {
+                            SystemInfo::new().get_user_agent()
+                        }
+                    }
+                    _ => SystemInfo::new().get_user_agent(),
+                };
+
+                Arc::new(user_agent)
+            })
+            .await;
+
+        open_list_user_agent_arc.clone()
     }
 
     async fn build_redirect_info(
@@ -281,9 +307,13 @@ impl AppStreamService {
     ) -> RedirectInfo {
         let mut final_headers = original_headers.clone();
         let config = self.get_backend_config().await;
+
         let user_agent = match &config.backend_config {
             StreamBackendConfig::DirectLink(dirct_link) => {
-                Some(dirct_link.user_agent.to_string())
+                Some(Arc::new(dirct_link.user_agent.to_string()))
+            }
+            StreamBackendConfig::OpenList(_) => {
+                Some(self.get_open_list_user_agent().await)
             }
             _ => None,
         };
