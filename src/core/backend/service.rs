@@ -209,7 +209,7 @@ impl AppStreamService {
 
         let result = openlist_client
             .fetch_file_path(
-                &openlist_config.uri(),
+                &openlist_config.uri().to_string(),
                 &openlist_config.token,
                 path,
             )
@@ -217,11 +217,17 @@ impl AppStreamService {
 
         match result {
             Ok(new_url) => {
-                let new_uri: Uri = new_url.parse().map_err(
-                    |e: hyper::http::uri::InvalidUri| {
-                        AppStreamError::InvalidOpenListUri(e.to_string())
-                    },
-                )?;
+                let new_uri =
+                    Uri::force_from_path_or_url(&new_url).map_err(|e| {
+                        error_log!(
+                            STREAM_LOGGER_DOMAIN,
+                            "Failed to convert openlist url: {:?} to uri: {:?}",
+                            new_url,
+                            e
+                        );
+                        AppStreamError::InvalidOpenListUri(new_url.clone())
+                    })?;
+
                 cache.insert(self.open_list_cache_key(uri), new_uri.clone());
 
                 debug_log!(
