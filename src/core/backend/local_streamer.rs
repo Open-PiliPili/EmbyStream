@@ -24,9 +24,22 @@ impl LocalStreamer {
         state: Arc<AppState>,
         path: PathBuf,
         range_header: Option<String>,
+        client: Option<String>,
+        client_ip: Option<String>,
     ) -> Result<AppStreamResult, StatusCode> {
         if !path.is_file() {
             return Err(StatusCode::NOT_FOUND);
+        }
+
+        if range_header.is_none() {
+            error_log!(
+                LOCAL_STREAMER_LOGGER_DOMAIN,
+                "No-Range req for '{:?}' rejected. IP: {:?}, Client: {:?}",
+                &path,
+                client,
+                client_ip
+            );
+            return Err(StatusCode::FORBIDDEN);
         }
 
         let cache = state.get_metadata_cache().await;

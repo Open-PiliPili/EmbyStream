@@ -303,6 +303,8 @@ impl StreamService for AppStreamService {
                 LocalStreamer::stream(
                     self.state.clone(),
                     path,
+                    request.client(),
+                    request.client_ip(),
                     request.content_range(),
                 )
                 .await
@@ -328,6 +330,8 @@ impl StreamService for AppStreamService {
                         uri,
                         Some(user_agent),
                         &request.original_headers,
+                        request.client(),
+                        request.client_ip(),
                     )
                     .await
                 }

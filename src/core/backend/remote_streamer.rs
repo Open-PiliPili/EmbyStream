@@ -20,7 +20,20 @@ impl RemoteStreamer {
         url: Uri,
         user_agent: Option<String>,
         headers: &HeaderMap,
+        client: Option<String>,
+        client_ip: Option<String>,
     ) -> Result<AppStreamResult, StatusCode> {
+        if !headers.contains_key(header::RANGE) {
+            error_log!(
+                REMOTE_STREAMER_LOGGER_DOMAIN,
+                "No-Range req for '{:?}' rejected. IP: {:?}, Client: {:?}",
+                &url,
+                client,
+                client_ip
+            );
+            return Err(StatusCode::FORBIDDEN);
+        }
+
         let client = ClientBuilder::<DownloadClient>::new()
             .with_plugin(CurlPlugin)
             .build();
