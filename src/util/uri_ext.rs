@@ -5,6 +5,7 @@ use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
 use reqwest::Url;
 use thiserror::Error;
 
+const PSEUDO_HOST: &str = "local-file.invalid";
 const PSEUDO_BASE_URI: &str = "http://local-file.invalid";
 
 #[derive(Error, Debug)]
@@ -92,7 +93,7 @@ impl UriExt for Uri {
 
     fn is_local(&self) -> bool {
         if let Some(scheme) = self.host() {
-            return scheme.to_lowercase() == PSEUDO_BASE_URI;
+            return scheme.eq_ignore_ascii_case(PSEUDO_HOST);
         }
 
         self.host().is_none() && self.path().starts_with('/')
