@@ -82,6 +82,8 @@ ssl_key_file = ""
 [Fallback]
 # The path to a fallback video file to play when the original video is missing.
 # If this path is set and the file exists, this video will be played instead of showing an error.
+# Note: For binary or Docker deployments in 'dual' or 'frontend' mode, this path must be accessible
+# from within the server or container for this feature to function.
 # Example: "/path/to/your/video_missing.mp4"
 video_missing_path = "/mnt/anime/fallback/video_missing.mp4"
 
