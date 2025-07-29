@@ -201,10 +201,14 @@ impl AppStreamService {
         };
 
         let path = Uri::to_path_or_url_string(uri);
+        let openlist_ua =
+            user_agent.unwrap_or(SystemInfo::new().get_user_agent());
+
         debug_log!(
             STREAM_LOGGER_DOMAIN,
-            "Open list processing path: {:?}",
-            path
+            "Open list processing path: {:?}, user-agent: {:?}",
+            path,
+            openlist_ua
         );
 
         let openlist_client = ClientBuilder::<OpenListClient>::new()
@@ -216,7 +220,7 @@ impl AppStreamService {
                 &openlist_config.uri().to_string(),
                 &openlist_config.token,
                 path,
-                user_agent.unwrap_or(SystemInfo::new().get_user_agent()),
+                openlist_ua,
             )
             .await;
 
