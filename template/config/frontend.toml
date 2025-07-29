@@ -79,6 +79,7 @@ ssl_cert_file = ""
 # Example: ssl_key_file = "/path/to/private_key.pem"
 ssl_key_file = ""
 
+[Fallback]
 # The path to a fallback video file to play when the original video is missing.
 # If this path is set and the file exists, this video will be played instead of showing an error.
 # Note: For binary or Docker deployments in 'dual' or 'frontend' mode, this path must be accessible
