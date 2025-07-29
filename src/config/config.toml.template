@@ -185,7 +185,6 @@ description = ""
 base_url = "https://openlist.example.com" # OpenList server URL
 port = "443"                             # OpenList server port
 token = ""                               # Authentication token for OpenList
-user_agent = ""                          # Custom User-Agent for requests
 
 [DirectLink]
 # DirectLink backend configuration - for CDN or direct streaming

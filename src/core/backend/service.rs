@@ -36,7 +36,6 @@ pub trait StreamService: Send + Sync {
 pub struct AppStreamService {
     pub state: Arc<AppState>,
     pub config: OnceCell<Arc<BackendConfig>>,
-    pub openlist_user_agent: OnceCell<Arc<String>>,
 }
 
 impl AppStreamService {
@@ -44,7 +43,6 @@ impl AppStreamService {
         Self {
             state,
             config: OnceCell::new(),
-            openlist_user_agent: OnceCell::new(),
         }
     }
 
@@ -72,7 +70,10 @@ impl AppStreamService {
 
         let mut uri = sign.uri.clone().ok_or(AppStreamError::InvalidUri)?;
         uri = self.rewrite_uri_if_needed(uri).await;
-        uri = self.fetch_remote_uri_if_openlist(&uri).await?;
+
+        uri = self
+            .fetch_remote_uri_if_openlist(&uri, request.user_agent())
+            .await?;
 
         if Uri::is_local(&uri) {
             let local_path = PathBuf::from(Uri::to_path_or_url_string(&uri));
@@ -172,6 +173,7 @@ impl AppStreamService {
     async fn fetch_remote_uri_if_openlist(
         &self,
         uri: &Uri,
+        user_agent: Option<String>,
     ) -> Result<Uri, AppStreamError> {
         if !Uri::is_local(uri) {
             debug_log!(
@@ -214,6 +216,7 @@ impl AppStreamService {
                 &openlist_config.uri().to_string(),
                 &openlist_config.token,
                 path,
+                user_agent.unwrap_or(SystemInfo::new().get_user_agent()),
             )
             .await;
 
@@ -276,30 +279,6 @@ impl AppStreamService {
         config_arc.clone()
     }
 
-    async fn get_open_list_user_agent(&self) -> Arc<String> {
-        let backend_config = self.get_backend_config().await;
-
-        let open_list_user_agent_arc = self
-            .openlist_user_agent
-            .get_or_init(|| async {
-                let user_agent = match &backend_config.backend_config {
-                    StreamBackendConfig::OpenList(open_list) => {
-                        if !open_list.user_agent.is_empty() {
-                            open_list.user_agent.clone()
-                        } else {
-                            SystemInfo::new().get_user_agent()
-                        }
-                    }
-                    _ => SystemInfo::new().get_user_agent(),
-                };
-
-                Arc::new(user_agent)
-            })
-            .await;
-
-        open_list_user_agent_arc.clone()
-    }
-
     async fn build_redirect_info(
         &self,
         url: Uri,
@@ -311,9 +290,6 @@ impl AppStreamService {
         let user_agent = match &config.backend_config {
             StreamBackendConfig::DirectLink(dirct_link) => {
                 Some(Arc::new(dirct_link.user_agent.to_string()))
-            }
-            StreamBackendConfig::OpenList(_) => {
-                Some(self.get_open_list_user_agent().await)
             }
             _ => None,
         };

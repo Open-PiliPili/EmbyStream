@@ -1,7 +1,6 @@
 use crate::{
     api::openlist::Operation,
     network::{HttpMethod, NetworkTarget, NetworkTask},
-    system::SystemInfo,
 };
 
 /// Represents OpenList API endpoints with their respective parameters.
@@ -11,6 +10,8 @@ pub struct API {
     url: String,
     /// The token for authenticating with the OpenList server.
     token: String,
+    /// The user-agent for request alist server
+    user_agent: String,
     /// The specific API operation (e.g., FsGet).
     operation: Operation,
 }
@@ -21,10 +22,12 @@ impl API {
         url: impl Into<String>,
         token: impl Into<String>,
         path: impl Into<String>,
+        user_agent: impl Into<String>,
     ) -> Self {
         API {
             url: url.into(),
             token: token.into(),
+            user_agent: user_agent.into(),
             operation: Operation::FsGet { path: path.into() },
         }
     }
@@ -33,10 +36,12 @@ impl API {
         url: impl Into<String>,
         token: impl Into<String>,
         path: impl Into<String>,
+        user_agent: impl Into<String>,
     ) -> Self {
         API {
             url: url.into(),
             token: token.into(),
+            user_agent: user_agent.into(),
             operation: Operation::FsLink { path: path.into() },
         }
     }
@@ -96,7 +101,6 @@ impl NetworkTarget for API {
     /// - Authentication token
     /// - User agent string
     fn headers(&self) -> Vec<(String, String)> {
-        let sys_info = SystemInfo::new();
         vec![
             ("accept".into(), "application/json, text/plain, */*".into()),
             ("authorization".into(), self.token.clone()),
@@ -105,7 +109,7 @@ impl NetworkTarget for API {
                 "content-type".into(),
                 "application/json;charset=UTF-8".into(),
             ),
-            ("user-agent".into(), sys_info.get_user_agent()),
+            ("user-agent".into(), self.user_agent.clone()),
         ]
     }
 }

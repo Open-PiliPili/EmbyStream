@@ -36,6 +36,13 @@ impl Request {
             .map(String::from)
     }
 
+    pub(crate) fn user_agent(&self) -> Option<String> {
+        self.original_headers
+            .get(header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .map(String::from)
+    }
+
     pub(crate) fn client_ip(&self) -> Option<String> {
         self.original_headers
             .get(header::FORWARDED)
