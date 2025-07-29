@@ -85,13 +85,19 @@ impl Gateway {
         self.handler = Some(handler);
     }
 
+    pub fn setup_crypto_provider() -> Result<(), Box<dyn StdError + Send + Sync>>
+    {
+        aws_lc_rs::default_provider()
+            .install_default()
+            .map_err(|e| {
+                format!("Failed to install rustls crypto provider: {:?}", e)
+            })?;
+        Ok(())
+    }
+
     pub async fn listen(
         &mut self,
     ) -> Result<(), Box<dyn StdError + Send + Sync>> {
-        aws_lc_rs::default_provider()
-            .install_default()
-            .expect("Failed to install rustls crypto provider");
-
         let addr: SocketAddr = self.addr.parse()?;
         let listener = TcpListener::bind(&addr).await?;
         let handler =

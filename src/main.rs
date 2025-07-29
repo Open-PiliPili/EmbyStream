@@ -3,6 +3,7 @@ use std::{error::Error, fs, path::Path, str::FromStr, sync::Arc};
 use clap::Parser;
 use figlet_rs::FIGfont;
 use hyper::{StatusCode, body::Incoming};
+use tokio::signal as TokioSignal;
 
 use embystream::gateway::reverse_proxy_filter::ReverseProxyFilterMiddleware;
 use embystream::{
@@ -39,18 +40,43 @@ async fn run_app(
     run_args: &RunArgs,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     setup_figlet();
+
     let config = setup_load_config(run_args);
     setup_logger(&config)?;
     setup_print_info(&config);
 
-    let app_state = setup_cache(&config).await;
-    let frontend_state = app_state.clone();
-    let backend_state = app_state.clone();
+    setup_crypto_provider()?;
 
-    tokio::try_join!(
-        setup_frontend_gateway(&frontend_state),
-        setup_backend_gateway(&backend_state)
-    )?;
+    let app_state = setup_cache(&config).await;
+    let mode = {
+        let config_guard = app_state.get_config().await;
+        config_guard.general.stream_mode.clone()
+    };
+
+    if matches!(mode, StreamMode::Frontend | StreamMode::Dual) {
+        let frontend_state = app_state.clone();
+        tokio::spawn(async move {
+            if let Err(e) = setup_frontend_gateway(&frontend_state).await {
+                error_log!(
+                    INIT_LOGGER_DOMAIN,
+                    "Frontend gateway failed: {}",
+                    e
+                );
+            }
+        });
+    }
+
+    if matches!(mode, StreamMode::Backend | StreamMode::Dual) {
+        let backend_state = app_state.clone();
+        tokio::spawn(async move {
+            if let Err(e) = setup_backend_gateway(&backend_state).await {
+                error_log!(INIT_LOGGER_DOMAIN, "Backend gateway failed: {}", e);
+            }
+        });
+    }
+
+    TokioSignal::ctrl_c().await?;
+    info_log!(INIT_LOGGER_DOMAIN, "Shutting down EmbyStream...");
 
     Ok(())
 }
@@ -130,6 +156,13 @@ fn setup_logger(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
 async fn setup_cache(config: &Config) -> Arc<AppState> {
     let app_state = AppState::new(config.clone()).await;
     Arc::new(app_state)
+}
+
+fn setup_crypto_provider() -> Result<(), Box<dyn Error + Send + Sync>> {
+    Gateway::setup_crypto_provider().map_err(|e| {
+        error_log!(INIT_LOGGER_DOMAIN, "Setup crypto-provider failed: {:?}", e);
+        e
+    })
 }
 
 async fn setup_frontend_gateway(
