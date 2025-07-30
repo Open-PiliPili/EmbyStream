@@ -11,11 +11,15 @@ use hyper::{HeaderMap, StatusCode, header};
 use lazy_static::lazy_static;
 
 use super::{
-    read_stream::ReaderStream, response::Response,
-    result::Result as AppStreamResult, types::ContentRange,
+    read_stream::ReaderStream,
+    response::Response,
+    result::Result as AppStreamResult,
+    types::{ContentRange, RangeParseError},
 };
 use crate::cache::FileMetadata;
-use crate::{AppState, LOCAL_STREAMER_LOGGER_DOMAIN, error_log, info_log};
+use crate::{
+    AppState, LOCAL_STREAMER_LOGGER_DOMAIN, debug_log, error_log, info_log,
+};
 
 pub(crate) struct LocalStreamer;
 
@@ -31,7 +35,7 @@ impl LocalStreamer {
             return Err(StatusCode::NOT_FOUND);
         }
 
-        if range_header.is_none() {
+        let Some(range_value) = range_header.as_deref() else {
             error_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
                 "No-Range req for '{:?}' rejected. IP: {:?}, Client: {:?}",
@@ -40,7 +44,7 @@ impl LocalStreamer {
                 client_ip
             );
             return Err(StatusCode::FORBIDDEN);
-        }
+        };
 
         let cache = state.get_metadata_cache().await;
         let Ok(file_metadata) = cache.fetch_metadata(&path).await else {
@@ -52,19 +56,34 @@ impl LocalStreamer {
             return Err(StatusCode::NOT_FOUND);
         };
 
-        let content_range = Self::parse_content_range(
-            range_header.as_deref(),
+        let content_range = match Self::parse_content_range(
+            range_value,
             file_metadata.file_size,
-        );
-        let status_code =
-            if range_header.is_some() && !content_range.is_full_range() {
-                StatusCode::PARTIAL_CONTENT
-            } else {
-                StatusCode::OK
-            };
+        ) {
+            Ok(range) => {
+                debug_log!(
+                    LOCAL_STREAMER_LOGGER_DOMAIN,
+                    "Successfully parsed content range: {:?} for path: {:?}",
+                    range,
+                    &path
+                );
+                range
+            }
+            Err(RangeParseError::Malformed) => {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            Err(RangeParseError::Unsatisfiable) => {
+                return Err(StatusCode::RANGE_NOT_SATISFIABLE);
+            }
+        };
 
-        Self::stream_file(&path, &file_metadata, content_range, status_code)
-            .await
+        Self::stream_file(
+            &path,
+            &file_metadata,
+            content_range,
+            StatusCode::PARTIAL_CONTENT,
+        )
+        .await
     }
 
     async fn stream_file(
@@ -119,23 +138,30 @@ impl LocalStreamer {
     }
 
     fn parse_content_range(
-        range_header: Option<&str>,
+        range_value: &str,
         total_size: u64,
-    ) -> ContentRange {
-        let (start, end) = range_header
-            .and_then(|header_value| {
-                http_range_header::parse_range_header(header_value).ok()
-            })
-            .and_then(|parsed| parsed.validate(total_size).ok())
-            .and_then(|validated| {
-                validated.first().map(|r| (*r.start(), *r.end()))
-            })
-            .unwrap_or((0, total_size.saturating_sub(1)));
+    ) -> Result<ContentRange, RangeParseError> {
+        debug_log!(
+            LOCAL_STREAMER_LOGGER_DOMAIN,
+            "Start parsing content range: {:?}",
+            range_value
+        );
 
-        ContentRange {
-            start,
-            end,
-            total_size,
+        let ranges = http_range_header::parse_range_header(range_value)
+            .map_err(|_| RangeParseError::Malformed)?;
+
+        let validated_ranges = ranges
+            .validate(total_size)
+            .map_err(|_| RangeParseError::Unsatisfiable)?;
+
+        if let Some(first_range) = validated_ranges.first() {
+            Ok(ContentRange {
+                start: *first_range.start(),
+                end: *first_range.end(),
+                total_size,
+            })
+        } else {
+            Err(RangeParseError::Unsatisfiable)
         }
     }
 }

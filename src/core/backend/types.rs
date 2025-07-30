@@ -26,3 +26,9 @@ impl ContentRange {
         self.start == 0 && self.end >= self.total_size.saturating_sub(1)
     }
 }
+
+#[derive(Debug)]
+pub enum RangeParseError {
+    Malformed,
+    Unsatisfiable,
+}
