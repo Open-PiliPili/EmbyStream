@@ -443,8 +443,10 @@ impl AppForwardService {
                         .filter(|path| path.exists())
                         .map(|path| path.to_string_lossy().into_owned());
 
+                    let (_, ttl) = self.state.get_cache_settings().await;
+
                     Arc::new(ForwardConfig {
-                        expired_seconds: config.general.expired_seconds,
+                        expired_seconds: ttl,
                         proxy_mode: backend.proxy_mode.clone(),
                         backend_url: backend.uri().to_string(),
                         crypto_key: config.general.encipher_key.clone(),

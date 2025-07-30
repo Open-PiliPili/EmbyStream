@@ -39,7 +39,7 @@ impl AppState {
         self.config.read().await
     }
 
-    async fn get_cache_settings(&self) -> (u64, u64) {
+    pub async fn get_cache_settings(&self) -> (u64, u64) {
         let config = self.get_config().await;
         match config.general.memory_mode.as_str() {
             "low" => (256, 60 * 60 * 2),

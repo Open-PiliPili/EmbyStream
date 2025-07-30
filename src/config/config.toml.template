@@ -21,12 +21,6 @@ root_path = "/mnt/stream/logs"
 # - high: Maximum performance, higher memory usage
 memory_mode = "middle"
 
-# Cache expiration time in seconds
-# - Default: 3600 (1 hour)
-# - Set to 0 to disable caching
-# - Recommended range: 300-86400 (5 minutes to 1 day)
-expired_seconds = 3600
-
 # Stream running mode
 # - Options: "frontend", "backend", "dual"
 # - "frontend": Runs only the frontend service.

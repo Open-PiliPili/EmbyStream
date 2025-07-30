@@ -25,7 +25,6 @@ impl fmt::Display for StreamMode {
 #[derive(Clone, Debug, Deserialize)]
 pub struct General {
     pub memory_mode: String,
-    pub expired_seconds: u64,
     #[serde(default)]
     pub stream_mode: StreamMode,
     pub backend_type: String,
