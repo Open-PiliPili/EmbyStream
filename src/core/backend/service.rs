@@ -75,14 +75,16 @@ impl AppStreamService {
             .fetch_remote_uri_if_openlist(&uri, request.user_agent())
             .await?;
 
+        let device_id = params.device_id;
+
         if Uri::is_local(&uri) {
-            let local_path = PathBuf::from(Uri::to_path_or_url_string(&uri));
+            let path = PathBuf::from(Uri::to_path_or_url_string(&uri));
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "Routing to local path {:?}",
-                local_path
+                path
             );
-            Ok(Source::Local(local_path))
+            Ok(Source::Local { path, device_id })
         } else {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
@@ -359,13 +361,14 @@ impl StreamService for AppStreamService {
         info_log!(STREAM_LOGGER_DOMAIN, "Routing stream source: {:?}", source);
 
         match source {
-            Source::Local(path) => {
+            Source::Local { path, device_id } => {
                 LocalStreamer::stream(
                     self.state.clone(),
                     path,
                     request.content_range(),
                     request.client(),
                     request.client_ip(),
+                    Some(device_id),
                 )
                 .await
             }

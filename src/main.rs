@@ -53,6 +53,9 @@ async fn run_app(
     setup_crypto_provider()?;
 
     let app_state = setup_cache(&config).await;
+
+    setup_rate_limiters(&app_state).await;
+
     let mode = {
         let config_guard = app_state.get_config().await;
         config_guard.general.stream_mode.clone()
@@ -184,6 +187,12 @@ fn setup_crypto_provider() -> Result<(), Box<dyn Error + Send + Sync>> {
         error_log!(INIT_LOGGER_DOMAIN, "Setup crypto-provider failed: {:?}", e);
         e
     })
+}
+
+async fn setup_rate_limiters(app_state: &Arc<AppState>) {
+    let rate_limiter_cache = app_state.get_rate_limiter_cache().await;
+    rate_limiter_cache.start_refill_task();
+    info_log!(INIT_LOGGER_DOMAIN, "Rate limiter refill task started.");
 }
 
 async fn setup_frontend_gateway(

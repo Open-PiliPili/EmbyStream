@@ -133,6 +133,7 @@ base_url = "https://backend.example.com"               # Replace base URL for st
 path = "stream"                                        # Path component for stream URLs
 port = "443"                                           # HTTPS port for stream service
 proxy_mode = "proxy"                                   # Backend proxy mode for media streaming (options: "proxy", "redirect")
+client_speed_limit_kbs = 15360                         # Client speed limit in KB/s (integer >= 0). 0 = unlimited.
 
 # ===================================================================
 # Backend Path Rewrite Rules

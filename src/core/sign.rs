@@ -15,6 +15,9 @@ pub struct SignParams {
     pub(crate) sign: String,
 
     #[serde(default)]
+    pub(crate) device_id: String,
+
+    #[serde(default)]
     pub(crate) proxy_mode: ProxyMode,
 }
 
@@ -22,6 +25,7 @@ impl Default for SignParams {
     fn default() -> Self {
         Self {
             sign: "".into(),
+            device_id: "".into(),
             proxy_mode: ProxyMode::default(),
         }
     }

@@ -3,7 +3,7 @@ use std::ops::Deref as DerefTrait;
 use tokio::sync::{OnceCell, RwLock as TokioRwLock};
 
 use crate::{
-    cache::{GeneralCache, MetadataCache},
+    cache::{GeneralCache, MetadataCache, RateLimiterCache},
     config::core::Config,
     util::path_rewriter::PathRewriter,
 };
@@ -18,6 +18,7 @@ pub struct AppState {
     strm_file_cache: OnceCell<GeneralCache>,
     forward_info_cache: OnceCell<GeneralCache>,
     open_list_cache: OnceCell<GeneralCache>,
+    rate_limiter_cache: OnceCell<RateLimiterCache>,
 }
 
 impl AppState {
@@ -32,6 +33,7 @@ impl AppState {
             strm_file_cache: OnceCell::new(),
             forward_info_cache: OnceCell::new(),
             open_list_cache: OnceCell::new(),
+            rate_limiter_cache: OnceCell::new(),
         }
     }
 
@@ -135,6 +137,21 @@ impl AppState {
         let (capacity, ttl) = self.get_cache_settings().await;
         self.open_list_cache
             .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
+            .await
+    }
+
+    pub async fn get_rate_limiter_cache(&self) -> &RateLimiterCache {
+        self.rate_limiter_cache
+            .get_or_init(|| async {
+                let config = self.get_config().await;
+                let (capacity, ttl) = self.get_cache_settings().await;
+                let limit_kbs = config
+                    .backend
+                    .as_ref()
+                    .map_or(0, |b| b.client_speed_limit_kbs);
+
+                RateLimiterCache::new(capacity, ttl, limit_kbs)
+            })
             .await
     }
 }
