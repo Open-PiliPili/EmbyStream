@@ -72,7 +72,7 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
     ```
 
 ### From Docker
-You can access the Docker Hub URL below and use Docker to install the image.
+You can access the Docker Hub URL below and use Docker to install the image.   
 [DockerHub: openpilipili/embystream](https://hub.docker.com/r/openpilipili/embystream)
 
 ### From Binaries
