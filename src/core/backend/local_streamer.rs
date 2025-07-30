@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    io::{Error as IoError, ErrorKind},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -9,6 +10,7 @@ use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::{HeaderMap, StatusCode, header};
 use lazy_static::lazy_static;
+use tokio::sync::Semaphore;
 
 use super::{
     read_stream::ReaderStream,
@@ -30,10 +32,26 @@ impl LocalStreamer {
         range_header: Option<String>,
         client: Option<String>,
         client_ip: Option<String>,
+        client_id: Option<String>,
     ) -> Result<AppStreamResult, StatusCode> {
         if !path.is_file() {
             return Err(StatusCode::NOT_FOUND);
         }
+
+        let client_id_value = match client_id {
+            Some(value) if !value.is_empty() => value,
+            _ => {
+                error_log!(
+                    LOCAL_STREAMER_LOGGER_DOMAIN,
+                    "Empty client id for '{:?}'",
+                    &path,
+                );
+                return Err(StatusCode::FORBIDDEN);
+            }
+        };
+
+        let rate_limiter_cache = state.get_rate_limiter_cache().await;
+        let limiter = rate_limiter_cache.fetch_limiter(&client_id_value).await;
 
         let Some(range_value) = range_header.as_deref() else {
             error_log!(
@@ -82,6 +100,7 @@ impl LocalStreamer {
             &file_metadata,
             content_range,
             StatusCode::PARTIAL_CONTENT,
+            limiter.semaphore.clone(),
         )
         .await
     }
@@ -91,6 +110,7 @@ impl LocalStreamer {
         file_metadata: &FileMetadata,
         content_range: ContentRange,
         status_code: StatusCode,
+        semaphore: Arc<Semaphore>,
     ) -> Result<AppStreamResult, StatusCode> {
         info_log!(
             LOCAL_STREAMER_LOGGER_DOMAIN,
@@ -101,6 +121,22 @@ impl LocalStreamer {
 
         let stream = ReaderStream::new(path, content_range)
             .into_stream()
+            .and_then(move |chunk| {
+                let semaphore_clone = semaphore.clone();
+                async move {
+                    match semaphore_clone.acquire_many(chunk.len() as u32).await
+                    {
+                        Ok(permit) => {
+                            permit.forget();
+                            Ok(chunk)
+                        }
+                        Err(_) => Err(IoError::new(
+                            ErrorKind::BrokenPipe,
+                            "Semaphore closed",
+                        )),
+                    }
+                }
+            })
             .map_ok(Frame::data)
             .map_err(Into::into);
 

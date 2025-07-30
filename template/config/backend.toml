@@ -128,11 +128,12 @@ host = ""
 
 [Backend]
 # Backend server configuration
-listen_port = 60001            # Replace port for the stream service
-base_url = ""                  # Base URL for stream service
-path = "stream"                # Path component for stream URLs
-port = "443"                   # HTTPS port for stream service
-proxy_mode = "proxy"           # Backend proxy mode for media streaming (options: "proxy", "redirect")
+listen_port = 60001                                    # Port for the stream service, option
+base_url = "https://backend.example.com"               # Replace base URL for stream service
+path = "stream"                                        # Path component for stream URLs
+port = "443"                                           # HTTPS port for stream service
+proxy_mode = "proxy"                                   # Backend proxy mode for media streaming (options: "proxy", "redirect")
+client_speed_limit_kbs = 15360                         # Client speed limit in KB/s (integer >= 0). 0 = unlimited.
 
 # ===================================================================
 # Backend Path Rewrite Rules
