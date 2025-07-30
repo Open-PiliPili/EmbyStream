@@ -32,6 +32,8 @@ pub enum Error {
     StrmFileIoError(String),
     #[error("Empty emby token")]
     EmptyEmbyToken,
+    #[error("Empty emby device id")]
+    EmptyEmbyDeviceId,
     #[error("Emby path request error")]
     EmbyPathRequestError,
     #[error("Emby path parser error")]
