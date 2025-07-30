@@ -35,9 +35,9 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
 - **Universal Compatibility**: Supports all versions of Emby.
 - **Multiple Backend Types**:
     - `disk`: For locally mounted storage.
-    - `openlist`: For integration with OpenList.
+    - `openlist`: For integration with [OpenList](https://github.com/OpenListTeam/OpenList).
     - `direct_link`: For direct links or CDN streaming.
-- **STRM Format Support**: Perfectly compatible with `.strm` files, integrating seamlessly with plugins like "[StrmAssistant](https://github.com/sjtuross/StrmAssistant/wiki)".
+- **STRM Format Support**: Perfectly compatible with `.strm` files, integrating seamlessly with plugins like [StrmAssistant](https://github.com/sjtuross/StrmAssistant/wiki).
 - **Link Encryption**: Secures data transmission with link encryption.
 - **User-Agent Filtering**: Includes both allowlist and denylist modes for precise access control.
 - **Anti-Reverse Proxy Filtering**: Prevents unauthorized playback by restricting access to a specified host.
@@ -71,6 +71,33 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
     cp ./target/release/embystream /usr/local/bin
     ```
 
+### From Docker
+You can access the Docker Hub URL below and use Docker to install the image.
+[DockerHub: openpilipili/embystream](https://hub.docker.com/r/openpilipili/embystream)
+
+### From Binaries
+
+You can download pre-compiled binaries for macOS and Linux from the [**GitHub Releases**](https://github.com/Open-PiliPili/EmbyStream/tags) page. Simply unzip the file and add the `embystream` executable to your `$PATH`.
+
+## PART 4. RUN
+
+Create `config.toml` based on one of the two templates below, and modify the contents as needed afterward.   
+
+[frontend.toml](https://github.com/Open-PiliPili/EmbyStream/blob/main/template/config/frontend.toml)   
+[backend.toml](https://github.com/Open-PiliPili/EmbyStream/blob/main/template/config/backend.toml)
+
+> 💡 **Note**:
+> The dual mode simply requires you to fill in both the frontend and backend configuration sections, and set the `stream_mode` in the template configuration file to `dual`.
+
+### With Binaries
+```shell
+## Default
+/usr/bin/embystream run
+
+## Custom
+/usr/bin/embystream run --config "$HOME/.config/embystream/config.toml"
+```
+
 ### With Docker Run
 
 ```shell
@@ -90,18 +117,14 @@ docker run -d \
   openpilipili/embystream:latest
 ```
 
-### With docker-compose
+### With Docker Compose Run
 
 Reference: [docker-compose.yaml](https://raw.githubusercontent.com/Open-PiliPili/EmbyStream/main/template/docker/docker-compose.yaml)
 ```shell
 docker-compose pull && docker-compose up -d
 ```
 
-### Binaries
-
-You can download pre-compiled binaries for macOS and Linux from the [**GitHub Releases**](https://github.com/Open-PiliPili/EmbyStream/tags) page. Simply unzip the file and add the `embystream` executable to your `$PATH`.
-
-## PART 4. CLI
+## PART 5. CLI
 
 ```shell
 Another Emby streaming application (frontend/backend separation) written in Rust.
@@ -117,7 +140,7 @@ Options:
   -V, --version  Print version
 ```
 
-## PART 5. License
+## PART 6. License
 
 Copyright (c) 2025 open-pilipili.
 
