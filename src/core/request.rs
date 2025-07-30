@@ -45,9 +45,15 @@ impl Request {
 
     pub(crate) fn client_ip(&self) -> Option<String> {
         self.original_headers
-            .get(header::FORWARDED)
-            .or(self.original_headers.get("x-real-ip"))
+            .get("x-forwarded-for")
             .and_then(|v| v.to_str().ok())
-            .map(String::from)
+            .and_then(|s| {
+                s.split(',').next().map(str::trim).map(str::to_string)
+            })
+            .or_else(|| {
+                self.original_headers
+                    .get("x-real-ip")
+                    .and_then(|v| v.to_str().ok().map(str::to_string))
+            })
     }
 }
