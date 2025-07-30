@@ -1,4 +1,4 @@
-use std::{error::Error, fs, path::Path, str::FromStr, sync::Arc};
+use std::{error::Error, fs, path::Path, process, str::FromStr, sync::Arc};
 
 use clap::Parser;
 use figlet_rs::FIGfont;
@@ -44,6 +44,11 @@ async fn run_app(
     let config = setup_load_config(run_args);
     setup_logger(&config)?;
     setup_print_info(&config);
+
+    if let Err(e) = validate_dual_mode_ports(&config) {
+        error_log!(INIT_LOGGER_DOMAIN, "{}", e);
+        process::exit(1);
+    }
 
     setup_crypto_provider()?;
 
@@ -134,7 +139,7 @@ fn setup_load_config(run_args: &RunArgs) -> Config {
                 "Configuration initialization failed: {}",
                 e
             );
-            std::process::exit(1);
+            process::exit(1);
         }
     }
 }
@@ -156,6 +161,22 @@ fn setup_logger(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
 async fn setup_cache(config: &Config) -> Arc<AppState> {
     let app_state = AppState::new(config.clone()).await;
     Arc::new(app_state)
+}
+
+fn validate_dual_mode_ports(config: &Config) -> Result<(), String> {
+    if config.general.stream_mode == StreamMode::Dual {
+        if let (Some(frontend), Some(backend)) =
+            (&config.frontend, &config.backend)
+        {
+            if frontend.listen_port == backend.listen_port {
+                return Err(format!(
+                    "Dual mode port conflict: frontend & backend cannot both use {}.",
+                    frontend.listen_port
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn setup_crypto_provider() -> Result<(), Box<dyn Error + Send + Sync>> {
