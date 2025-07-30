@@ -40,8 +40,8 @@ impl LocalStreamer {
                 LOCAL_STREAMER_LOGGER_DOMAIN,
                 "No-Range req for '{:?}' rejected. IP: {:?}, Client: {:?}",
                 &path,
-                client,
-                client_ip
+                client_ip,
+                client
             );
             return Err(StatusCode::FORBIDDEN);
         };
