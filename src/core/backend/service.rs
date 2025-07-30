@@ -184,8 +184,13 @@ impl AppStreamService {
             return Ok(uri.clone());
         }
 
+        let openlist_ua =
+            user_agent.unwrap_or(SystemInfo::new().get_user_agent());
+
         let cache = self.state.get_open_list_cache().await;
-        if let Some(cached_uri) = cache.get(&self.open_list_cache_key(uri)) {
+        if let Some(cached_uri) =
+            cache.get(&self.open_list_cache_key(uri, &openlist_ua.clone()))
+        {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "Open list cache hit: {:?}",
@@ -201,8 +206,6 @@ impl AppStreamService {
         };
 
         let path = Uri::to_path_or_url_string(uri);
-        let openlist_ua =
-            user_agent.unwrap_or(SystemInfo::new().get_user_agent());
 
         debug_log!(
             STREAM_LOGGER_DOMAIN,
@@ -220,7 +223,7 @@ impl AppStreamService {
                 &openlist_config.uri().to_string(),
                 &openlist_config.token,
                 path,
-                openlist_ua,
+                openlist_ua.clone(),
             )
             .await;
 
@@ -237,7 +240,10 @@ impl AppStreamService {
                         AppStreamError::InvalidOpenListUri(new_url.clone())
                     })?;
 
-                cache.insert(self.open_list_cache_key(uri), new_uri.clone());
+                cache.insert(
+                    self.open_list_cache_key(uri, &openlist_ua),
+                    new_uri.clone(),
+                );
 
                 debug_log!(
                     STREAM_LOGGER_DOMAIN,
@@ -331,9 +337,11 @@ impl AppStreamService {
         Ok(StringUtil::md5(&input))
     }
 
-    fn open_list_cache_key(&self, uri: &Uri) -> String {
-        let url = Uri::to_path_or_url_string(uri).to_lowercase();
-        let input = url.to_lowercase();
+    fn open_list_cache_key(&self, uri: &Uri, user_agent: &str) -> String {
+        let url_string = Uri::to_path_or_url_string(uri);
+        let trimmed_url = url_string.trim_end();
+        let input =
+            format!("{}&user_agent={}", trimmed_url.to_lowercase(), user_agent);
         StringUtil::md5(&input)
     }
 }
