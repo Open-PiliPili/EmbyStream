@@ -76,6 +76,20 @@ impl AppForwardService {
         self.get_forward_config().await.emby_api_key.clone()
     }
 
+    async fn get_device_id(&self, request: &AppForwardRequest) -> String {
+        if let Some(device_id) = request.uri.query().and_then(|q| {
+            form_urlencoded::parse(q.as_bytes())
+                .find(|(k, _)| {
+                    ["DeviceId"].iter().any(|&s| k.eq_ignore_ascii_case(s))
+                })
+                .map(|(_, v)| v.into_owned())
+        }) {
+            return device_id;
+        }
+
+        String::new()
+    }
+
     async fn get_forward_info(
         &self,
         path_params: &PathParams,
@@ -96,6 +110,11 @@ impl AppForwardService {
         let emby_token = self.get_emby_api_token(request).await;
         if emby_token.is_empty() {
             return Err(AppForwardError::EmptyEmbyToken);
+        }
+
+        let device_id = self.get_device_id(request).await;
+        if device_id.is_empty() {
+            return Err(AppForwardError::EmptyEmbyDeviceId);
         }
 
         let emby_client = ClientBuilder::<EmbyClient>::new()
@@ -125,6 +144,7 @@ impl AppForwardService {
                 item_id: path_params.item_id.clone(),
                 media_source_id: path_params.media_source_id.clone(),
                 path: path.to_string(),
+                device_id,
             })
             .ok_or_else(|| {
                 error_log!(
@@ -156,7 +176,8 @@ impl AppForwardService {
 
         url.query_pairs_mut()
             .append_pair("sign", &sign_value)
-            .append_pair("proxy_mode", &config.proxy_mode);
+            .append_pair("proxy_mode", &config.proxy_mode)
+            .append_pair("device_id", &forward_info.device_id);
 
         let url_str = url.as_str();
         debug_log!(
