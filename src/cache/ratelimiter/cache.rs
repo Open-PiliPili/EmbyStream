@@ -14,10 +14,16 @@ pub struct RateLimiterCache {
     limiters: Cache<String, Arc<RateLimiter>>,
     active_limiters: Arc<DashMap<String, Weak<RateLimiter>>>,
     rate_kbs: u64,
+    burst_kbs: u64,
 }
 
 impl RateLimiterCache {
-    pub fn new(max_capacity: u64, time_to_live: u64, rate_kbs: u64) -> Self {
+    pub fn new(
+        max_capacity: u64,
+        time_to_live: u64,
+        rate_kbs: u64,
+        burst_kbs: u64,
+    ) -> Self {
         let active_limiters = Arc::new(DashMap::new());
         let active_limiters_clone = active_limiters.clone();
 
@@ -32,6 +38,7 @@ impl RateLimiterCache {
             limiters,
             active_limiters,
             rate_kbs,
+            burst_kbs,
         }
     }
 
@@ -65,7 +72,13 @@ impl RateLimiterCache {
 
         let active_limiters = self.active_limiters.clone();
         let bytes_to_add_per_second = (self.rate_kbs * 1024) as usize;
-        let max_permits = bytes_to_add_per_second * 2;
+
+        let max_permits =
+            if self.burst_kbs >= self.rate_kbs && self.rate_kbs > 0 {
+                (self.burst_kbs * 1024) as usize
+            } else {
+                (bytes_to_add_per_second as f64 * 1.2) as usize
+            };
 
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(1));
