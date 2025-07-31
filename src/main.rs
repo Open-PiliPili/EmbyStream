@@ -125,6 +125,7 @@ fn setup_print_info(config: &Config) {
         "Stream mode: {}",
         config.general.stream_mode
     );
+    info_log!(INIT_LOGGER_DOMAIN, "User agent: {}", config.user_agent)
 }
 
 fn setup_load_config(run_args: &RunArgs) -> Config {

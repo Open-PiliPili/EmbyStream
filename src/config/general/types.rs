@@ -73,3 +73,22 @@ impl UserAgent {
         self.mode == "allow"
     }
 }
+
+impl fmt::Display for UserAgent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.mode.as_str() {
+            "allow" => write!(
+                f,
+                "Mode: {}, Allowed User Agents: [{}]",
+                self.mode,
+                self.allow_ua.join(", ")
+            ),
+            _ => write!(
+                f,
+                "Mode: {}, Denied User Agents: [{}]",
+                self.mode,
+                self.deny_ua.join(", ")
+            ),
+        }
+    }
+}
