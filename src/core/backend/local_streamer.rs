@@ -201,9 +201,8 @@ impl LocalStreamer {
             }
         }
 
-        let client_str = match client.as_deref() {
-            Some(s) => s,
-            None => return,
+        let Some(client_str) = client else {
+            return;
         };
 
         let client_lower = client_str.to_lowercase();
