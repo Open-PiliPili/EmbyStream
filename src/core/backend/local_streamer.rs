@@ -56,10 +56,11 @@ impl LocalStreamer {
         let Some(range_value) = range_header.as_deref() else {
             error_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
-                "No-Range req for '{:?}' rejected. IP: {:?}, Client: {:?}",
+                "No-Range req for '{:?}' rejected. IP: {:?}, Client: {:?}, ClientID: {:?}",
                 &path,
                 client_ip,
-                client
+                client,
+                client_id_value,
             );
             return Err(StatusCode::FORBIDDEN);
         };
