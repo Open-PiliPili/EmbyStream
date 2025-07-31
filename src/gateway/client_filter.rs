@@ -57,14 +57,7 @@ impl ClientAgentFilterMiddleware {
     }
 
     fn is_ua_matching(&self, ua: &str, rule: &str) -> bool {
-        match rule {
-            "infuse" => {
-                ua.contains("infuse")
-                    && !ua.contains("infuse-library")
-                    && !ua.contains("infuse-download")
-            }
-            _ => ua.contains(rule),
-        }
+        UserAgentMatcher::is_ua_matching(ua, rule)
     }
 
     async fn get_client_config(&self) -> Arc<UserAgent> {
@@ -114,5 +107,72 @@ impl Middleware for ClientAgentFilterMiddleware {
 
     fn clone_box(&self) -> Box<dyn Middleware> {
         Box::new(self.clone())
+    }
+}
+
+pub struct UserAgentMatcher;
+
+impl UserAgentMatcher {
+    pub fn is_ua_matching(ua: &str, rule: &str) -> bool {
+        if rule.is_empty() {
+            return true;
+        }
+        if ua.is_empty() {
+            return false;
+        }
+
+        ua.as_bytes()
+            .windows(rule.len())
+            .any(|window| window.eq_ignore_ascii_case(rule.as_bytes()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ua_matching_logic() {
+        // --- Test cases for the "infuse" rule ---
+
+        // ✅ Case 1: A standard "infuse" user agent should match.
+        let result1 = UserAgentMatcher::is_ua_matching(
+            "Infuse-Direct/7.8.3 (Apple TV)",
+            "infuse-direct",
+        );
+        println!("result1: {}, expected true", result1);
+
+        // ❌ Case 2: A "infuse-library" user agent should be denied.
+        let result2 = UserAgentMatcher::is_ua_matching(
+            "infuse-library/1.0",
+            "infuse-direct",
+        );
+        println!("result2: {}, expected false", result2);
+
+        // ❌ Case 3: A "infuse-download" user agent should be denied.
+        let result3 = UserAgentMatcher::is_ua_matching(
+            "infuse-download; Infuse/7.0",
+            "infuse-direct",
+        );
+        println!("result3: {}, expected false", result3);
+
+        // --- Test cases for the generic rule ---
+
+        // ✅ Case 4: A simple substring match should return true.
+        let chrome_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
+        let result4 = UserAgentMatcher::is_ua_matching(chrome_ua, "Chrome");
+        println!("result4: {}, expected true", result4);
+
+        // ❌ Case 5: A non-matching substring should return false.
+        let result5 = UserAgentMatcher::is_ua_matching(chrome_ua, "Firefox");
+        println!("result5: {}, expected false", result5);
+
+        // ✅ Case 6: rule empty
+        let result6 = UserAgentMatcher::is_ua_matching(chrome_ua, "");
+        println!("result6: {}, expected true", result6);
+
+        // ❌ Case 7: ua empty
+        let result7 = UserAgentMatcher::is_ua_matching("", "Infuse-Direct");
+        println!("result7: {}, expected false", result7);
     }
 }
