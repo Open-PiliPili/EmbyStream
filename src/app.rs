@@ -142,15 +142,16 @@ impl AppState {
 
     pub async fn get_rate_limiter_cache(&self) -> &RateLimiterCache {
         self.rate_limiter_cache
-            .get_or_init(|| async {
+            .get_or_init(|| async move {
                 let config = self.get_config().await;
                 let (capacity, ttl) = self.get_cache_settings().await;
-                let limit_kbs = config
-                    .backend
-                    .as_ref()
-                    .map_or(0, |b| b.client_speed_limit_kbs);
 
-                RateLimiterCache::new(capacity, ttl, limit_kbs)
+                let (limit_kbs, burst_kbs) =
+                    config.backend.as_ref().map_or((0, 0), |b| {
+                        (b.client_speed_limit_kbs, b.client_burst_speed_kbs)
+                    });
+
+                RateLimiterCache::new(capacity * 2, ttl, limit_kbs, burst_kbs)
             })
             .await
     }

@@ -130,12 +130,19 @@ replacement = "/proxy$1"
 
 [Backend]
 # Backend server configuration
-listen_port = 60002            # Port for the stream service
-base_url = "https://example.com" # Base URL for stream service
-path = "stream"                # Path component for stream URLs
-port = "443"                   # HTTPS port for stream service
-proxy_mode = "proxy"           # Backend proxy mode for media streaming (options: "proxy", "redirect")
-client_speed_limit_kbs = 0     # Client speed limit in KB/s (integer >= 0). 0 = unlimited.
+listen_port = 60002                                    # Port for the stream service
+base_url = "https://example.com"                       # Base URL for stream service
+path = "stream"                                        # Path component for stream URLs
+port = "443"                                           # HTTPS port for stream service
+proxy_mode = "proxy"                                   # Backend proxy mode for media streaming (options: "proxy", "redirect")
+client_speed_limit_kbs = 15360                         # Client speed limit in KB/s (integer >= 0). 0 = unlimited.
+client_burst_speed_kbs = 20480                         # Client burst speed in KB/s (integer >= 0). 0 = unlimited.
+# Speed Limit Notes:
+# 1. These settings are only effective when `backend_type` is "disk" and `proxy_mode` is "proxy".
+#    They do not apply to 302 redirects to CDNs or other remote servers.
+# 2. `client_burst_speed_kbs` must be greater than or equal to `client_speed_limit_kbs`.
+# 3. If `client_burst_speed_kbs` is less than `client_speed_limit_kbs` (and the limit is > 0),
+#    it will automatically default to 1.2 times `client_speed_limit_kbs`.
 
 # ===================================================================
 # Backend Path Rewrite Rules

@@ -13,7 +13,10 @@ pub struct Backend {
     pub path: String,
     pub port: String,
     pub proxy_mode: String,
+    #[serde(default)]
     pub client_speed_limit_kbs: u64,
+    #[serde(default)]
+    pub client_burst_speed_kbs: u64,
     #[serde(default, rename = "PathRewrite")]
     pub path_rewrites: Vec<PathRewriteConfig>,
     #[serde(default, rename = "AntiReverseProxy")]
