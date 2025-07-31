@@ -1,6 +1,3 @@
-name: Build and Push Docker on Tag
-
-# This action is triggered on pushes to tags that look like versions (e.g., v1.0, v1.2.3)
 on:
   push:
     tags:
@@ -8,6 +5,7 @@ on:
 
 env:
   IMAGE_NAME: openpilipili/embystream
+  CARGO_TERM_COLOR: always
 
 jobs:
   build-and-push:
@@ -27,6 +25,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -37,7 +42,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: |
+            ${{ env.IMAGE_NAME }}
+            ghcr.io/${{ github.repository }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
