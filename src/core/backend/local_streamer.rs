@@ -21,7 +21,12 @@ use super::{
 use crate::cache::FileMetadata;
 use crate::{
     AppState, LOCAL_STREAMER_LOGGER_DOMAIN, debug_log, error_log, info_log,
+    warn_log,
 };
+
+// These constants define the user agent substrings for clients that require
+// a workaround for missing Range headers.
+const PROBLEMATIC_CLIENTS: &[&str] = &["yamby", "hills"];
 
 pub(crate) struct LocalStreamer;
 
@@ -29,7 +34,7 @@ impl LocalStreamer {
     pub async fn stream(
         state: Arc<AppState>,
         path: PathBuf,
-        range_header: Option<String>,
+        mut range_header: Option<String>,
         client_info: ClientInfo,
     ) -> Result<AppStreamResult, StatusCode> {
         if !path.is_file() {
@@ -51,13 +56,18 @@ impl LocalStreamer {
         let rate_limiter_cache = state.get_rate_limiter_cache().await;
         let limiter = rate_limiter_cache.fetch_limiter(&client_id_value).await;
 
+        Self::fix_range_header_if_needed(
+            &mut range_header,
+            &client_info.user_agent,
+        );
+
         let Some(range_value) = range_header.as_deref() else {
             error_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
                 "No-Range req for '{:?}' rejected. IP: {:?}, Client: {:?}, ClientID: {:?}",
                 &path,
                 client_info.ip,
-                client_info.name,
+                client_info.user_agent,
                 client_id_value,
             );
             return Err(StatusCode::FORBIDDEN);
@@ -170,6 +180,46 @@ impl LocalStreamer {
         };
 
         Ok(AppStreamResult::Stream(response))
+    }
+
+    /// Handles requests from specific clients that do not send a Range header by applying a default.
+    ///
+    /// # WARNING: Temporary Workaround
+    /// This method serves as a temporary compatibility layer for clients (e.g., `yamby`, `hills`)
+    /// that incorrectly omit the `Range` header in streaming requests.
+    ///
+    /// This is considered a tactical fix. The correct long-term solution is for the client applications
+    /// to solve this issue. This workaround may be deprecated or removed in future releases
+    /// as clients become compliant.
+    fn fix_range_header_if_needed(
+        range_header: &mut Option<String>,
+        client: &Option<String>,
+    ) {
+        if let Some(header) = range_header {
+            if !header.is_empty() {
+                return;
+            }
+        }
+
+        let client_str = match client.as_deref() {
+            Some(s) => s,
+            None => return,
+        };
+
+        let client_lower = client_str.to_lowercase();
+
+        // Check if the client user agent contains any of the known problematic substrings.
+        if PROBLEMATIC_CLIENTS
+            .iter()
+            .any(|&c| client_lower.contains(c))
+        {
+            warn_log!(
+                LOCAL_STREAMER_LOGGER_DOMAIN,
+                "Client '{:?}' missing Range header. Applying workaround 'bytes=0-'.",
+                client_str
+            );
+            *range_header = Some("bytes=0-".to_string());
+        }
     }
 
     fn parse_content_range(
