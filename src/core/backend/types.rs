@@ -32,3 +32,19 @@ pub enum RangeParseError {
     Malformed,
     Unsatisfiable,
 }
+
+pub struct ClientInfo {
+    pub(crate) id: Option<String>,
+    pub(crate) name: Option<String>,
+    pub(crate) ip: Option<String>,
+}
+
+impl ClientInfo {
+    pub fn new(
+        id: Option<String>,
+        name: Option<String>,
+        ip: Option<String>,
+    ) -> ClientInfo {
+        Self { id, name, ip }
+    }
+}

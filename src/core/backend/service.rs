@@ -9,6 +9,7 @@ use super::{
     remote_streamer::RemoteStreamer, result::Result as AppStreamResult,
     source::Source, types::BackendConfig,
 };
+use crate::backend::types::ClientInfo;
 use crate::core::redirect_info::RedirectInfo;
 use crate::{AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
@@ -362,13 +363,16 @@ impl StreamService for AppStreamService {
 
         match source {
             Source::Local { path, device_id } => {
+                let client_info = ClientInfo::new(
+                    Some(device_id),
+                    request.client(),
+                    request.client_ip(),
+                );
                 LocalStreamer::stream(
                     self.state.clone(),
                     path,
                     request.content_range(),
-                    request.client(),
-                    request.client_ip(),
-                    Some(device_id),
+                    client_info,
                 )
                 .await
             }

@@ -16,7 +16,7 @@ use super::{
     read_stream::ReaderStream,
     response::Response,
     result::Result as AppStreamResult,
-    types::{ContentRange, RangeParseError},
+    types::{ClientInfo, ContentRange, RangeParseError},
 };
 use crate::cache::FileMetadata;
 use crate::{
@@ -30,15 +30,13 @@ impl LocalStreamer {
         state: Arc<AppState>,
         path: PathBuf,
         range_header: Option<String>,
-        client: Option<String>,
-        client_ip: Option<String>,
-        client_id: Option<String>,
+        client_info: ClientInfo,
     ) -> Result<AppStreamResult, StatusCode> {
         if !path.is_file() {
             return Err(StatusCode::NOT_FOUND);
         }
 
-        let client_id_value = match client_id {
+        let client_id_value = match client_info.id {
             Some(value) if !value.is_empty() => value,
             _ => {
                 error_log!(
@@ -58,8 +56,8 @@ impl LocalStreamer {
                 LOCAL_STREAMER_LOGGER_DOMAIN,
                 "No-Range req for '{:?}' rejected. IP: {:?}, Client: {:?}, ClientID: {:?}",
                 &path,
-                client_ip,
-                client,
+                client_info.ip,
+                client_info.name,
                 client_id_value,
             );
             return Err(StatusCode::FORBIDDEN);
