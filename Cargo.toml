@@ -2,9 +2,14 @@
 name = "embystream"
 version = "0.0.9"
 edition = "2024"
-license = "GPL-3.0-or-later"
 rust-version = "1.85"
+readme = "README.md"
+license = "GPL-3.0-or-later"
 authors = ["Open-PiliPili <openpilipili@gmail.com>"]
+homepage = "https://github.com/Open-PiliPili/EmbyStream"
+repository = "https://github.com/Open-PiliPili/EmbyStream"
+keywords = ["emby", "streaming", "media", "cli"]
+categories = ["command-line-utilities", "multimedia"]
 description = "Another Emby streaming application (frontend/backend separation) written in Rust."
 
 [profile.release]
@@ -21,6 +26,7 @@ chrono = "0.4.41"
 cipher = "0.4.4"
 clap = { version = "4.5.42", features = ["derive"] }
 dashmap = "6.1.0"
+deranged = "=0.4.0"
 directories = "6.0.0"
 figlet-rs = "0.1.5"
 form_urlencoded = "1.2.1"

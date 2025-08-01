@@ -21,7 +21,7 @@ A highly customizable, decoupled frontend/backend application for Emby, written 
 
 EmbyStream is a highly customizable, decoupled frontend/backend application for Emby. It is written entirely in Rust for ultimate performance and memory safety.
 
-To learn more about the architecture of a decoupled Emby setup, please refer to our [**Wiki**](https://www.google.com/search?q=https://github.com/Open-PiliPili/EmbyStream/wiki).
+To learn more about the architecture of a decoupled Emby setup, please refer to [**Wiki**](https://www.google.com/search?q=https://github.com/Open-PiliPili/EmbyStream/wiki).
 
 **Screenshot:**
 
@@ -39,6 +39,7 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
     - `direct_link`: For direct links or CDN streaming.
 - **STRM Format Support**: Perfectly compatible with `.strm` files, integrating seamlessly with plugins like [StrmAssistant](https://github.com/sjtuross/StrmAssistant/wiki).
 - **Link Encryption**: Secures data transmission with link encryption.
+- **Link Expiration Protection**: All generated media links automatically expire after a configurable duration, preventing unauthorized redistribution.
 - **User-Agent Filtering**: Includes both allowlist and denylist modes for precise access control.
 - **Anti-Reverse Proxy Filtering**: Prevents unauthorized playback by restricting access to a specified host.
 
@@ -144,4 +145,4 @@ Options:
 
 Copyright (c) 2025 open-pilipili.
 
-EmbyStream is licensed under the **GPL-V3 License**. See the [official GPL-V3 license text](https://www.gnu.org/licenses/gpl-3.0.html) for more details.
+EmbyStream is licensed under the **[GPL-V3 License](https://www.gnu.org/licenses/gpl-3.0.html)**. 
