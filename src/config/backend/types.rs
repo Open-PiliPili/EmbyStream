@@ -21,6 +21,8 @@ pub struct Backend {
     pub path_rewrites: Vec<PathRewriteConfig>,
     #[serde(default, rename = "AntiReverseProxy")]
     pub anti_reverse_proxy: AntiReverseProxyConfig,
+    #[serde(default)]
+    pub problematic_clients: Vec<String>,
 }
 
 impl Backend {

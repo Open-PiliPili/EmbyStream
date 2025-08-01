@@ -24,15 +24,6 @@ use crate::{
     warn_log,
 };
 
-// These constants define the user agent substrings for clients that require
-// a workaround for missing Range headers.
-const PROBLEMATIC_CLIENTS: &[&str] = &[
-    "yamby",
-    "hills",
-    "embytolocalplayer",
-    "Emby/"
-];
-
 pub(crate) struct LocalStreamer;
 
 impl LocalStreamer {
@@ -61,10 +52,14 @@ impl LocalStreamer {
         let rate_limiter_cache = state.get_rate_limiter_cache().await;
         let limiter = rate_limiter_cache.fetch_limiter(&client_id_value).await;
 
+        let problematic_clients = state.get_problematic_clients().await;
+
         Self::fix_range_header_if_needed(
             &mut range_header,
             &client_info.user_agent,
-        );
+            problematic_clients,
+        )
+        .await;
 
         let Some(range_value) = range_header.as_deref() else {
             error_log!(
@@ -196,9 +191,10 @@ impl LocalStreamer {
     /// This is considered a tactical fix. The correct long-term solution is for the client applications
     /// to solve this issue. This workaround may be deprecated or removed in future releases
     /// as clients become compliant.
-    fn fix_range_header_if_needed(
+    async fn fix_range_header_if_needed(
         range_header: &mut Option<String>,
         client: &Option<String>,
+        problematic_clients: &[String],
     ) {
         if let Some(header) = range_header {
             if !header.is_empty() {
@@ -213,10 +209,7 @@ impl LocalStreamer {
         let client_lower = client_str.to_lowercase();
 
         // Check if the client user agent contains any of the known problematic substrings.
-        if PROBLEMATIC_CLIENTS
-            .iter()
-            .any(|&c| client_lower.contains(c))
-        {
+        if problematic_clients.iter().any(|c| client_lower.contains(c)) {
             warn_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
                 "Client '{:?}' missing Range header. Applying workaround 'bytes=0-'.",

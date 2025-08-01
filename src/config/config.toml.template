@@ -144,6 +144,11 @@ client_burst_speed_kbs = 20480                         # Client burst speed in K
 # 3. If `client_burst_speed_kbs` is less than `client_speed_limit_kbs` (and the limit is > 0),
 #    it will automatically default to 1.2 times `client_speed_limit_kbs`.
 
+# List of problematic clients that do not send Range headers.
+# EmbyStream will apply a workaround for these clients.
+# Default built-in clients are: ["yamby", "hills", "embytolocalplayer"]
+problematic_clients = []
+
 # ===================================================================
 # Backend Path Rewrite Rules
 # ===================================================================

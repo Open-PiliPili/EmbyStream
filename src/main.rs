@@ -164,6 +164,14 @@ fn setup_logger(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
 
 async fn setup_cache(config: &Config) -> Arc<AppState> {
     let app_state = AppState::new(config.clone()).await;
+
+    let problematic_clients = app_state.get_problematic_clients().await;
+    info_log!(
+        INIT_LOGGER_DOMAIN,
+        "Problematic clients: {:?}",
+        problematic_clients
+    );
+
     Arc::new(app_state)
 }
 

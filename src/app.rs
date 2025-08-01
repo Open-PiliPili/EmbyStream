@@ -1,4 +1,4 @@
-use std::ops::Deref as DerefTrait;
+use std::{collections::HashSet, ops::Deref as DerefTrait};
 
 use tokio::sync::{OnceCell, RwLock as TokioRwLock};
 
@@ -8,10 +8,16 @@ use crate::{
     util::path_rewriter::PathRewriter,
 };
 
+// These constants define the user agent substrings for clients that require
+// a workaround for missing Range headers.
+const PROBLEMATIC_CLIENTS: &[&str] =
+    &["yamby", "hills", "embytolocalplayer", "Emby/"];
+
 pub struct AppState {
     config: TokioRwLock<Config>,
     frontend_path_rewrite_cache: OnceCell<Vec<PathRewriter>>,
     backend_path_rewrite_cache: OnceCell<Vec<PathRewriter>>,
+    problematic_clients_cache: OnceCell<Vec<String>>,
     metadata_cache: OnceCell<MetadataCache>,
     encrypt_cache: OnceCell<GeneralCache>,
     decrypt_cache: OnceCell<GeneralCache>,
@@ -27,6 +33,7 @@ impl AppState {
             config: TokioRwLock::new(config),
             frontend_path_rewrite_cache: OnceCell::new(),
             backend_path_rewrite_cache: OnceCell::new(),
+            problematic_clients_cache: OnceCell::new(),
             metadata_cache: OnceCell::new(),
             encrypt_cache: OnceCell::new(),
             decrypt_cache: OnceCell::new(),
@@ -94,6 +101,29 @@ impl AppState {
                         )
                     })
                     .collect()
+            })
+            .await
+    }
+
+    pub async fn get_problematic_clients(&self) -> &Vec<String> {
+        let config = self.get_config().await;
+        self.problematic_clients_cache
+            .get_or_init(|| async move {
+                let mut clients: HashSet<String> = PROBLEMATIC_CLIENTS
+                    .iter()
+                    .map(|s| s.to_lowercase())
+                    .collect();
+
+                if let Some(backend_config) = config.backend.as_ref() {
+                    clients.extend(
+                        backend_config
+                            .problematic_clients
+                            .iter()
+                            .map(|s| s.to_lowercase()),
+                    );
+                }
+
+                clients.into_iter().filter(|s| !s.is_empty()).collect()
             })
             .await
     }
