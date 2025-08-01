@@ -1,4 +1,4 @@
-name: Build and Release Binaries on Tag
+name: Build Binaries on Tag
 
 on:
   push:
