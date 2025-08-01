@@ -15,7 +15,9 @@ use reqwest::Url;
 use tokio::fs::{self as TokioFS, metadata as TokioMetadata};
 use tokio::sync::OnceCell;
 
-use super::types::{ForwardConfig, ForwardInfo, PathParams};
+use super::types::{
+    ForwardConfig, ForwardInfo, InfuseAuthorization, PathParams,
+};
 use crate::{AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
     client::{ClientBuilder, EmbyClient},
@@ -73,6 +75,17 @@ impl AppForwardService {
             return token.to_owned();
         }
 
+        if let Some(token) = request
+            .original_headers
+            .get("x-emby-authorization")
+            .and_then(|h| h.to_str().ok())
+            .and_then(InfuseAuthorization::from_header_str)
+            .and_then(|auth| auth.get("MediaBrowser Token"))
+            .filter(|id| !id.is_empty())
+        {
+            return token.to_owned();
+        }
+
         self.get_forward_config().await.emby_api_key.clone()
     }
 
@@ -91,6 +104,17 @@ impl AppForwardService {
             .original_headers
             .get("DeviceId")
             .and_then(|v| v.to_str().ok())
+        {
+            return device_id.to_owned();
+        }
+
+        if let Some(device_id) = request
+            .original_headers
+            .get("x-emby-authorization")
+            .and_then(|h| h.to_str().ok())
+            .and_then(InfuseAuthorization::from_header_str)
+            .and_then(|auth| auth.get("DeviceId"))
+            .filter(|id| !id.is_empty())
         {
             return device_id.to_owned();
         }
