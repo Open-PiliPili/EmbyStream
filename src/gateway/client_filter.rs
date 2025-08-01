@@ -121,9 +121,39 @@ impl UserAgentMatcher {
             return false;
         }
 
-        ua.as_bytes()
-            .windows(rule.len())
-            .any(|window| window.eq_ignore_ascii_case(rule.as_bytes()))
+        let lower_ua = ua.to_ascii_lowercase();
+        let lower_rule = rule.to_ascii_lowercase();
+
+        match lower_rule.as_str() {
+            "emby" => Self::is_emby_client(&lower_ua),
+            "infuse" => Self::is_other_play_skip_to_infuse(&lower_ua),
+            _ => lower_ua.contains(&lower_rule),
+        }
+    }
+
+    /// Checks if the User-Agent matches an official Emby client.
+    ///
+    /// Official Emby clients use the format "Emby/x.x.x".
+    /// To ensue only match the official client format and not other strings containing
+    /// "Emby" (e.g., "emby-one" or "EmbyOne") which might pose security risks.
+    fn is_emby_client(ua: &str) -> bool {
+        ua.find("emby/")
+            .is_some_and(|i| i + "emby/".len() < ua.len())
+    }
+
+    /// Determines if the User-Agent matches Infuse client requirements.
+    ///
+    /// For Infuse versions:
+    /// - Pre-8.x.x: Media library mode used "infuse/x.x.x" format
+    /// - 8.x.x+: Media library mode uses dedicated "infuse-library" UA
+    /// - Player redirections still use "infuse/x.x.x" format
+    fn is_other_play_skip_to_infuse(ua: &str) -> bool {
+        ua.find("infuse/")
+            .and_then(|i| ua.get(i + "infuse/".len()..))
+            .and_then(|v| v.chars().next())
+            .and_then(|c| c.to_digit(10))
+            .map(|major_version| major_version >= 8)
+            .unwrap_or(false)
     }
 }
 
@@ -174,5 +204,24 @@ mod tests {
         // ❌ Case 7: ua empty
         let result7 = UserAgentMatcher::is_ua_matching("", "Infuse-Direct");
         println!("result7: {}, expected false", result7);
+
+        // ✅ Case 8: infuse/8.5.6
+        let result8 =
+            UserAgentMatcher::is_ua_matching("infuse/8.5.6", "Infuse");
+        println!("result8: {}, expected true", result8);
+
+        // ❌ Case 9: infuse/7.5.6
+        let result9 =
+            UserAgentMatcher::is_ua_matching("infuse/7.5.6", "Infuse");
+        println!("result9: {}, expected false", result9);
+
+        // ✅ Case 10: Emby/4.0.0
+        let result10 = UserAgentMatcher::is_ua_matching("Emby/4.0.0", "emby");
+        println!("result10: {}, expected true", result10);
+
+        // ✅ Case 11: EmbyOne/4.0.0
+        let result11 =
+            UserAgentMatcher::is_ua_matching("EmbyOne/4.0.0", "emby");
+        println!("result11: {}, expected false", result11);
     }
 }
