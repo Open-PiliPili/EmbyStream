@@ -26,7 +26,12 @@ use crate::{
 
 // These constants define the user agent substrings for clients that require
 // a workaround for missing Range headers.
-const PROBLEMATIC_CLIENTS: &[&str] = &["yamby", "hills", "embytolocalplayer"];
+const PROBLEMATIC_CLIENTS: &[&str] = &[
+    "yamby",
+    "hills",
+    "embytolocalplayer",
+    "Emby/"
+];
 
 pub(crate) struct LocalStreamer;
 
