@@ -87,6 +87,14 @@ impl AppForwardService {
             return device_id;
         }
 
+        if let Some(device_id) = request
+            .original_headers
+            .get("DeviceId")
+            .and_then(|v| v.to_str().ok())
+        {
+            return device_id.to_owned();
+        }
+
         String::new()
     }
 
