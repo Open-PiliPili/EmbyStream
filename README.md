@@ -45,6 +45,11 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
 
 ## PART 3. Install
 
+### From Cargo Crates
+```shell
+cargo install embystream
+```
+
 ### From Source (with Cargo)
 
 1. Clone the repository:
