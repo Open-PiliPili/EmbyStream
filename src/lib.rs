@@ -6,6 +6,7 @@ pub mod client;
 pub mod config;
 pub mod core;
 pub mod crypto;
+pub mod defaults;
 pub mod domain;
 pub mod error;
 pub mod gateway;

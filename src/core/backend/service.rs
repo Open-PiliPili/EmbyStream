@@ -1,7 +1,7 @@
-use std::{borrow::Cow, path::PathBuf, sync::Arc};
-
 use async_trait::async_trait;
 use hyper::{HeaderMap, StatusCode, Uri, header};
+use std::path::Path;
+use std::{borrow::Cow, path::PathBuf, sync::Arc};
 use tokio::sync::OnceCell;
 
 use super::{
@@ -78,25 +78,76 @@ impl AppStreamService {
 
         let device_id = params.device_id;
 
-        if Uri::is_local(&uri) {
-            let path = PathBuf::from(Uri::to_path_or_url_string(&uri));
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "Routing to local path {:?}",
-                path
-            );
-            Ok(Source::Local { path, device_id })
-        } else {
+        // Remote url
+        if !Uri::is_local(&uri) {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "Routing to remote path {:?}",
                 uri
             );
-            Ok(Source::Remote {
+            return Ok(Source::Remote {
                 uri,
                 mode: params.proxy_mode,
-            })
+            });
         }
+
+        // Local path
+        let path = PathBuf::from(Uri::to_path_or_url_string(&uri));
+
+        debug_log!(STREAM_LOGGER_DOMAIN, "Routing to local path {:?}", path);
+
+        if path.exists() {
+            return Ok(Source::Local { path, device_id });
+        }
+
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "File not found at original path: {:?}, checking fallback",
+            path
+        );
+
+        let fallback_path = self.get_fallback_path().await;
+        match fallback_path {
+            Some(fallback_path) => {
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Using fallback path: {:?}",
+                    fallback_path
+                );
+                Ok(Source::Local {
+                    path: fallback_path,
+                    device_id,
+                })
+            }
+            None => {
+                Err(AppStreamError::FileNotFound(path.display().to_string()))
+            }
+        }
+    }
+
+    async fn get_fallback_path(&self) -> Option<PathBuf> {
+        let config = self.get_backend_config().await;
+
+        config
+            .fallback_video_path
+            .as_ref()
+            .and_then(|fallback_path_str| {
+                if fallback_path_str.is_empty() {
+                    return None;
+                }
+
+                let fallback_path = PathBuf::from(fallback_path_str);
+                if !fallback_path.exists() {
+                    debug_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "Fallback path does not exist: {:?}",
+                        fallback_path_str
+                    );
+                    return None;
+                }
+
+                Some(fallback_path)
+            })
     }
 
     async fn decrypt(
@@ -280,11 +331,26 @@ impl AppStreamService {
                 let backend_config = config.backend_config.as_ref().expect(
                     "Attempted to access backend config, but backend config is not configured",
                 );
+
+                let fallback_video_path = Some(&config.fallback.video_missing_path)
+                    .filter(|p| !p.is_empty())
+                    .map(PathBuf::from)
+                    .map(|path| {
+                        if path.is_absolute() {
+                            path
+                        } else {
+                            config.path.parent().unwrap_or_else(|| Path::new("")).join(path)
+                        }
+                    })
+                    .filter(|path| path.exists())
+                    .map(|path| path.to_string_lossy().into_owned());
+
                 Arc::new(BackendConfig {
                     crypto_key: config.general.encipher_key.clone(),
                     crypto_iv: config.general.encipher_iv.clone(),
                     backend: backend.clone(),
-                    backend_config: backend_config.clone()
+                    backend_config: backend_config.clone(),
+                    fallback_video_path
                 })
             })
             .await;

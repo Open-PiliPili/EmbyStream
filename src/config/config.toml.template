@@ -89,7 +89,8 @@ video_missing_path = ""
 
 [Frontend]
 # Frontend web server configuration
-listen_port = 60001  # Port for the frontend web interface
+listen_port = 60001             # Port for the frontend web interface
+check_file_existence = true	    # Check if the file exists on the frontend before redirect to the backend (default: true).
 
 # ===================================================================
 # Frontend Path Rewrite Rules

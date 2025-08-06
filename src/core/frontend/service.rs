@@ -266,32 +266,7 @@ impl AppForwardService {
         debug_log!(FORWARD_LOGGER_DOMAIN, "Sign path: {:?}", path);
 
         let config = self.get_forward_config().await;
-        let uri = Uri::from_path_or_url(&path)
-            .or_else(|e| match e {
-                UriExtError::FileNotFound(original_path) => {
-                    if let Some(fallback_path) = &config.fallback_video_path {
-                        info_log!(
-                            FORWARD_LOGGER_DOMAIN,
-                            "File not found: '{}'. Using fallback: '{}'",
-                            original_path,
-                            fallback_path
-                        );
-                        Uri::from_path_or_url(fallback_path)
-                    } else {
-                        Err(UriExtError::FileNotFound(original_path))
-                    }
-                }
-                _ => Err(e),
-            })
-            .map_err(|e| match e {
-                UriExtError::FileNotFound(p) => {
-                    AppForwardError::FileNotFound(p)
-                }
-                UriExtError::InvalidUri => AppForwardError::InvalidUri,
-                UriExtError::IoError(io_err) => {
-                    AppForwardError::IoError(io_err)
-                }
-            })?;
+        let uri = self.create_uri(&mut path, config)?;
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         let expired_at = now + self.get_forward_config().await.expired_seconds;
@@ -311,6 +286,48 @@ impl AppForwardService {
         encrypt_cache.insert(cache_key, sign.clone());
 
         Ok(sign)
+    }
+
+    fn create_uri(
+        &self,
+        path: &mut String,
+        config: Arc<ForwardConfig>,
+    ) -> Result<Uri, AppForwardError> {
+        let uri = {
+            let initial_result = if config.check_file_existence {
+                Uri::from_path_or_url(&path).or_else(|e| match e {
+                    UriExtError::FileNotFound(original_path) => config
+                        .fallback_video_path
+                        .as_ref()
+                        .map(|fallback_path| {
+                            info_log!(
+                                FORWARD_LOGGER_DOMAIN,
+                                "File not found: '{}'. Using fallback: '{}'",
+                                original_path,
+                                fallback_path
+                            );
+                            Uri::from_path_or_url(fallback_path)
+                        })
+                        .unwrap_or(Err(UriExtError::FileNotFound(
+                            original_path,
+                        ))),
+                    e => Err(e),
+                })
+            } else {
+                Uri::force_from_path_or_url(&path)
+            };
+
+            initial_result.map_err(|e| match e {
+                UriExtError::FileNotFound(p) => {
+                    AppForwardError::FileNotFound(p)
+                }
+                UriExtError::InvalidUri => AppForwardError::InvalidUri,
+                UriExtError::IoError(io_err) => {
+                    AppForwardError::IoError(io_err)
+                }
+            })?
+        };
+        Ok(uri)
     }
 
     async fn reparse_if_strm(
@@ -479,6 +496,10 @@ impl AppForwardService {
             self.config
                 .get_or_init(|| async {
                     let config = self.state.get_config().await;
+
+                    let frontend = config.frontend.as_ref().expect(
+                        "Attempted to access frontend config, but frontend is not configured",
+                    );
                     let backend = config.backend.as_ref().expect(
                         "Attempted to access backend config, but backend is not configured",
                     );
@@ -506,6 +527,7 @@ impl AppForwardService {
                         crypto_iv: config.general.encipher_iv.clone(),
                         emby_server_url: config.emby.get_uri().to_string(),
                         emby_api_key: config.emby.token.to_string(),
+                        check_file_existence: frontend.check_file_existence,
                         fallback_video_path,
                     })
                 })

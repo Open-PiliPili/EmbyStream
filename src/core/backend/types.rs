@@ -8,6 +8,7 @@ pub struct BackendConfig {
     pub crypto_iv: String,
     pub backend: Backend,
     pub backend_config: StreamBackendConfig,
+    pub fallback_video_path: Option<String>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

@@ -27,6 +27,7 @@ pub struct ForwardConfig {
     pub crypto_iv: String,
     pub emby_server_url: String,
     pub emby_api_key: String,
+    pub check_file_existence: bool,
     pub fallback_video_path: Option<String>,
 }
 
