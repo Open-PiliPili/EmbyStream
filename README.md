@@ -42,6 +42,7 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
 - **Link Expiration Protection**: All generated media links automatically expire after a configurable duration, preventing unauthorized redistribution.
 - **User-Agent Filtering**: Includes both allowlist and denylist modes for precise access control.
 - **Anti-Reverse Proxy Filtering**: Prevents unauthorized playback by restricting access to a specified host.
+- **Speed Limit Support**: Supports configurable speed limits per user device, with no limit applied by default.
 
 ## PART 3. Install
 
@@ -85,14 +86,14 @@ You can access the Docker Hub URL below and use Docker to install the image.
 
 You can download pre-compiled binaries for macOS and Linux from the [**GitHub Releases**](https://github.com/Open-PiliPili/EmbyStream/tags) page. Simply unzip the file and add the `embystream` executable to your `$PATH`.
 
-## PART 4. RUN
+## PART 4. Run
 
 Create `config.toml` based on one of the two templates below, and modify the contents as needed afterward.   
 
 [frontend.toml](https://github.com/Open-PiliPili/EmbyStream/blob/main/template/config/frontend.toml)   
 [backend.toml](https://github.com/Open-PiliPili/EmbyStream/blob/main/template/config/backend.toml)
 
-> 💡 **Note**:
+> [!NOTE]
 > The dual mode simply requires you to fill in both the frontend and backend configuration sections, and set the `stream_mode` in the template configuration file to `dual`.
 
 ### With Binaries
