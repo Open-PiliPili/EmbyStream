@@ -1,7 +1,11 @@
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
 use async_trait::async_trait;
 use hyper::{HeaderMap, StatusCode, Uri, header};
-use std::path::Path;
-use std::{borrow::Cow, path::PathBuf, sync::Arc};
 use tokio::sync::OnceCell;
 
 use super::{
