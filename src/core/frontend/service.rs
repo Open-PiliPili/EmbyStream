@@ -20,6 +20,7 @@ use super::types::{
 };
 use crate::{AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
+    api::PlaybackInfo,
     client::{ClientBuilder, EmbyClient},
     core::{
         error::Error as AppForwardError, redirect_info::RedirectInfo,
@@ -34,11 +35,17 @@ const MAX_STRM_FILE_SIZE: u64 = 1024 * 1024;
 
 #[async_trait]
 pub trait ForwardService: Send + Sync {
-    async fn handle_request(
+    async fn fetch_redirect_info(
         &self,
         request: AppForwardRequest,
         path_params: PathParams,
     ) -> Result<RedirectInfo, StatusCode>;
+
+    async fn fetch_playback_info(
+        &self,
+        request: AppForwardRequest,
+        path_params: PathParams,
+    ) -> Result<PlaybackInfo, StatusCode>;
 }
 
 pub struct AppForwardService {
@@ -124,8 +131,8 @@ impl AppForwardService {
 
     async fn get_forward_info(
         &self,
-        path_params: &PathParams,
         request: &AppForwardRequest,
+        path_params: &PathParams,
     ) -> Result<ForwardInfo, AppForwardError> {
         let forward_info_cache = self.state.get_forward_info_cache().await;
         let cache_key = self.forward_info_key(path_params)?;
@@ -138,15 +145,56 @@ impl AppForwardService {
             return Ok(cached_forward_info);
         }
 
-        let config = self.get_forward_config().await;
-        let emby_token = self.get_emby_api_token(request).await;
-        if emby_token.is_empty() {
-            return Err(AppForwardError::EmptyEmbyToken);
-        }
-
         let device_id = self.get_device_id(request).await;
         if device_id.is_empty() {
             return Err(AppForwardError::EmptyEmbyDeviceId);
+        }
+
+        let playback_info =
+            self.get_playback_info(request, path_params).await?;
+
+        let forward_info = playback_info
+            .find_media_source_path_by_id(&path_params.media_source_id)
+            .map(|path| ForwardInfo {
+                item_id: path_params.item_id.clone(),
+                media_source_id: path_params.media_source_id.clone(),
+                path: path.to_string(),
+                device_id,
+            })
+            .ok_or_else(|| {
+                error_log!(
+                    FORWARD_LOGGER_DOMAIN,
+                    "Media source not found: {}",
+                    path_params.media_source_id
+                );
+                AppForwardError::EmbyPathParserError
+            })?;
+
+        forward_info_cache.insert(cache_key, forward_info.clone());
+        Ok(forward_info)
+    }
+
+    async fn get_playback_info(
+        &self,
+        request: &AppForwardRequest,
+        path_params: &PathParams,
+    ) -> Result<PlaybackInfo, AppForwardError> {
+        let playback_info_cache = self.state.get_playback_info_cache().await;
+        let cache_key = self.playback_info_key(path_params)?;
+        if let Some(cached_forward_info) = playback_info_cache.get(&cache_key) {
+            debug_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "Playback info cache hit {:?}",
+                cached_forward_info
+            );
+            return Ok(cached_forward_info);
+        }
+
+        let config = self.get_forward_config().await;
+
+        let emby_token = self.get_emby_api_token(request).await;
+        if emby_token.is_empty() {
+            return Err(AppForwardError::EmptyEmbyToken);
         }
 
         let emby_client = ClientBuilder::<EmbyClient>::new()
@@ -170,25 +218,9 @@ impl AppForwardService {
                 AppForwardError::EmbyPathRequestError
             })?;
 
-        let forward_info = playback_info
-            .find_media_source_path_by_id(&path_params.media_source_id)
-            .map(|path| ForwardInfo {
-                item_id: path_params.item_id.clone(),
-                media_source_id: path_params.media_source_id.clone(),
-                path: path.to_string(),
-                device_id,
-            })
-            .ok_or_else(|| {
-                error_log!(
-                    FORWARD_LOGGER_DOMAIN,
-                    "Media source not found: {}",
-                    path_params.media_source_id
-                );
-                AppForwardError::EmbyPathParserError
-            })?;
+        playback_info_cache.insert(cache_key, playback_info.clone());
 
-        forward_info_cache.insert(cache_key, forward_info.clone());
-        Ok(forward_info)
+        Ok(playback_info)
     }
 
     async fn get_signed_uri(
@@ -464,6 +496,13 @@ impl AppForwardService {
         self.md5_key(&params.item_id, &params.media_source_id)
     }
 
+    fn playback_info_key(
+        &self,
+        params: &PathParams,
+    ) -> Result<String, AppForwardError> {
+        self.md5_key(&params.item_id, &params.media_source_id)
+    }
+
     fn forward_info_key(
         &self,
         params: &PathParams,
@@ -539,13 +578,13 @@ impl AppForwardService {
 
 #[async_trait]
 impl ForwardService for AppForwardService {
-    async fn handle_request(
+    async fn fetch_redirect_info(
         &self,
         request: AppForwardRequest,
         path_params: PathParams,
     ) -> Result<RedirectInfo, StatusCode> {
         let forward_info = self
-            .get_forward_info(&path_params, &request)
+            .get_forward_info(&request, &path_params)
             .await
             .map_err(|e| {
                 error_log!(
@@ -585,5 +624,21 @@ impl ForwardService for AppForwardService {
             })?;
 
         Ok(self.build_redirect_info(remote_uri, &request.original_headers))
+    }
+
+    async fn fetch_playback_info(
+        &self,
+        request: AppForwardRequest,
+        path_params: PathParams,
+    ) -> Result<PlaybackInfo, StatusCode> {
+        info_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Start handle request playback info for uri: {:?}",
+            request.uri
+        );
+
+        self.get_playback_info(&request, &path_params)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     }
 }

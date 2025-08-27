@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct PlaybackInfo {
     #[serde(rename = "MediaSources", default)]
     pub media_sources: Vec<MediaSource>,
@@ -20,9 +20,13 @@ impl PlaybackInfo {
             .find(|source| source.id.as_deref() == Some(target_id))
             .and_then(|source| source.path.as_deref())
     }
+
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MediaSource {
     #[serde(rename = "Protocol", default)]
     pub protocol: Option<String>,
@@ -78,7 +82,7 @@ pub struct MediaSource {
     pub item_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MediaStream {
     #[serde(rename = "Codec", default)]
     pub codec: Option<String>,
