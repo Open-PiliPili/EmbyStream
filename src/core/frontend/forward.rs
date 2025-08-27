@@ -2,15 +2,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use form_urlencoded;
-use hyper::{
-    Response, StatusCode, Uri,
-    body::Incoming,
-    header::{self, HeaderMap, HeaderValue},
-};
+use hyper::{Response, StatusCode, Uri, body::Incoming};
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use super::{service::ForwardService, types::ForwardRequestType};
+use super::service::ForwardService;
 use crate::frontend::types::PathParams;
 use crate::{
     FORWARD_LOGGER_DOMAIN, GATEWAY_LOGGER_DOMAIN, debug_log, info_log,
@@ -23,15 +19,6 @@ use crate::{
         response::{BoxBodyType, ResponseBuilder},
     },
 };
-
-static PLAYBACK_INFO_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(concat!(
-        r"(?i)^/(?:emby/)?Items/", // 1. Path prefix
-        r"([a-zA-Z0-9_-]+)",       // 2. Item ID capture
-        r"/?PlaybackInfo/?$"       // 3. PlaybackInfo endpoint
-    ))
-    .expect("Invalid regex pattern")
-});
 
 static NORMAL_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(concat!(
@@ -68,25 +55,13 @@ impl ForwardMiddleware {
         Self { forward_service }
     }
 
-    fn get_request_type(&self, ctx: &Context) -> Option<ForwardRequestType> {
-        let item_id = self.get_item_id(&ctx.path)?;
-        let path_params = PathParams {
-            item_id,
-            media_source_id: self.get_media_source_id(&ctx.uri),
-        };
-
-        if PLAYBACK_INFO_REGEX.is_match(&ctx.path) {
-            return Some(ForwardRequestType::PlaybackInfo(path_params));
+    fn get_item_id(&self, path: &str) -> Option<String> {
+        if let Some(caps) = NORMAL_STREAM_REGEX.captures(path) {
+            return caps.get(1).map(|m| m.as_str().to_owned());
         }
 
-        Some(ForwardRequestType::Stream(path_params))
-    }
-
-    fn get_item_id(&self, path: &str) -> Option<String> {
-        NORMAL_STREAM_REGEX
+        HLS_STREAM_REGEX
             .captures(path)
-            .or_else(|| HLS_STREAM_REGEX.captures(path))
-            .or_else(|| PLAYBACK_INFO_REGEX.captures(path))
             .and_then(|caps| caps.get(1))
             .map(|m| m.as_str().to_owned())
     }
@@ -100,16 +75,38 @@ impl ForwardMiddleware {
             })
             .unwrap_or_default()
     }
+}
 
-    async fn handle_stream_request(
+#[async_trait]
+impl Middleware for ForwardMiddleware {
+    async fn handle(
         &self,
-        forward_request: AppForwardRequest,
-        path_params: PathParams,
+        ctx: Context,
+        body: Option<Incoming>,
+        next: Next,
     ) -> Response<BoxBodyType> {
+        debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting forward middleware...");
+
+        let Some(item_id) = self.get_item_id(&ctx.path) else {
+            return next(ctx, body).await;
+        };
+
+        let path_params = PathParams {
+            item_id,
+            media_source_id: self.get_media_source_id(&ctx.uri),
+        };
+
+        let forward_request = AppForwardRequest {
+            uri: ctx.uri,
+            original_headers: ctx.headers,
+            request_start_time: ctx.start_time,
+        };
+
         let result = self
             .forward_service
-            .fetch_redirect_info(forward_request, path_params)
+            .handle_request(forward_request, path_params)
             .await;
+
         match result {
             Ok(redirect_info) => {
                 info_log!(
@@ -129,70 +126,6 @@ impl ForwardMiddleware {
                 )
             }
             Err(status_code) => ResponseBuilder::with_status_code(status_code),
-        }
-    }
-
-    async fn handle_playback_info_request(
-        &self,
-        forward_request: AppForwardRequest,
-        path_params: PathParams,
-    ) -> Response<BoxBodyType> {
-        let result = self
-            .forward_service
-            .fetch_playback_info(forward_request, path_params)
-            .await;
-
-        match result {
-            Ok(playback_info) => match playback_info.to_json() {
-                Ok(json_body) => {
-                    let mut headers = HeaderMap::new();
-                    headers.insert(
-                        header::CONTENT_TYPE,
-                        HeaderValue::from_static("application/json"),
-                    );
-                    ResponseBuilder::with_response(
-                        StatusCode::OK,
-                        Some(headers),
-                        Some(json_body),
-                    )
-                }
-                Err(_) => ResponseBuilder::with_status_code(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                ),
-            },
-            Err(status_code) => ResponseBuilder::with_status_code(status_code),
-        }
-    }
-}
-
-#[async_trait]
-impl Middleware for ForwardMiddleware {
-    async fn handle(
-        &self,
-        ctx: Context,
-        body: Option<Incoming>,
-        next: Next,
-    ) -> Response<BoxBodyType> {
-        debug_log!(GATEWAY_LOGGER_DOMAIN, "Starting forward middleware...");
-
-        let forward_request = AppForwardRequest {
-            uri: ctx.uri.clone(),
-            original_headers: ctx.headers.clone(),
-            request_start_time: ctx.start_time,
-        };
-
-        match self.get_request_type(&ctx) {
-            Some(ForwardRequestType::Stream(path_params)) => {
-                self.handle_stream_request(forward_request, path_params)
-                    .await
-            }
-
-            Some(ForwardRequestType::PlaybackInfo(path_params)) => {
-                self.handle_playback_info_request(forward_request, path_params)
-                    .await
-            }
-
-            None => next(ctx, body).await,
         }
     }
 

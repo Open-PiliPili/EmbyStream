@@ -8,10 +8,7 @@ use std::{
 use futures_util::TryStreamExt;
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
-use hyper::{
-    HeaderMap, StatusCode,
-    header::{self, HeaderValue},
-};
+use hyper::{HeaderMap, StatusCode, header};
 use lazy_static::lazy_static;
 use tokio::sync::Semaphore;
 
@@ -155,10 +152,9 @@ impl LocalStreamer {
         let mut headers = HeaderMap::new();
         headers.insert(
             header::CONTENT_TYPE,
-            HeaderValue::from_static(get_content_type(&file_metadata.format)),
+            get_content_type(&file_metadata.format).parse().unwrap(),
         );
-        headers
-            .insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        headers.insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
 
         if status_code == StatusCode::PARTIAL_CONTENT {
             headers
@@ -169,9 +165,7 @@ impl LocalStreamer {
                 content_range.end,
                 content_range.total_size
             );
-            if let Ok(range_value) = HeaderValue::from_str(&range_str) {
-                headers.insert(header::CONTENT_RANGE, range_value);
-            }
+            headers.insert(header::CONTENT_RANGE, range_str.parse().unwrap());
         } else {
             headers.insert(
                 header::CONTENT_LENGTH,

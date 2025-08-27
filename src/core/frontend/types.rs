@@ -4,11 +4,6 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Deserialize;
 
-pub enum ForwardRequestType {
-    Stream(PathParams),
-    PlaybackInfo(PathParams),
-}
-
 #[derive(Clone, Debug)]
 pub struct ForwardInfo {
     pub item_id: String,

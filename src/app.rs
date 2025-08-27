@@ -22,7 +22,6 @@ pub struct AppState {
     encrypt_cache: OnceCell<GeneralCache>,
     decrypt_cache: OnceCell<GeneralCache>,
     strm_file_cache: OnceCell<GeneralCache>,
-    playback_info_cache: OnceCell<GeneralCache>,
     forward_info_cache: OnceCell<GeneralCache>,
     open_list_cache: OnceCell<GeneralCache>,
     rate_limiter_cache: OnceCell<RateLimiterCache>,
@@ -39,7 +38,6 @@ impl AppState {
             encrypt_cache: OnceCell::new(),
             decrypt_cache: OnceCell::new(),
             strm_file_cache: OnceCell::new(),
-            playback_info_cache: OnceCell::new(),
             forward_info_cache: OnceCell::new(),
             open_list_cache: OnceCell::new(),
             rate_limiter_cache: OnceCell::new(),
@@ -154,13 +152,6 @@ impl AppState {
     pub async fn get_strm_file_cache(&self) -> &GeneralCache {
         let (capacity, ttl) = self.get_cache_settings().await;
         self.strm_file_cache
-            .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
-            .await
-    }
-
-    pub async fn get_playback_info_cache(&self) -> &GeneralCache {
-        let (capacity, ttl) = self.get_cache_settings().await;
-        self.playback_info_cache
             .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
             .await
     }

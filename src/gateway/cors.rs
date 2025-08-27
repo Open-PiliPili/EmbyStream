@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use hyper::{Response, body::Incoming, header::HeaderValue};
+use hyper::{Response, body::Incoming};
 
 use super::{
     chain::{Middleware, Next},
@@ -25,17 +25,22 @@ impl Middleware for CorsMiddleware {
 
         response.headers_mut().insert(
             "Access-Control-Allow-Origin",
-            HeaderValue::from_static("*"),
+            "*".parse()
+                .expect("Failed to parse CORS Allow-Origin header"),
         );
 
         response.headers_mut().insert(
             "Access-Control-Allow-Methods",
-            HeaderValue::from_static("GET,POST,PUT,DELETE,OPTIONS"),
+            "GET,POST,PUT,DELETE,OPTIONS"
+                .parse()
+                .expect("Failed to parse CORS Allow-Methods header"),
         );
 
         response.headers_mut().insert(
             "Access-Control-Allow-Headers",
-            HeaderValue::from_static("Content-Type,Authorization"),
+            "Content-Type,Authorization"
+                .parse()
+                .expect("Failed to parse CORS Allow-Headers header"),
         );
 
         response
