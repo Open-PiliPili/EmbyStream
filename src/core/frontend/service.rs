@@ -61,7 +61,11 @@ impl AppForwardService {
         }
     }
 
-    async fn get_emby_api_token(&self, request: &AppForwardRequest) -> String {
+    async fn get_emby_api_token(
+        &self,
+        request: &AppForwardRequest,
+        use_fallback_key: bool,
+    ) -> String {
         if let Some(token) = request.uri.query().and_then(|q| {
             form_urlencoded::parse(q.as_bytes())
                 .find(|(k, _)| {
@@ -93,7 +97,11 @@ impl AppForwardService {
             return token.to_owned();
         }
 
-        self.get_forward_config().await.emby_api_key.clone()
+        if use_fallback_key {
+            self.get_forward_config().await.emby_api_key.clone()
+        } else {
+            String::new()
+        }
     }
 
     async fn get_device_id(&self, request: &AppForwardRequest) -> String {
@@ -126,7 +134,7 @@ impl AppForwardService {
             return device_id.to_owned();
         }
 
-        String::new()
+        self.get_emby_api_token(request, false).await
     }
 
     async fn get_forward_info(
@@ -193,7 +201,7 @@ impl AppForwardService {
 
         let config = self.get_forward_config().await;
 
-        let emby_token = self.get_emby_api_token(request).await;
+        let emby_token = self.get_emby_api_token(request, true).await;
         if emby_token.is_empty() {
             error_log!(
                 FORWARD_LOGGER_DOMAIN,
