@@ -124,7 +124,7 @@ impl ForwardMiddleware {
                 );
                 ResponseBuilder::with_redirect(
                     redirect_info.target_url.to_string(),
-                    StatusCode::FOUND,
+                    StatusCode::MOVED_PERMANENTLY,
                     Some(redirect_info.final_headers),
                 )
             }

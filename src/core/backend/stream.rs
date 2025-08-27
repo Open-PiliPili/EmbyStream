@@ -95,7 +95,7 @@ impl Middleware for StreamMiddleware {
                     );
                     ResponseBuilder::with_redirect(
                         redirect_info.target_url.to_string().as_str(),
-                        StatusCode::FOUND,
+                        StatusCode::MOVED_PERMANENTLY,
                         Some(redirect_info.final_headers),
                     )
                 }

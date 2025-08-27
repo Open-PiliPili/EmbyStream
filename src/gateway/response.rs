@@ -18,7 +18,7 @@ impl ResponseBuilder {
         headers: Option<HeaderMap>,
     ) -> Response<BoxBodyType> {
         if !status.is_redirection() {
-            status = StatusCode::FOUND;
+            status = StatusCode::MOVED_PERMANENTLY;
         }
 
         let mut response = Response::new(
