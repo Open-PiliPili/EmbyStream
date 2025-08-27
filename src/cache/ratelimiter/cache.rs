@@ -45,13 +45,18 @@ impl RateLimiterCache {
     pub async fn fetch_limiter(&self, device_id: &str) -> Arc<RateLimiter> {
         if self.rate_kbs == 0 {
             return Arc::new(RateLimiter {
-                semaphore: Arc::new(Semaphore::new(usize::MAX / 2)),
+                semaphore: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
             });
         }
 
         self.limiters
             .get_with(device_id.to_string(), async {
-                let bytes_per_sec = (self.rate_kbs * 1024) as usize;
+                let bytes_per_sec = self
+                    .rate_kbs
+                    .checked_mul(1024)
+                    .map(|v| v as usize)
+                    .unwrap_or(Semaphore::MAX_PERMITS)
+                    .min(Semaphore::MAX_PERMITS);
 
                 let limiter = Arc::new(RateLimiter {
                     semaphore: Arc::new(Semaphore::new(bytes_per_sec)),
@@ -71,13 +76,23 @@ impl RateLimiterCache {
         }
 
         let active_limiters = self.active_limiters.clone();
-        let bytes_to_add_per_second = (self.rate_kbs * 1024) as usize;
+        let bytes_to_add_per_second = self
+            .rate_kbs
+            .checked_mul(1024)
+            .map(|v| v as usize)
+            .unwrap_or(Semaphore::MAX_PERMITS)
+            .min(Semaphore::MAX_PERMITS);
 
         let max_permits =
             if self.burst_kbs >= self.rate_kbs && self.rate_kbs > 0 {
-                (self.burst_kbs * 1024) as usize
+                self.burst_kbs
+                    .checked_mul(1024)
+                    .map(|v| v as usize)
+                    .unwrap_or(Semaphore::MAX_PERMITS)
+                    .min(Semaphore::MAX_PERMITS)
             } else {
-                (bytes_to_add_per_second as f64 * 1.2) as usize
+                ((bytes_to_add_per_second as f64 * 1.2) as usize)
+                    .min(Semaphore::MAX_PERMITS)
             };
 
         tokio::spawn(async move {
@@ -91,9 +106,9 @@ impl RateLimiterCache {
                         let current_permits =
                             limiter.semaphore.available_permits();
                         if current_permits < max_permits {
-                            limiter
-                                .semaphore
-                                .add_permits(bytes_to_add_per_second);
+                            let to_add = (max_permits - current_permits)
+                                .min(bytes_to_add_per_second);
+                            limiter.semaphore.add_permits(to_add);
                         }
                         true
                     } else {
