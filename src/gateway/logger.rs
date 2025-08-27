@@ -6,7 +6,7 @@ use super::{
     response::BoxBodyType,
 };
 use crate::gateway::context::Context;
-use crate::{GATEWAY_LOGGER_DOMAIN, info_log};
+use crate::{GATEWAY_LOGGER_DOMAIN, debug_log, info_log};
 
 #[derive(Clone)]
 pub struct LoggerMiddleware;
@@ -39,7 +39,7 @@ impl Middleware for LoggerMiddleware {
         info_log!(GATEWAY_LOGGER_DOMAIN, "Request headers: {:?}", ctx.headers);
 
         if ctx.headers.contains_key(header::CONTENT_LENGTH) {
-            info_log!(
+            debug_log!(
                 GATEWAY_LOGGER_DOMAIN,
                 "Request contains a body (content not logged to preserve stream)"
             );
