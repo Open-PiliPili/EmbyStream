@@ -51,7 +51,7 @@ pub struct InfuseAuthorization {
 }
 
 static INFUSE_AUTH_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(concat!(r#"([^=,]+)="([^"]+)""#)).expect("Invalid regex pattern")
+    Regex::new(r#"([^=,]+)="([^"]+)""#).expect("Invalid regex pattern")
 });
 
 impl InfuseAuthorization {
