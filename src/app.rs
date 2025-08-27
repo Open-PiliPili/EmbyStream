@@ -159,9 +159,9 @@ impl AppState {
     }
 
     pub async fn get_playback_info_cache(&self) -> &GeneralCache {
-        let (capacity, ttl) = self.get_cache_settings().await;
+        let (capacity, _) = self.get_cache_settings().await;
         self.playback_info_cache
-            .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
+            .get_or_init(|| async move { GeneralCache::new(capacity, 60 * 60) })
             .await
     }
 
