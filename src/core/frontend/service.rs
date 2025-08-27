@@ -181,19 +181,25 @@ impl AppForwardService {
     ) -> Result<PlaybackInfo, AppForwardError> {
         let playback_info_cache = self.state.get_playback_info_cache().await;
         let cache_key = self.playback_info_key(path_params)?;
-        if let Some(cached_forward_info) = playback_info_cache.get(&cache_key) {
+        if let Some(cached_playback_info) = playback_info_cache.get(&cache_key)
+        {
             debug_log!(
                 FORWARD_LOGGER_DOMAIN,
-                "Playback info cache hit {:?}",
-                cached_forward_info
+                "Playback info cache hit for uri: {:?}",
+                request.uri
             );
-            return Ok(cached_forward_info);
+            return Ok(cached_playback_info);
         }
 
         let config = self.get_forward_config().await;
 
         let emby_token = self.get_emby_api_token(request).await;
         if emby_token.is_empty() {
+            error_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "Emby token not found for uri: {:?}",
+                request.uri
+            );
             return Err(AppForwardError::EmptyEmbyToken);
         }
 
@@ -217,6 +223,12 @@ impl AppForwardService {
                 );
                 AppForwardError::EmbyPathRequestError
             })?;
+
+        debug_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "Successfully fetched playback info: {:?}, uri",
+            request.uri
+        );
 
         playback_info_cache.insert(cache_key, playback_info.clone());
 
@@ -500,7 +512,7 @@ impl AppForwardService {
         &self,
         params: &PathParams,
     ) -> Result<String, AppForwardError> {
-        self.md5_key(&params.item_id, &params.media_source_id)
+        Ok(StringUtil::md5(&params.item_id))
     }
 
     fn forward_info_key(

@@ -78,10 +78,12 @@ impl NetworkTarget for API {
             Operation::PlaybackInfo {
                 media_source_id, ..
             } => {
-                params.insert(
-                    "MediaSourceId".to_string(),
-                    media_source_id.clone(),
-                );
+                if !media_source_id.is_empty() {
+                    params.insert(
+                        "MediaSourceId".to_string(),
+                        media_source_id.clone(),
+                    );
+                }
                 NetworkTask::RequestParameters(params)
             }
         }
