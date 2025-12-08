@@ -13,7 +13,10 @@ use embystream::{
 use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
     cli::{Cli, Commands, RunArgs},
-    config::{core::Config, general::StreamMode},
+    config::{
+        backend::types::BackendConfig as StreamBackendConfig, core::Config,
+        general::StreamMode,
+    },
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
         CorsMiddleware, LoggerMiddleware, OptionsMiddleware, chain::Handler,
@@ -55,6 +58,8 @@ async fn run_app(
     let app_state = setup_cache(&config).await;
 
     setup_rate_limiters(&app_state).await;
+
+    setup_backend_routes(&app_state).await;
 
     let mode = {
         let config_guard = app_state.get_config().await;
@@ -202,6 +207,60 @@ async fn setup_rate_limiters(app_state: &Arc<AppState>) {
     let rate_limiter_cache = app_state.get_rate_limiter_cache().await;
     rate_limiter_cache.start_refill_task();
     info_log!(INIT_LOGGER_DOMAIN, "Rate limiter refill task started.");
+}
+
+async fn setup_backend_routes(app_state: &Arc<AppState>) {
+    if let Some(routes) = app_state.get_backend_routes().await {
+        info_log!(
+            INIT_LOGGER_DOMAIN,
+            "Backend routing enabled: {} route(s) configured",
+            routes.routes.len()
+        );
+        info_log!(
+            INIT_LOGGER_DOMAIN,
+            "Routing settings: match_before_rewrite={}, match_priority={}",
+            routes.match_before_rewrite,
+            if routes.match_priority_first {
+                "first"
+            } else {
+                "last"
+            }
+        );
+
+        for (index, route) in routes.routes.iter().enumerate() {
+            let backend_type = match &route.backend_config.backend_config {
+                StreamBackendConfig::Disk(_) => "disk",
+                StreamBackendConfig::OpenList(_) => "openlist",
+                StreamBackendConfig::DirectLink(_) => "direct_link",
+            };
+            info_log!(
+                INIT_LOGGER_DOMAIN,
+                "  Route #{}: pattern=\"{}\", backend_type=\"{}\"",
+                index + 1,
+                route.pattern,
+                backend_type
+            );
+        }
+
+        let fallback_type = match &routes.fallback.backend_config {
+            StreamBackendConfig::Disk(_) => "disk",
+            StreamBackendConfig::OpenList(_) => "openlist",
+            StreamBackendConfig::DirectLink(_) => "direct_link",
+        };
+        info_log!(
+            INIT_LOGGER_DOMAIN,
+            "Fallback backend: type=\"{}\"",
+            fallback_type
+        );
+    } else {
+        let config = app_state.get_config().await;
+        let backend_type = config.general.backend_type.as_str();
+        info_log!(
+            INIT_LOGGER_DOMAIN,
+            "Backend routing disabled: using legacy backend_type=\"{}\"",
+            backend_type
+        );
+    }
 }
 
 async fn setup_frontend_gateway(
