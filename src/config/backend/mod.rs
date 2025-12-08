@@ -6,4 +6,4 @@ pub mod types;
 pub use direct::DirectLink;
 pub use disk::Disk;
 pub use openlist::OpenList;
-pub use types::{Backend, BackendConfig};
+pub use types::{Backend, BackendConfig, backend_type_str};

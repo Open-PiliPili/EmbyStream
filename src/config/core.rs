@@ -392,26 +392,25 @@ impl Config {
         raw_config: &RawConfig,
     ) -> Result<BackendConfig, ConfigError> {
         match backend_type.to_lowercase().as_str() {
-            "disk" => {
-                let disk = raw_config.disk.as_ref().ok_or_else(|| {
-                    ConfigError::MissingConfig("Disk".to_string())
-                })?;
-                Ok(BackendConfig::Disk(disk.clone()))
-            }
-            "openlist" => {
-                let open_list =
-                    raw_config.open_list.as_ref().ok_or_else(|| {
-                        ConfigError::MissingConfig("OpenList".to_string())
-                    })?;
-                Ok(BackendConfig::OpenList(open_list.clone()))
-            }
-            "direct_link" => {
-                let direct_link =
-                    raw_config.direct_link.as_ref().ok_or_else(|| {
-                        ConfigError::MissingConfig("DirectLink".to_string())
-                    })?;
-                Ok(BackendConfig::DirectLink(direct_link.clone()))
-            }
+            "disk" => raw_config
+                .disk
+                .as_ref()
+                .map(|d| BackendConfig::Disk(d.clone()))
+                .ok_or_else(|| ConfigError::MissingConfig("Disk".to_string())),
+            "openlist" => raw_config
+                .open_list
+                .as_ref()
+                .map(|o| BackendConfig::OpenList(o.clone()))
+                .ok_or_else(|| {
+                    ConfigError::MissingConfig("OpenList".to_string())
+                }),
+            "direct_link" => raw_config
+                .direct_link
+                .as_ref()
+                .map(|d| BackendConfig::DirectLink(d.clone()))
+                .ok_or_else(|| {
+                    ConfigError::MissingConfig("DirectLink".to_string())
+                }),
             other => Err(ConfigError::InvalidBackendType(other.to_string())),
         }
     }
