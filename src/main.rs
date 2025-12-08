@@ -8,7 +8,7 @@ use tokio::signal as TokioSignal;
 use embystream::gateway::reverse_proxy_filter::ReverseProxyFilterMiddleware;
 use embystream::{
     AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log,
-    info_log,
+    info_log, warn_log,
 };
 use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
@@ -227,9 +227,9 @@ async fn setup_backend_routes(app_state: &Arc<AppState>) {
         for (index, route) in routes.routes.iter().enumerate() {
             let backend_type =
                 backend_type_str(&route.backend_config.backend_config);
-            info_log!(
+            debug_log!(
                 INIT_LOGGER_DOMAIN,
-                "  Route #{}: pattern=\"{}\", backend_type=\"{}\"",
+                "Route #{}: pattern=\"{}\", backend_type=\"{}\"",
                 index + 1,
                 route.pattern,
                 backend_type
@@ -245,9 +245,10 @@ async fn setup_backend_routes(app_state: &Arc<AppState>) {
     } else {
         let config = app_state.get_config().await;
         let backend_type = config.general.backend_type.as_str();
-        info_log!(
+        warn_log!(
             INIT_LOGGER_DOMAIN,
-            "Backend routing disabled: using legacy backend_type=\"{}\"",
+            "DEPRECATED: Using legacy backend_type=\"{}\". \
+            Please configure [[Backend.Routes]] and [Backend.Fallback] instead.",
             backend_type
         );
     }

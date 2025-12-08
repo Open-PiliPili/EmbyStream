@@ -9,12 +9,19 @@ use crate::config::types::{AntiReverseProxyConfig, PathRewriteConfig};
 /// Configuration for backend routing behavior
 #[derive(Clone, Debug, Deserialize)]
 pub struct BackendRoutingConfig {
+    /// Enable backend routing (default: false)
+    #[serde(default = "default_enable")]
+    pub enable: bool,
     /// Match routes before path rewriting (default: false)
     #[serde(default = "default_match_before_rewrite")]
     pub match_before_rewrite: bool,
     /// Match priority: "first" or "last" (default: "first")
     #[serde(default = "default_match_priority")]
     pub match_priority: String,
+}
+
+fn default_enable() -> bool {
+    false
 }
 
 fn default_match_before_rewrite() -> bool {
@@ -28,6 +35,9 @@ fn default_match_priority() -> String {
 /// Configuration for a single backend route rule
 #[derive(Clone, Debug, Deserialize)]
 pub struct BackendRouteConfig {
+    /// Enable this route rule (default: false)
+    #[serde(default = "default_enable")]
+    pub enable: bool,
     /// Regex pattern to match against request path
     pub pattern: String,
     /// Backend type to use when pattern matches: "disk", "openlist", or "direct_link"
@@ -37,6 +47,9 @@ pub struct BackendRouteConfig {
 /// Configuration for fallback backend when no route matches
 #[derive(Clone, Debug, Deserialize)]
 pub struct BackendFallbackConfig {
+    /// Enable fallback backend (default: false)
+    #[serde(default = "default_enable")]
+    pub enable: bool,
     /// Backend type to use as fallback: "disk", "openlist", or "direct_link"
     pub backend_type: String,
 }
@@ -58,6 +71,15 @@ pub struct Backend {
     pub anti_reverse_proxy: AntiReverseProxyConfig,
     #[serde(default)]
     pub problematic_clients: Vec<String>,
+    /// Backend routing configuration (Backend.Routing)
+    #[serde(default, rename = "Routing")]
+    pub routing: Option<BackendRoutingConfig>,
+    /// Backend route rules (Backend.Routes)
+    #[serde(default, rename = "Routes")]
+    pub routes: Vec<BackendRouteConfig>,
+    /// Fallback backend configuration (Backend.Fallback)
+    #[serde(rename = "Fallback")]
+    pub fallback: Option<BackendFallbackConfig>,
 }
 
 /// Get backend type string from BackendConfig enum

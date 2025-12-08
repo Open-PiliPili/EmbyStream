@@ -7,6 +7,7 @@ macro_rules! config_log {
         let level_padded = format!("{:>5}", $level);
         let colored_level = match $level {
             "ERROR" => format!("\x1b[31m{}\x1b[0m", level_padded),
+            "WARN" => format!("\x1b[33m{}\x1b[0m", level_padded),
             "DEBUG" => format!("\x1b[33m{}\x1b[0m", level_padded),
             _ => format!("\x1b[32m{}\x1b[0m", level_padded),
         };
@@ -35,5 +36,12 @@ macro_rules! config_error_log {
 macro_rules! config_debug_log {
     ($domain:expr, $($arg:tt)+) => {
         $crate::config_log!("DEBUG", $domain, $($arg)+);
+    };
+}
+
+#[macro_export]
+macro_rules! config_warn_log {
+    ($domain:expr, $($arg:tt)+) => {
+        $crate::config_log!("WARN", $domain, $($arg)+);
     };
 }
