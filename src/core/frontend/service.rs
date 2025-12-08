@@ -84,7 +84,9 @@ impl AppForwardService {
             .get("x-emby-authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(InfuseAuthorization::from_header_str)
-            .and_then(|auth| auth.get("MediaBrowser Token"))
+            .and_then(|auth| {
+                auth.get("MediaBrowser Token").or_else(|| auth.get("Token"))
+            })
             .filter(|id| !id.is_empty())
         {
             return token.to_owned();
