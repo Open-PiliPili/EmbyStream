@@ -1,7 +1,15 @@
 use serde::Deserialize;
 
 use crate::config::{
-    backend::{Backend, direct::DirectLink, disk::Disk, openlist::OpenList},
+    backend::{
+        Backend,
+        direct::DirectLink,
+        disk::Disk,
+        openlist::OpenList,
+        types::{
+            BackendFallbackConfig, BackendRouteConfig, BackendRoutingConfig,
+        },
+    },
     frontend::Frontend,
     general::{Emby, General, Log, UserAgent},
     http2::Http2,
@@ -87,6 +95,15 @@ pub struct RawConfig {
     pub frontend: Option<Frontend>,
     #[serde(rename = "Backend")]
     pub backend: Option<Backend>,
+    /// Backend routing configuration
+    #[serde(rename = "Backend.Routing", default)]
+    pub backend_routing: Option<BackendRoutingConfig>,
+    /// Backend route rules (matched in order)
+    #[serde(rename = "Backend.Routes", default)]
+    pub backend_routes: Vec<BackendRouteConfig>,
+    /// Fallback backend configuration when no route matches
+    #[serde(rename = "Backend.Fallback")]
+    pub backend_fallback: Option<BackendFallbackConfig>,
     #[serde(rename = "Disk")]
     pub disk: Option<Disk>,
     #[serde(rename = "OpenList")]

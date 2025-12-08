@@ -125,7 +125,10 @@ enable = false
 host = ""
 
 # Backend-specific configurations
-# Only configure the section matching your chosen backend_type
+# 
+# NOTE: If you don't configure routing rules ([[Backend.Routes]]), the system will
+# automatically use the legacy backend_type setting from [General] section.
+# This ensures backward compatibility with existing configurations.
 
 [Backend]
 # Backend server configuration
@@ -185,6 +188,60 @@ replacement = "/proxy$1"
 [Backend.AntiReverseProxy]
 enable = false
 host = ""
+
+# ===================================================================
+# Backend Routing Configuration (Optional - for advanced users)
+# ===================================================================
+#
+# Route requests to different backends based on path patterns.
+# Routes are matched in order, and the first (or last) matching route is used.
+#
+# IMPORTANT: If you don't configure any routes below, the system will automatically
+# use the legacy backend_type setting from [General] section for backward compatibility.
+# You can safely ignore this section if you only need a single backend type.
+
+# Routing behavior configuration
+[Backend.Routing]
+# Match routes before path rewriting (default: false)
+# - true: Match routes using the original path before any path rewrites
+# - false: Match routes using the path after path rewrites (recommended)
+match_before_rewrite = false
+
+# Match priority when multiple routes match (default: "first")
+# - "first": Use the first matching route (recommended)
+# - "last": Use the last matching route
+match_priority = "first"
+
+# Route rules (matched in order)
+# Each route specifies a regex pattern and the backend type to use when matched.
+# Uncomment and configure the routes below to enable path-based routing.
+#
+# [[Backend.Routes]]
+# # Example: Route all /movies/ paths to disk backend
+# pattern = "^/movies/.*"
+# backend_type = "disk"
+#
+# [[Backend.Routes]]
+# # Example: Route all /tv/ paths to OpenList backend
+# pattern = "^/tv/.*"
+# backend_type = "openlist"
+#
+# [[Backend.Routes]]
+# # Example: Route all /cdn/ paths to DirectLink backend
+# pattern = "^/cdn/.*"
+# backend_type = "direct_link"
+
+# Fallback backend configuration
+# Used when no route matches the request path (only needed if routes are configured)
+[Backend.Fallback]
+# Backend type to use as fallback: "disk", "openlist", or "direct_link"
+backend_type = "disk"
+
+# ===================================================================
+# Backend Type Configurations
+# ===================================================================
+# These configurations are referenced by the route rules above (or by backend_type if routing is not used).
+# Each backend type has its own configuration section.
 
 [Disk]
 # Disk backend configuration - for local or mounted storage

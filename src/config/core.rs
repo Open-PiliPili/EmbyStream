@@ -7,6 +7,8 @@ use std::{
 
 use directories::BaseDirs;
 use libc;
+
+use regex::Regex;
 use serde::Deserialize;
 
 use super::{
@@ -19,6 +21,8 @@ use super::{
 };
 use crate::cli::RunArgs;
 use crate::config::general::{Log, types::Emby};
+use crate::core::backend::types::{BackendRoute, BackendRoutes};
+use crate::util::resolve_fallback_video_path;
 use crate::{CONFIG_LOGGER_DOMAIN, config_error_log, config_info_log};
 
 const CONFIG_DIR_NAME: &str = "embystream";
@@ -40,7 +44,11 @@ pub struct Config {
     pub user_agent: UserAgent,
     pub frontend: Option<Frontend>,
     pub backend: Option<Backend>,
+    /// Legacy single backend config (for backward compatibility)
     pub backend_config: Option<BackendConfig>,
+    /// Backend routes configuration (new routing system)
+    #[serde(skip)]
+    pub backend_routes: Option<BackendRoutes>,
     pub http2: Http2,
     pub fallback: FallbackConfig,
 }
@@ -134,35 +142,45 @@ impl Config {
             || stream_mode == &StreamMode::Backend
             || stream_mode == &StreamMode::Dual;
 
-        let backend_config = if needs_backend {
+        let (backend_config, backend_routes) = if needs_backend {
             if raw_config.backend.is_none() {
                 return Err(ConfigError::MissingConfig("Backend".to_string()));
             }
 
-            let backend_type = raw_config.general.backend_type.as_str();
+            // Check if routing configuration is provided
+            if !raw_config.backend_routes.is_empty() {
+                // Use new routing system
+                let routes = Self::build_backend_routes(&raw_config, path)?;
+                (None, Some(routes))
+            } else {
+                // Backward compatibility: use legacy single backend_type
+                let backend_type = raw_config.general.backend_type.as_str();
 
-            let config = match backend_type.to_lowercase().as_str() {
-                "disk" => Ok(BackendConfig::Disk(raw_config.disk.ok_or_else(
-                    || ConfigError::MissingConfig("Disk".to_string()),
-                )?)),
-                "openlist" => Ok(BackendConfig::OpenList(
-                    raw_config.open_list.ok_or_else(|| {
-                        ConfigError::MissingConfig("OpenList".to_string())
-                    })?,
-                )),
-                "direct_link" => Ok(BackendConfig::DirectLink(
-                    raw_config.direct_link.ok_or_else(|| {
-                        ConfigError::MissingConfig("DirectLink".to_string())
-                    })?,
-                )),
-                other => {
-                    Err(ConfigError::InvalidBackendType(other.to_string()))
-                }
-            };
+                let config = match backend_type.to_lowercase().as_str() {
+                    "disk" => {
+                        Ok(BackendConfig::Disk(raw_config.disk.ok_or_else(
+                            || ConfigError::MissingConfig("Disk".to_string()),
+                        )?))
+                    }
+                    "openlist" => Ok(BackendConfig::OpenList(
+                        raw_config.open_list.ok_or_else(|| {
+                            ConfigError::MissingConfig("OpenList".to_string())
+                        })?,
+                    )),
+                    "direct_link" => Ok(BackendConfig::DirectLink(
+                        raw_config.direct_link.ok_or_else(|| {
+                            ConfigError::MissingConfig("DirectLink".to_string())
+                        })?,
+                    )),
+                    other => {
+                        Err(ConfigError::InvalidBackendType(other.to_string()))
+                    }
+                };
 
-            Some(config?)
+                (Some(config?), None)
+            }
         } else {
-            None
+            (None, None)
         };
 
         Ok(Config {
@@ -174,6 +192,7 @@ impl Config {
             frontend: raw_config.frontend,
             backend: raw_config.backend,
             backend_config,
+            backend_routes,
             http2: raw_config.http2.unwrap_or_default(),
             fallback: raw_config.fallback,
         })
@@ -253,5 +272,138 @@ impl Config {
             "Please configure the new file and restart the application"
         );
         process::exit(0);
+    }
+
+    /// Build backend routes from raw configuration
+    fn build_backend_routes(
+        raw_config: &RawConfig,
+        config_path: &Path,
+    ) -> Result<BackendRoutes, ConfigError> {
+        // Get routing configuration with defaults
+        let routing_config =
+            raw_config.backend_routing.clone().unwrap_or_else(|| {
+                crate::config::backend::types::BackendRoutingConfig {
+                    match_before_rewrite: false,
+                    match_priority: "first".to_string(),
+                }
+            });
+
+        let mut routes = Vec::new();
+
+        // Build route rules
+        for route_config in &raw_config.backend_routes {
+            // Validate regex pattern
+            Regex::new(&route_config.pattern).map_err(|e| {
+                ConfigError::InvalidRegex {
+                    pattern: route_config.pattern.clone(),
+                    error: e.to_string(),
+                }
+            })?;
+
+            // Get backend config by type
+            let backend_config_enum = Self::get_backend_config_by_type(
+                &route_config.backend_type,
+                raw_config,
+            )?;
+
+            // Build BackendConfig with backend settings
+            let backend_config = Self::build_backend_config_instance(
+                raw_config,
+                config_path,
+                backend_config_enum,
+            );
+
+            routes.push(BackendRoute {
+                pattern: route_config.pattern.clone(),
+                regex: tokio::sync::OnceCell::new(),
+                backend_config,
+            });
+        }
+
+        // Build fallback configuration
+        let fallback_config_enum = if let Some(fallback) =
+            &raw_config.backend_fallback
+        {
+            Self::get_backend_config_by_type(
+                &fallback.backend_type,
+                raw_config,
+            )?
+        } else if let Some(first_route) = raw_config.backend_routes.first() {
+            // If no fallback configured, use the first route's backend type
+            Self::get_backend_config_by_type(
+                &first_route.backend_type,
+                raw_config,
+            )?
+        } else {
+            // If no routes at all, this should not happen (checked before calling this function)
+            return Err(ConfigError::MissingConfig(
+                "Backend.Routes (at least one route required)".to_string(),
+            ));
+        };
+
+        let fallback_config = Self::build_backend_config_instance(
+            raw_config,
+            config_path,
+            fallback_config_enum,
+        );
+
+        Ok(BackendRoutes {
+            routes,
+            fallback: fallback_config,
+            match_before_rewrite: routing_config.match_before_rewrite,
+            match_priority_first: routing_config.match_priority == "first",
+        })
+    }
+
+    /// Build a BackendConfig instance from raw config and backend config enum
+    fn build_backend_config_instance(
+        raw_config: &RawConfig,
+        config_path: &Path,
+        backend_config_enum: BackendConfig,
+    ) -> crate::core::backend::types::BackendConfig {
+        let backend =
+            raw_config.backend.as_ref().expect("Backend config missing");
+        let fallback_video_path = resolve_fallback_video_path(
+            &raw_config.fallback.video_missing_path,
+            config_path,
+        );
+
+        crate::core::backend::types::BackendConfig {
+            crypto_key: raw_config.general.encipher_key.clone(),
+            crypto_iv: raw_config.general.encipher_iv.clone(),
+            backend: backend.clone(),
+            backend_config: backend_config_enum,
+            fallback_video_path,
+        }
+    }
+
+    /// Get backend config enum by backend type string
+    fn get_backend_config_by_type(
+        backend_type: &str,
+        raw_config: &RawConfig,
+    ) -> Result<BackendConfig, ConfigError> {
+        match backend_type.to_lowercase().as_str() {
+            "disk" => {
+                let disk = raw_config.disk.as_ref().ok_or_else(|| {
+                    ConfigError::MissingConfig("Disk".to_string())
+                })?;
+                Ok(BackendConfig::Disk(disk.clone()))
+            }
+            "openlist" => {
+                let open_list =
+                    raw_config.open_list.as_ref().ok_or_else(|| {
+                        ConfigError::MissingConfig("OpenList".to_string())
+                    })?;
+                Ok(BackendConfig::OpenList(open_list.clone()))
+            }
+            "direct_link" => {
+                let direct_link =
+                    raw_config.direct_link.as_ref().ok_or_else(|| {
+                        ConfigError::MissingConfig("DirectLink".to_string())
+                    })?;
+                Ok(BackendConfig::DirectLink(direct_link.clone()))
+            }
+            other => Err(ConfigError::InvalidBackendType(other.to_string())),
+        }
     }
 }

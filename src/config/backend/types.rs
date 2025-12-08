@@ -6,6 +6,41 @@ use super::{
 };
 use crate::config::types::{AntiReverseProxyConfig, PathRewriteConfig};
 
+/// Configuration for backend routing behavior
+#[derive(Clone, Debug, Deserialize)]
+pub struct BackendRoutingConfig {
+    /// Match routes before path rewriting (default: false)
+    #[serde(default = "default_match_before_rewrite")]
+    pub match_before_rewrite: bool,
+    /// Match priority: "first" or "last" (default: "first")
+    #[serde(default = "default_match_priority")]
+    pub match_priority: String,
+}
+
+fn default_match_before_rewrite() -> bool {
+    false
+}
+
+fn default_match_priority() -> String {
+    "first".to_string()
+}
+
+/// Configuration for a single backend route rule
+#[derive(Clone, Debug, Deserialize)]
+pub struct BackendRouteConfig {
+    /// Regex pattern to match against request path
+    pub pattern: String,
+    /// Backend type to use when pattern matches: "disk", "openlist", or "direct_link"
+    pub backend_type: String,
+}
+
+/// Configuration for fallback backend when no route matches
+#[derive(Clone, Debug, Deserialize)]
+pub struct BackendFallbackConfig {
+    /// Backend type to use as fallback: "disk", "openlist", or "direct_link"
+    pub backend_type: String,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Backend {
     pub listen_port: u16,

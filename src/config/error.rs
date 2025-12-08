@@ -19,4 +19,6 @@ pub enum ConfigError {
     InvalidBackendType(String),
     #[error("Missing configuration: '{0}'")]
     MissingConfig(String),
+    #[error("Invalid regex pattern '{pattern}': {error}")]
+    InvalidRegex { pattern: String, error: String },
 }
