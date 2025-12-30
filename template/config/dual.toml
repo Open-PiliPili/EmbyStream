@@ -73,8 +73,6 @@ host = ""
 # Route requests to different backends based on path patterns
 
 [Backend.Routing]
-# Enable backend routing (default: false)
-enable = true
 # Match routes before path rewriting (default: false)
 match_before_rewrite = false
 # Match priority: "first" or "last" (default: "first")
@@ -82,30 +80,22 @@ match_priority = "first"
 
 # Route rules (matched in order)
 [[Backend.Routes]]
-# Enable this route rule (default: false)
-enable = true
 # Route all /movies/ paths to disk backend
 pattern = "^/movies/.*"
 backend_type = "disk"
 
 [[Backend.Routes]]
-# Enable this route rule (default: false)
-enable = true
 # Route all /tv/ paths to OpenList backend
 pattern = "^/tv/.*"
 backend_type = "openlist"
 
 [[Backend.Routes]]
-# Enable this route rule (default: false)
-enable = true
 # Route all /cdn/ paths to DirectLink backend
 pattern = "^/cdn/.*"
 backend_type = "direct_link"
 
 # Fallback backend configuration
 [Backend.Fallback]
-# Enable fallback backend (default: false)
-enable = true
 backend_type = "disk"
 
 # ===================================================================

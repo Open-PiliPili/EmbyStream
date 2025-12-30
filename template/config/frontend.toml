@@ -202,11 +202,6 @@ host = ""
 
 # Routing behavior configuration
 [Backend.Routing]
-# Enable backend routing (default: false)
-# - true: Enable routing rules and use them for request routing
-# - false: Disable routing, use default route with backend_type
-enable = false
-
 # Match routes before path rewriting (default: false)
 # - true: Match routes using the original path before any path rewrites
 # - false: Match routes using the path after path rewrites (recommended)
@@ -239,10 +234,6 @@ match_priority = "first"
 # Fallback backend configuration
 # Used when no route matches the request path (only needed if routes are configured)
 [Backend.Fallback]
-# Enable fallback backend (default: false)
-# - true: Use this fallback backend when no route matches
-# - false: Use backend_type from [General] section as fallback (deprecated)
-enable = false
 # Backend type to use as fallback: "disk", "openlist", or "direct_link"
 backend_type = "disk"
 
