@@ -291,18 +291,9 @@ impl Config {
         let mut routes = Vec::new();
 
         // Build route rules
-        for (index, route_config) in
-            raw_config.backend_routes.iter().enumerate()
-        {
+        for route_config in &raw_config.backend_routes {
             // Validate regex pattern
             Regex::new(&route_config.pattern).map_err(|e| {
-                config_error_log!(
-                    CONFIG_LOGGER_DOMAIN,
-                    "Invalid regex pattern in route #{}: \"{}\", error: {}",
-                    index + 1,
-                    route_config.pattern,
-                    e
-                );
                 ConfigError::InvalidRegex {
                     pattern: route_config.pattern.clone(),
                     error: e.to_string(),

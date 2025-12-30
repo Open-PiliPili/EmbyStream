@@ -76,39 +76,19 @@ impl AppStreamService {
 
         // Get backend routes configuration (if available)
         let routes = self.state.get_backend_routes().await;
-        let original_path = Uri::to_path_or_url_string(&uri);
 
         // Determine path for routing based on match_before_rewrite setting
         let path_for_routing = if let Some(routes) = routes {
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "Routing request: original_path=\"{}\", match_before_rewrite={}",
-                original_path,
-                routes.match_before_rewrite
-            );
-
             if routes.match_before_rewrite {
                 // Match routes before path rewriting
-                original_path
+                Uri::to_path_or_url_string(&uri)
             } else {
                 // Match routes after path rewriting (default)
                 uri = self.rewrite_uri_if_needed(uri).await;
-                let rewritten_path = Uri::to_path_or_url_string(&uri);
-                debug_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "Path rewritten: \"{}\" -> \"{}\"",
-                    original_path,
-                    rewritten_path
-                );
-                rewritten_path
+                Uri::to_path_or_url_string(&uri)
             }
         } else {
             // No routing configuration, use legacy behavior
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "No routing configured, using legacy backend_type for path: \"{}\"",
-                original_path
-            );
             uri = self.rewrite_uri_if_needed(uri).await;
             Uri::to_path_or_url_string(&uri)
         };
@@ -183,19 +163,9 @@ impl AppStreamService {
         path: &str,
     ) -> Arc<BackendConfig> {
         if let Some(routes) = self.state.get_backend_routes().await {
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "Matching routes for path: {}",
-                path
-            );
             self.get_backend_config_for_path(path, routes).await
         } else {
             // Legacy: use single backend config
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "Using legacy backend config for path: {}",
-                path
-            );
             self.get_backend_config().await
         }
     }
@@ -229,31 +199,19 @@ impl AppStreamService {
 
         match matched_route {
             Some(route) => {
-                let backend_type = match &route.backend_config.backend_config {
-                    StreamBackendConfig::Disk(_) => "disk",
-                    StreamBackendConfig::OpenList(_) => "openlist",
-                    StreamBackendConfig::DirectLink(_) => "direct_link",
-                };
-                info_log!(
+                debug_log!(
                     STREAM_LOGGER_DOMAIN,
-                    "Route matched: pattern=\"{}\", backend_type=\"{}\", path=\"{}\"",
+                    "Route matched: pattern={}, path={}",
                     route.pattern,
-                    backend_type,
                     path
                 );
                 Arc::new(route.backend_config.clone())
             }
             None => {
-                let fallback_type = match &routes.fallback.backend_config {
-                    StreamBackendConfig::Disk(_) => "disk",
-                    StreamBackendConfig::OpenList(_) => "openlist",
-                    StreamBackendConfig::DirectLink(_) => "direct_link",
-                };
                 debug_log!(
                     STREAM_LOGGER_DOMAIN,
-                    "No route matched for path=\"{}\", using fallback backend_type=\"{}\"",
-                    path,
-                    fallback_type
+                    "No route matched for path={}, using fallback",
+                    path
                 );
                 Arc::new(routes.fallback.clone())
             }
@@ -391,22 +349,8 @@ impl AppStreamService {
         }
 
         let openlist_config = match &backend_config.backend_config {
-            StreamBackendConfig::OpenList(open_list) => {
-                debug_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "Processing OpenList request for URI: {:?}",
-                    uri
-                );
-                open_list
-            }
-            _ => {
-                debug_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "Backend type is not OpenList, skipping OpenList processing for URI: {:?}",
-                    uri
-                );
-                return Ok(uri.clone());
-            }
+            StreamBackendConfig::OpenList(open_list) => open_list,
+            _ => return Ok(uri.clone()),
         };
 
         let path = Uri::to_path_or_url_string(uri);
