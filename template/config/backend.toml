@@ -186,56 +186,6 @@ replacement = "/proxy$1"
 enable = false
 host = ""
 
-# ===================================================================
-# Backend Routing Configuration
-# ===================================================================
-#
-# Route requests to different backends based on path patterns.
-# Routes are matched in order, and the first (or last) matching route is used.
-#
-# If no routes are configured, the legacy backend_type setting will be used.
-
-# Routing behavior configuration
-[Backend.Routing]
-# Match routes before path rewriting (default: false)
-# - true: Match routes using the original path before any path rewrites
-# - false: Match routes using the path after path rewrites (recommended)
-match_before_rewrite = false
-
-# Match priority when multiple routes match (default: "first")
-# - "first": Use the first matching route (recommended)
-# - "last": Use the last matching route
-match_priority = "first"
-
-# Route rules (matched in order)
-# Each route specifies a regex pattern and the backend type to use when matched.
-[[Backend.Routes]]
-# Example: Route all /movies/ paths to disk backend
-pattern = "^/movies/.*"
-backend_type = "disk"
-
-# [[Backend.Routes]]
-# Example: Route all /tv/ paths to OpenList backend
-# pattern = "^/tv/.*"
-# backend_type = "openlist"
-
-# [[Backend.Routes]]
-# Example: Route all /cdn/ paths to DirectLink backend
-# pattern = "^/cdn/.*"
-# backend_type = "direct_link"
-
-# Fallback backend configuration
-# Used when no route matches the request path
-[Backend.Fallback]
-# Backend type to use as fallback: "disk", "openlist", or "direct_link"
-backend_type = "disk"
-
-# ===================================================================
-# Backend Type Configurations
-# ===================================================================
-# These configurations are referenced by the route rules above.
-# Each backend type has its own configuration section.
-
 [Disk]
 # Disk backend configuration - for local or mounted storage
 description = ""

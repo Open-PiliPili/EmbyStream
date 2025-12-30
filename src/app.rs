@@ -1,12 +1,10 @@
 use std::{collections::HashSet, ops::Deref as DerefTrait};
 
-use regex::Regex;
 use tokio::sync::{OnceCell, RwLock as TokioRwLock};
 
 use crate::{
     cache::{GeneralCache, MetadataCache, RateLimiterCache},
     config::core::Config,
-    core::backend::types::BackendRoutes,
     util::path_rewriter::PathRewriter,
 };
 
@@ -27,7 +25,6 @@ pub struct AppState {
     forward_info_cache: OnceCell<GeneralCache>,
     open_list_cache: OnceCell<GeneralCache>,
     rate_limiter_cache: OnceCell<RateLimiterCache>,
-    backend_routes_cache: OnceCell<BackendRoutes>,
 }
 
 impl AppState {
@@ -44,7 +41,6 @@ impl AppState {
             forward_info_cache: OnceCell::new(),
             open_list_cache: OnceCell::new(),
             rate_limiter_cache: OnceCell::new(),
-            backend_routes_cache: OnceCell::new(),
         }
     }
 
@@ -188,34 +184,5 @@ impl AppState {
                 RateLimiterCache::new(capacity * 2, ttl, limit_kbs, burst_kbs)
             })
             .await
-    }
-
-    /// Get backend routes with compiled regex patterns (cached at startup)
-    pub async fn get_backend_routes(&self) -> Option<&BackendRoutes> {
-        let config = self.get_config().await;
-        if let Some(routes) = config.backend_routes.as_ref() {
-            Some(
-                self.backend_routes_cache
-                    .get_or_init(|| async move {
-                        let mut routes = routes.clone();
-                        // Compile all regex patterns
-                        for route in &mut routes.routes {
-                            let pattern = route.pattern.clone();
-                            route
-                                .regex
-                                .get_or_init(|| async {
-                                    Regex::new(&pattern).expect(
-                                        "Failed to compile regex pattern",
-                                    )
-                                })
-                                .await;
-                        }
-                        routes
-                    })
-                    .await,
-            )
-        } else {
-            None
-        }
     }
 }

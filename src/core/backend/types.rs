@@ -1,6 +1,3 @@
-use regex::Regex;
-use tokio::sync::OnceCell;
-
 use crate::config::backend::{
     Backend, types::BackendConfig as StreamBackendConfig,
 };
@@ -12,30 +9,6 @@ pub struct BackendConfig {
     pub backend: Backend,
     pub backend_config: StreamBackendConfig,
     pub fallback_video_path: Option<String>,
-}
-
-/// Runtime backend route with compiled regex pattern
-#[derive(Clone, Debug)]
-pub struct BackendRoute {
-    /// Original regex pattern string
-    pub pattern: String,
-    /// Compiled regex pattern (cached at startup)
-    pub regex: OnceCell<Regex>,
-    /// Backend configuration for this route
-    pub backend_config: BackendConfig,
-}
-
-/// Collection of backend routes with routing behavior configuration
-#[derive(Clone, Debug)]
-pub struct BackendRoutes {
-    /// List of route rules (matched in order)
-    pub routes: Vec<BackendRoute>,
-    /// Fallback backend configuration when no route matches
-    pub fallback: BackendConfig,
-    /// Whether to match routes before path rewriting
-    pub match_before_rewrite: bool,
-    /// Whether to use first match (true) or last match (false)
-    pub match_priority_first: bool,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
