@@ -60,15 +60,6 @@ pub struct Backend {
     pub problematic_clients: Vec<String>,
 }
 
-/// Get backend type string from BackendConfig enum
-pub fn backend_type_str(config: &BackendConfig) -> &'static str {
-    match config {
-        BackendConfig::Disk(_) => "disk",
-        BackendConfig::OpenList(_) => "openlist",
-        BackendConfig::DirectLink(_) => "direct_link",
-    }
-}
-
 impl Backend {
     pub fn uri(&self) -> Uri {
         let should_show_port = !(self.port == "443" || self.port == "80");

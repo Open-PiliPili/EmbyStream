@@ -18,9 +18,7 @@ use crate::{AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
     CryptoInput, CryptoOperation, CryptoOutput,
     client::{ClientBuilder, OpenListClient},
-    config::backend::{
-        backend_type_str, types::BackendConfig as StreamBackendConfig,
-    },
+    config::backend::types::BackendConfig as StreamBackendConfig,
     core::{
         error::Error as AppStreamError, request::Request as AppStreamRequest,
     },
@@ -52,18 +50,6 @@ impl AppStreamService {
         }
     }
 
-    /// Check if a route matches the given path
-    fn route_matches(
-        route: &crate::core::backend::types::BackendRoute,
-        path: &str,
-    ) -> bool {
-        route
-            .regex
-            .get()
-            .map(|re| re.is_match(path))
-            .unwrap_or(false)
-    }
-
     async fn decrypt_and_route(
         &self,
         request: &AppStreamRequest,
@@ -93,9 +79,39 @@ impl AppStreamService {
         let original_path = Uri::to_path_or_url_string(&uri);
 
         // Determine path for routing based on match_before_rewrite setting
-        let path_for_routing = self
-            .determine_routing_path(routes, &mut uri, &original_path)
-            .await;
+        let path_for_routing = if let Some(routes) = routes {
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "Routing request: original_path=\"{}\", match_before_rewrite={}",
+                original_path,
+                routes.match_before_rewrite
+            );
+
+            if routes.match_before_rewrite {
+                // Match routes before path rewriting
+                original_path
+            } else {
+                // Match routes after path rewriting (default)
+                uri = self.rewrite_uri_if_needed(uri).await;
+                let rewritten_path = Uri::to_path_or_url_string(&uri);
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Path rewritten: \"{}\" -> \"{}\"",
+                    original_path,
+                    rewritten_path
+                );
+                rewritten_path
+            }
+        } else {
+            // No routing configuration, use legacy behavior
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "No routing configured, using legacy backend_type for path: \"{}\"",
+                original_path
+            );
+            uri = self.rewrite_uri_if_needed(uri).await;
+            Uri::to_path_or_url_string(&uri)
+        };
 
         // Get backend config for this path (or use legacy config)
         let backend_config = self
@@ -174,6 +190,7 @@ impl AppStreamService {
             );
             self.get_backend_config_for_path(path, routes).await
         } else {
+            // Legacy: use single backend config
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "Using legacy backend config for path: {}",
@@ -183,77 +200,40 @@ impl AppStreamService {
         }
     }
 
-    /// Determine the path to use for routing based on configuration
-    async fn determine_routing_path(
-        &self,
-        routes: Option<&BackendRoutes>,
-        uri: &mut Uri,
-        original_path: &str,
-    ) -> String {
-        match routes {
-            Some(routes) => {
-                debug_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "Routing request: original_path=\"{}\", match_before_rewrite={}",
-                    original_path,
-                    routes.match_before_rewrite
-                );
-
-                if routes.match_before_rewrite {
-                    original_path.to_string()
-                } else {
-                    *uri = self.rewrite_uri_if_needed(uri.clone()).await;
-                    let rewritten_path = Uri::to_path_or_url_string(uri);
-                    debug_log!(
-                        STREAM_LOGGER_DOMAIN,
-                        "Path rewritten: \"{}\" -> \"{}\"",
-                        original_path,
-                        rewritten_path
-                    );
-                    rewritten_path
-                }
-            }
-            None => {
-                debug_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "No routing configured, using legacy backend_type for path: \"{}\"",
-                    original_path
-                );
-                *uri = self.rewrite_uri_if_needed(uri.clone()).await;
-                Uri::to_path_or_url_string(uri)
-            }
-        }
-    }
-
-    /// Find matching route based on priority setting
-    fn find_matching_route<'a>(
-        routes: &'a BackendRoutes,
-        path: &str,
-    ) -> Option<&'a crate::core::backend::types::BackendRoute> {
-        if routes.match_priority_first {
-            routes
-                .routes
-                .iter()
-                .find(|route| Self::route_matches(route, path))
-        } else {
-            routes
-                .routes
-                .iter()
-                .rev()
-                .find(|route| Self::route_matches(route, path))
-        }
-    }
-
     /// Get backend config for a specific path using route matching
     async fn get_backend_config_for_path(
         &self,
         path: &str,
         routes: &BackendRoutes,
     ) -> Arc<BackendConfig> {
-        match Self::find_matching_route(routes, path) {
+        // Find matching route based on priority setting
+        let matched_route = if routes.match_priority_first {
+            // First match: find the first route that matches
+            routes.routes.iter().find(|route| {
+                route
+                    .regex
+                    .get()
+                    .map(|re| re.is_match(path))
+                    .unwrap_or(false)
+            })
+        } else {
+            // Last match: find the last route that matches
+            routes.routes.iter().rev().find(|route| {
+                route
+                    .regex
+                    .get()
+                    .map(|re| re.is_match(path))
+                    .unwrap_or(false)
+            })
+        };
+
+        match matched_route {
             Some(route) => {
-                let backend_type =
-                    backend_type_str(&route.backend_config.backend_config);
+                let backend_type = match &route.backend_config.backend_config {
+                    StreamBackendConfig::Disk(_) => "disk",
+                    StreamBackendConfig::OpenList(_) => "openlist",
+                    StreamBackendConfig::DirectLink(_) => "direct_link",
+                };
                 info_log!(
                     STREAM_LOGGER_DOMAIN,
                     "Route matched: pattern=\"{}\", backend_type=\"{}\", path=\"{}\"",
@@ -264,8 +244,11 @@ impl AppStreamService {
                 Arc::new(route.backend_config.clone())
             }
             None => {
-                let fallback_type =
-                    backend_type_str(&routes.fallback.backend_config);
+                let fallback_type = match &routes.fallback.backend_config {
+                    StreamBackendConfig::Disk(_) => "disk",
+                    StreamBackendConfig::OpenList(_) => "openlist",
+                    StreamBackendConfig::DirectLink(_) => "direct_link",
+                };
                 debug_log!(
                     STREAM_LOGGER_DOMAIN,
                     "No route matched for path=\"{}\", using fallback backend_type=\"{}\"",
@@ -281,22 +264,26 @@ impl AppStreamService {
         &self,
         config: &BackendConfig,
     ) -> Option<PathBuf> {
-        let fallback_path_str = config.fallback_video_path.as_ref()?;
-        if fallback_path_str.is_empty() {
-            return None;
-        }
+        config
+            .fallback_video_path
+            .as_ref()
+            .and_then(|fallback_path_str| {
+                if fallback_path_str.is_empty() {
+                    return None;
+                }
 
-        let fallback_path = PathBuf::from(fallback_path_str);
-        if !fallback_path.exists() {
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "Fallback path does not exist: {:?}",
-                fallback_path_str
-            );
-            return None;
-        }
+                let fallback_path = PathBuf::from(fallback_path_str);
+                if !fallback_path.exists() {
+                    debug_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "Fallback path does not exist: {:?}",
+                        fallback_path_str
+                    );
+                    return None;
+                }
 
-        Some(fallback_path)
+                Some(fallback_path)
+            })
     }
 
     async fn decrypt(
@@ -389,11 +376,12 @@ impl AppStreamService {
         }
 
         let openlist_ua =
-            user_agent.unwrap_or_else(|| SystemInfo::new().get_user_agent());
+            user_agent.unwrap_or(SystemInfo::new().get_user_agent());
 
         let cache = self.state.get_open_list_cache().await;
-        let cache_key = self.open_list_cache_key(uri, &openlist_ua);
-        if let Some(cached_uri) = cache.get(&cache_key) {
+        if let Some(cached_uri) =
+            cache.get(&self.open_list_cache_key(uri, &openlist_ua.clone()))
+        {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "Open list cache hit: {:?}",
@@ -456,7 +444,10 @@ impl AppStreamService {
                         AppStreamError::InvalidOpenListUri(new_url.clone())
                     })?;
 
-                cache.insert(cache_key, new_uri.clone());
+                cache.insert(
+                    self.open_list_cache_key(uri, &openlist_ua),
+                    new_uri.clone(),
+                );
 
                 debug_log!(
                     STREAM_LOGGER_DOMAIN,
@@ -595,6 +586,7 @@ impl StreamService for AppStreamService {
             }
             Source::Remote { uri, mode } => match mode {
                 ProxyMode::Redirect => {
+                    // Get backend config for redirect (use path from URI)
                     let path_for_config = Uri::to_path_or_url_string(&uri);
                     let backend_config = self
                         .get_backend_config_for_path_str(&path_for_config)
@@ -610,6 +602,7 @@ impl StreamService for AppStreamService {
                     Ok(AppStreamResult::Redirect(redirect_info))
                 }
                 ProxyMode::Proxy => {
+                    // Get backend config for this request (use path from URI)
                     let path_for_config = Uri::to_path_or_url_string(&uri);
                     let backend_config = self
                         .get_backend_config_for_path_str(&path_for_config)
@@ -621,7 +614,7 @@ impl StreamService for AppStreamService {
                         }
                         _ => None,
                     }
-                    .unwrap_or_else(|| SystemInfo::new().get_user_agent());
+                    .unwrap_or(SystemInfo::new().get_user_agent());
                     RemoteStreamer::stream(
                         self.state.clone(),
                         uri,

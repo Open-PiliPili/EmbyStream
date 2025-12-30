@@ -13,7 +13,10 @@ use embystream::{
 use embystream::{
     backend::{service::AppStreamService, stream::StreamMiddleware},
     cli::{Cli, Commands, RunArgs},
-    config::{backend::backend_type_str, core::Config, general::StreamMode},
+    config::{
+        backend::types::BackendConfig as StreamBackendConfig, core::Config,
+        general::StreamMode,
+    },
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
         CorsMiddleware, LoggerMiddleware, OptionsMiddleware, chain::Handler,
@@ -225,8 +228,11 @@ async fn setup_backend_routes(app_state: &Arc<AppState>) {
         );
 
         for (index, route) in routes.routes.iter().enumerate() {
-            let backend_type =
-                backend_type_str(&route.backend_config.backend_config);
+            let backend_type = match &route.backend_config.backend_config {
+                StreamBackendConfig::Disk(_) => "disk",
+                StreamBackendConfig::OpenList(_) => "openlist",
+                StreamBackendConfig::DirectLink(_) => "direct_link",
+            };
             info_log!(
                 INIT_LOGGER_DOMAIN,
                 "  Route #{}: pattern=\"{}\", backend_type=\"{}\"",
@@ -236,7 +242,11 @@ async fn setup_backend_routes(app_state: &Arc<AppState>) {
             );
         }
 
-        let fallback_type = backend_type_str(&routes.fallback.backend_config);
+        let fallback_type = match &routes.fallback.backend_config {
+            StreamBackendConfig::Disk(_) => "disk",
+            StreamBackendConfig::OpenList(_) => "openlist",
+            StreamBackendConfig::DirectLink(_) => "direct_link",
+        };
         info_log!(
             INIT_LOGGER_DOMAIN,
             "Fallback backend: type=\"{}\"",
@@ -256,8 +266,8 @@ async fn setup_backend_routes(app_state: &Arc<AppState>) {
 async fn setup_frontend_gateway(
     app_state: &Arc<AppState>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let config_guard = app_state.get_config().await;
-    let mode = config_guard.general.stream_mode.clone();
+    let config = app_state.get_config().await.clone();
+    let mode = config.general.stream_mode;
 
     if !matches!(mode, StreamMode::Frontend | StreamMode::Dual) {
         debug_log!(
@@ -269,7 +279,7 @@ async fn setup_frontend_gateway(
 
     debug_log!(INIT_LOGGER_DOMAIN, "Successfully start frontend listener");
 
-    let frontend = config_guard.frontend.as_ref().ok_or_else(|| {
+    let frontend = config.frontend.as_ref().ok_or_else(|| {
         error_log!(
             INIT_LOGGER_DOMAIN,
             "Error: Frontend configuration not exist"
@@ -301,8 +311,8 @@ async fn setup_frontend_gateway(
 async fn setup_backend_gateway(
     app_state: &Arc<AppState>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let config_guard = app_state.get_config().await;
-    let mode = config_guard.general.stream_mode.clone();
+    let config = app_state.get_config().await.clone();
+    let mode = config.general.clone().stream_mode;
 
     if !matches!(mode, StreamMode::Backend | StreamMode::Dual) {
         debug_log!(
@@ -314,7 +324,7 @@ async fn setup_backend_gateway(
 
     debug_log!(INIT_LOGGER_DOMAIN, "Successfully start backend listener");
 
-    let backend = config_guard.backend.as_ref().ok_or_else(|| {
+    let backend = config.backend.as_ref().ok_or_else(|| {
         error_log!(
             INIT_LOGGER_DOMAIN,
             "Error: Backend configuration not exist"
@@ -326,10 +336,7 @@ async fn setup_backend_gateway(
     let service = Arc::new(AppStreamService::new(app_state.clone()));
 
     let mut gateway = Gateway::new(&addr)
-        .with_tls(
-            config_guard.get_ssl_cert_path(),
-            config_guard.get_ssl_key_path(),
-        )
+        .with_tls(config.get_ssl_cert_path(), config.get_ssl_key_path())
         .add_middleware(Box::new(LoggerMiddleware))
         .add_middleware(Box::new(ClientAgentFilterMiddleware::new(
             app_state.clone(),
