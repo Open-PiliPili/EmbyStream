@@ -219,7 +219,6 @@ impl AppForwardService {
 
         url.query_pairs_mut()
             .append_pair("sign", &sign_value)
-            .append_pair("proxy_mode", &config.proxy_mode)
             .append_pair("device_id", &forward_info.device_id);
 
         let url_str = url.as_str();
@@ -532,7 +531,6 @@ impl AppForwardService {
 
                     Arc::new(ForwardConfig {
                         expired_seconds: ttl,
-                        proxy_mode: backend.proxy_mode.clone(),
                         backend_url: backend.uri().to_string(),
                         crypto_key: config.general.encipher_key.clone(),
                         crypto_iv: config.general.encipher_iv.clone(),

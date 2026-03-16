@@ -2,10 +2,13 @@ use std::time::Instant;
 
 use hyper::{HeaderMap, Uri, header};
 
+use crate::config::backend::BackendNode;
+
 pub struct Request {
     pub uri: Uri,
     pub original_headers: HeaderMap,
     pub request_start_time: Instant,
+    pub node: Option<BackendNode>,
 }
 
 impl Request {
@@ -13,11 +16,13 @@ impl Request {
         uri: Uri,
         original_headers: HeaderMap,
         request_start_time: Instant,
+        node: Option<BackendNode>,
     ) -> Self {
         Self {
             uri,
             original_headers,
             request_start_time,
+            node,
         }
     }
 

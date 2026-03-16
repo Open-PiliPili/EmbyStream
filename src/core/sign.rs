@@ -6,7 +6,6 @@ use std::{
 use hyper::Uri;
 use serde::Deserialize;
 
-use crate::backend::proxy_mode::ProxyMode;
 use crate::{FORWARD_LOGGER_DOMAIN, debug_log};
 
 #[derive(Debug, Deserialize)]
@@ -16,9 +15,6 @@ pub struct SignParams {
 
     #[serde(default)]
     pub(crate) device_id: String,
-
-    #[serde(default)]
-    pub(crate) proxy_mode: ProxyMode,
 }
 
 impl Default for SignParams {
@@ -26,7 +22,6 @@ impl Default for SignParams {
         Self {
             sign: "".into(),
             device_id: "".into(),
-            proxy_mode: ProxyMode::default(),
         }
     }
 }

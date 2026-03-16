@@ -32,6 +32,7 @@ impl LocalStreamer {
         path: PathBuf,
         mut range_header: Option<String>,
         client_info: ClientInfo,
+        node_uuid: &str,
     ) -> Result<AppStreamResult, StatusCode> {
         if !path.is_file() {
             return Err(StatusCode::NOT_FOUND);
@@ -49,7 +50,18 @@ impl LocalStreamer {
             }
         };
 
-        let rate_limiter_cache = state.get_rate_limiter_cache().await;
+        let rate_limiter_cache = state
+            .get_rate_limiter_cache(node_uuid)
+            .await
+            .ok_or_else(|| {
+                error_log!(
+                    LOCAL_STREAMER_LOGGER_DOMAIN,
+                    "Rate limiter cache not found for node uuid: {}",
+                    node_uuid
+                );
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
         let limiter = rate_limiter_cache.fetch_limiter(&client_id_value).await;
 
         let problematic_clients = state.get_problematic_clients().await;

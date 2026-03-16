@@ -1,10 +1,13 @@
 use hyper::Uri;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OpenList {
+    #[serde(default)]
     pub base_url: String,
+    #[serde(default)]
     pub port: String,
+    #[serde(default)]
     pub token: String,
 }
 

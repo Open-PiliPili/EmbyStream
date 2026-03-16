@@ -24,7 +24,6 @@ pub struct PathParams {
 pub struct ForwardConfig {
     pub expired_seconds: u64,
     pub backend_url: String,
-    pub proxy_mode: String,
     pub crypto_key: String,
     pub crypto_iv: String,
     pub emby_server_url: String,

@@ -1,10 +1,10 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::types::{AntiReverseProxyConfig, PathRewriteConfig};
 
 use crate::defaults;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Frontend {
     pub listen_port: u16,
 

@@ -1,13 +1,16 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    backend::{Backend, direct::DirectLink, disk::Disk, openlist::OpenList},
+    backend::{
+        Backend, BackendNode, direct::DirectLink, disk::Disk,
+        openlist::OpenList,
+    },
     frontend::Frontend,
     general::{Emby, General, Log, UserAgent},
     http2::Http2,
 };
 
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct PathRewriteConfig {
     #[serde(default)]
     pub enable: bool,
@@ -26,7 +29,7 @@ impl PathRewriteConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AntiReverseProxyConfig {
     #[serde(default)]
     pub enable: bool,
@@ -65,13 +68,13 @@ impl AntiReverseProxyConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct FallbackConfig {
     #[serde(default)]
     pub video_missing_path: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct RawConfig {
     #[serde(rename = "General")]
     pub general: General,
@@ -87,6 +90,8 @@ pub struct RawConfig {
     pub frontend: Option<Frontend>,
     #[serde(rename = "Backend")]
     pub backend: Option<Backend>,
+    #[serde(rename = "BackendNode")]
+    pub backend_nodes: Option<Vec<BackendNode>>,
     #[serde(rename = "Disk")]
     pub disk: Option<Disk>,
     #[serde(rename = "OpenList")]

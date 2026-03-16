@@ -5,7 +5,6 @@ use figlet_rs::FIGfont;
 use hyper::{StatusCode, body::Incoming};
 use tokio::signal as TokioSignal;
 
-use embystream::gateway::reverse_proxy_filter::ReverseProxyFilterMiddleware;
 use embystream::{
     AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log,
     info_log,
@@ -19,6 +18,7 @@ use embystream::{
         CorsMiddleware, LoggerMiddleware, OptionsMiddleware, chain::Handler,
         client_filter::ClientAgentFilterMiddleware, context::Context,
         core::Gateway, response::ResponseBuilder,
+        reverse_proxy_filter::ReverseProxyFilterMiddleware,
     },
     logger::{LogLevel, Logger},
     system::SystemInfo,
@@ -42,6 +42,7 @@ async fn run_app(
     setup_figlet();
 
     let config = setup_load_config(run_args);
+
     setup_logger(&config)?;
     setup_print_info(&config);
 
@@ -148,7 +149,9 @@ fn setup_load_config(run_args: &RunArgs) -> Config {
     }
 }
 
-fn setup_logger(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
+fn setup_logger(
+    config: &Config,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let log_path = Path::new(&config.log.root_path);
     fs::create_dir_all(log_path)?;
 
@@ -199,8 +202,7 @@ fn setup_crypto_provider() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 async fn setup_rate_limiters(app_state: &Arc<AppState>) {
-    let rate_limiter_cache = app_state.get_rate_limiter_cache().await;
-    rate_limiter_cache.start_refill_task();
+    app_state.init_rate_limiters().await;
     info_log!(INIT_LOGGER_DOMAIN, "Rate limiter refill task started.");
 }
 
@@ -282,13 +284,10 @@ async fn setup_backend_gateway(
         .add_middleware(Box::new(ClientAgentFilterMiddleware::new(
             app_state.clone(),
         )))
-        .add_middleware(Box::new(ReverseProxyFilterMiddleware::new(
-            backend.clone().anti_reverse_proxy,
-        )))
         .add_middleware(Box::new(CorsMiddleware))
         .add_middleware(Box::new(OptionsMiddleware))
         .add_middleware(Box::new(StreamMiddleware::new(
-            &backend.path,
+            config.backend_nodes.clone(),
             service,
         )));
 

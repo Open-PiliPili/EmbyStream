@@ -1,5 +1,6 @@
 use std::{collections::HashSet, ops::Deref as DerefTrait};
 
+use dashmap::DashMap;
 use tokio::sync::{OnceCell, RwLock as TokioRwLock};
 
 use crate::{
@@ -16,7 +17,6 @@ const PROBLEMATIC_CLIENTS: &[&str] =
 pub struct AppState {
     config: TokioRwLock<Config>,
     frontend_path_rewrite_cache: OnceCell<Vec<PathRewriter>>,
-    backend_path_rewrite_cache: OnceCell<Vec<PathRewriter>>,
     problematic_clients_cache: OnceCell<Vec<String>>,
     metadata_cache: OnceCell<MetadataCache>,
     encrypt_cache: OnceCell<GeneralCache>,
@@ -24,7 +24,7 @@ pub struct AppState {
     strm_file_cache: OnceCell<GeneralCache>,
     forward_info_cache: OnceCell<GeneralCache>,
     open_list_cache: OnceCell<GeneralCache>,
-    rate_limiter_cache: OnceCell<RateLimiterCache>,
+    rate_limiter_cache: OnceCell<DashMap<String, RateLimiterCache>>,
 }
 
 impl AppState {
@@ -32,7 +32,6 @@ impl AppState {
         Self {
             config: TokioRwLock::new(config),
             frontend_path_rewrite_cache: OnceCell::new(),
-            backend_path_rewrite_cache: OnceCell::new(),
             problematic_clients_cache: OnceCell::new(),
             metadata_cache: OnceCell::new(),
             encrypt_cache: OnceCell::new(),
@@ -66,30 +65,6 @@ impl AppState {
                     None => return vec![],
                 };
                 frontend_config
-                    .clone()
-                    .path_rewrites
-                    .into_iter()
-                    .map(|path_rewrite| {
-                        PathRewriter::new(
-                            path_rewrite.enable,
-                            &path_rewrite.pattern,
-                            &path_rewrite.replacement,
-                        )
-                    })
-                    .collect()
-            })
-            .await
-    }
-
-    pub async fn get_backend_path_rewrite_cache(&self) -> &Vec<PathRewriter> {
-        let config = self.get_config().await;
-        self.backend_path_rewrite_cache
-            .get_or_init(|| async move {
-                let backend_config = match &config.backend {
-                    Some(config) => config,
-                    None => return vec![],
-                };
-                backend_config
                     .clone()
                     .path_rewrites
                     .into_iter()
@@ -170,19 +145,35 @@ impl AppState {
             .await
     }
 
-    pub async fn get_rate_limiter_cache(&self) -> &RateLimiterCache {
-        self.rate_limiter_cache
+    pub async fn get_rate_limiter_cache(
+        &self,
+        node_uuid: &str,
+    ) -> Option<RateLimiterCache> {
+        let cache_map = self
+            .rate_limiter_cache
             .get_or_init(|| async move {
                 let config = self.get_config().await;
                 let (capacity, ttl) = self.get_cache_settings().await;
+                let map = DashMap::new();
 
-                let (limit_kbs, burst_kbs) =
-                    config.backend.as_ref().map_or((0, 0), |b| {
-                        (b.client_speed_limit_kbs, b.client_burst_speed_kbs)
-                    });
+                for node in &config.backend_nodes {
+                    let cache = RateLimiterCache::new(
+                        capacity * 2,
+                        ttl,
+                        node.client_speed_limit_kbs,
+                        node.client_burst_speed_kbs,
+                    );
+                    cache.start_refill_task();
+                    map.insert(node.uuid.clone(), cache);
+                }
 
-                RateLimiterCache::new(capacity * 2, ttl, limit_kbs, burst_kbs)
+                map
             })
-            .await
+            .await;
+
+        cache_map.get(node_uuid).map(|r| r.value().clone())
+    }
+    pub async fn init_rate_limiters(&self) {
+        self.get_rate_limiter_cache("").await;
     }
 }

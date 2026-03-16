@@ -1,0 +1,122 @@
+# Application Configuration File
+# Note: This is an example setup for running both Frontend and Backend in the same instance ("dual" mode).
+
+[Log]
+level = "info"
+prefix = ""
+root_path = "/var/logs/embystream"
+
+[General]
+memory_mode = "middle"
+stream_mode = "dual"
+encipher_key = "Q4eCbawEp3sCvDvx" # Replace in production!
+encipher_iv = "a3cH2abhxnu9hGo5" # Replace in production!
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "nmbp7mpixze8ghdfgki6yrijkeq5zuao"
+
+[UserAgent]
+mode = "deny"
+allow_ua = []
+deny_ua = ["curl", "wget", "python", "fimily", "infuse-library"]
+
+[Http2]
+ssl_cert_file = ""
+ssl_key_file = ""
+
+[Fallback]
+video_missing_path = "/mnt/anime/fallback/video_missing.mp4"
+
+# ===================================================================
+# Frontend Configuration
+# ===================================================================
+[Frontend]
+listen_port = 60001
+check_file_existence = true
+
+[[Frontend.PathRewrite]]
+enable = false
+pattern = "^(/.*)$"
+replacement = "https://my-cdn.com$1"
+
+[Frontend.AntiReverseProxy]
+enable = false
+host = ""
+
+# ===================================================================
+# Backend Configuration
+# ===================================================================
+[Backend]
+listen_port = 3000
+base_url = "http://127.0.0.1"
+port = "3000"
+path = ""
+problematic_clients = ["yamby", "hills", "embytolocalplayer", "Emby/"]
+
+# Backend Nodes
+[[BackendNode]]
+name = "LocalDisk"
+type = "Disk"
+pattern = "/mnt/media/.*"
+base_url = "http://127.0.0.1"
+port = "3000"
+path = "/mnt/media"
+priority = 0
+proxy_mode = "proxy"
+client_speed_limit_kbs = 0
+client_burst_speed_kbs = 0
+
+# Example: Path rewrite rules for this node
+[[BackendNode.PathRewrite]]
+enable = false
+pattern = "^/mnt/media(/.*)$"
+replacement = "/media$1"
+
+[[BackendNode.PathRewrite]]
+enable = false
+pattern = "^(.*)\\.mkv$"
+replacement = "$1.mp4"
+
+[BackendNode.Disk]
+# Specific settings for disk backend
+
+[[BackendNode]]
+name = "MyOpenList"
+type = "OpenList"
+pattern = "/openlist/.*"
+base_url = "http://alist.example.com"
+port = "5244"
+path = "/openlist"
+priority = 0
+proxy_mode = "redirect"
+
+# Example: Path rewrite for OpenList node
+[[BackendNode.PathRewrite]]
+enable = false
+pattern = "^/openlist(/.*)$"
+replacement = "$1"
+
+[BackendNode.OpenList]
+base_url = "http://alist.example.com"
+token = "mock_token_12345"
+
+[[BackendNode]]
+name = "CloudDrive"
+type = "DirectLink"
+pattern = "/cloud/.*"
+base_url = "https://cloud.example.com"
+port = "443"
+path = "/cloud"
+priority = 0
+proxy_mode = "redirect"
+
+# Example: Path rewrite for DirectLink node (e.g., CDN URL transformation)
+[[BackendNode.PathRewrite]]
+enable = false
+pattern = "^/cloud(/.*)$"
+replacement = "https://cdn.example.com$1"
+
+[BackendNode.DirectLink]
+user_agent = "Mozilla/5.0 (MockClient)"

@@ -1,9 +1,9 @@
 use std::fmt;
 
 use hyper::Uri;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum StreamMode {
     #[default]
@@ -22,24 +22,23 @@ impl fmt::Display for StreamMode {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct General {
     pub memory_mode: String,
     #[serde(default)]
     pub stream_mode: StreamMode,
-    pub backend_type: String,
     pub encipher_key: String,
     pub encipher_iv: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Log {
     pub level: String,
     pub prefix: String,
     pub root_path: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Emby {
     pub url: String,
     pub port: String,
@@ -61,7 +60,7 @@ impl Emby {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UserAgent {
     pub mode: String,
     pub allow_ua: Vec<String>,

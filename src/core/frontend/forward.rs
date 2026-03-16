@@ -100,6 +100,7 @@ impl Middleware for ForwardMiddleware {
             uri: ctx.uri,
             original_headers: ctx.headers,
             request_start_time: ctx.start_time,
+            node: None,
         };
 
         let result = self

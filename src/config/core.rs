@@ -7,19 +7,25 @@ use std::{
 
 use directories::BaseDirs;
 use libc;
-use serde::Deserialize;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::{
-    backend::{Backend, BackendConfig},
+    backend::{Backend, BackendNode},
     error::ConfigError,
     frontend::Frontend,
     general::{General, StreamMode, UserAgent},
     http2::Http2,
     types::{FallbackConfig, RawConfig},
 };
-use crate::cli::RunArgs;
-use crate::config::general::{Log, types::Emby};
-use crate::{CONFIG_LOGGER_DOMAIN, config_error_log, config_info_log};
+use crate::{
+    CONFIG_LOGGER_DOMAIN,
+    cli::RunArgs,
+    config::general::{Log, types::Emby},
+    config_error_log, config_info_log,
+    util::path_rewriter::PathRewriter,
+};
 
 const CONFIG_DIR_NAME: &str = "embystream";
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -30,7 +36,7 @@ const DOCKER_CONFIG_PATH: &str = "/config/embystream/config.toml";
 const TEMPLATE_CONFIG_PATH: &str = "src/config.toml.template";
 const ROOT_CONFIG_PATH: &str = "/root/.config/embystream";
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     #[serde(skip)]
     pub path: PathBuf,
@@ -40,7 +46,7 @@ pub struct Config {
     pub user_agent: UserAgent,
     pub frontend: Option<Frontend>,
     pub backend: Option<Backend>,
-    pub backend_config: Option<BackendConfig>,
+    pub backend_nodes: Vec<BackendNode>,
     pub http2: Http2,
     pub fallback: FallbackConfig,
 }
@@ -130,40 +136,32 @@ impl Config {
             return Err(ConfigError::MissingConfig("Frontend".to_string()));
         }
 
-        let needs_backend = stream_mode == &StreamMode::Frontend
-            || stream_mode == &StreamMode::Backend
-            || stream_mode == &StreamMode::Dual;
+        if (stream_mode == &StreamMode::Backend
+            || stream_mode == &StreamMode::Dual)
+            && raw_config.backend.is_none()
+        {
+            return Err(ConfigError::MissingConfig("Backend".to_string()));
+        }
 
-        let backend_config = if needs_backend {
-            if raw_config.backend.is_none() {
-                return Err(ConfigError::MissingConfig("Backend".to_string()));
+        let mut backend_nodes = raw_config.backend_nodes.unwrap_or_default();
+        for node in &mut backend_nodes {
+            node.uuid = Uuid::new_v4().to_string();
+
+            if !node.pattern.is_empty() {
+                node.pattern_regex = Some(
+                    Regex::new(&node.pattern)
+                        .map_err(ConfigError::InvalidRegex)?,
+                );
             }
 
-            let backend_type = raw_config.general.backend_type.as_str();
-
-            let config = match backend_type.to_lowercase().as_str() {
-                "disk" => Ok(BackendConfig::Disk(raw_config.disk.ok_or_else(
-                    || ConfigError::MissingConfig("Disk".to_string()),
-                )?)),
-                "openlist" => Ok(BackendConfig::OpenList(
-                    raw_config.open_list.ok_or_else(|| {
-                        ConfigError::MissingConfig("OpenList".to_string())
-                    })?,
-                )),
-                "direct_link" => Ok(BackendConfig::DirectLink(
-                    raw_config.direct_link.ok_or_else(|| {
-                        ConfigError::MissingConfig("DirectLink".to_string())
-                    })?,
-                )),
-                other => {
-                    Err(ConfigError::InvalidBackendType(other.to_string()))
-                }
-            };
-
-            Some(config?)
-        } else {
-            None
-        };
+            node.path_rewriter_cache = node
+                .path_rewrites
+                .iter()
+                .map(|pr| {
+                    PathRewriter::new(pr.enable, &pr.pattern, &pr.replacement)
+                })
+                .collect();
+        }
 
         Ok(Config {
             path: path.to_path_buf(),
@@ -173,7 +171,7 @@ impl Config {
             user_agent: raw_config.user_agent,
             frontend: raw_config.frontend,
             backend: raw_config.backend,
-            backend_config,
+            backend_nodes,
             http2: raw_config.http2.unwrap_or_default(),
             fallback: raw_config.fallback,
         })
@@ -192,7 +190,6 @@ impl Config {
             } else if cfg!(target_os = "windows") {
                 base_dirs.config_dir().join(CONFIG_DIR_NAME)
             } else {
-                // macOS and other Unix-like systems
                 base_dirs.home_dir().join(".config").join(CONFIG_DIR_NAME)
             };
 

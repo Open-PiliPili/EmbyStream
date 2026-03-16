@@ -1,17 +1,12 @@
-use std::{
-    borrow::Cow,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{borrow::Cow, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
-use hyper::{HeaderMap, StatusCode, Uri, header};
-use tokio::sync::OnceCell;
+use hyper::{StatusCode, Uri, header};
 
 use super::{
     local_streamer::LocalStreamer, proxy_mode::ProxyMode,
     remote_streamer::RemoteStreamer, result::Result as AppStreamResult,
-    source::Source, types::BackendConfig,
+    source::Source,
 };
 use crate::backend::types::ClientInfo;
 use crate::core::redirect_info::RedirectInfo;
@@ -19,7 +14,6 @@ use crate::{AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
     CryptoInput, CryptoOperation, CryptoOutput,
     client::{ClientBuilder, OpenListClient},
-    config::backend::types::BackendConfig as StreamBackendConfig,
     core::{
         error::Error as AppStreamError, request::Request as AppStreamRequest,
     },
@@ -30,25 +24,44 @@ use crate::{
     util::{StringUtil, UriExt},
 };
 
+/// Trait for handling streaming requests
+///
+/// Implementations of this trait process incoming streaming requests,
+/// decrypt signatures, route to appropriate backends, and return streaming responses.
 #[async_trait]
 pub trait StreamService: Send + Sync {
+    /// Handle a streaming request
+    ///
+    /// # Process
+    /// 1. Decrypts and validates the request signature
+    /// 2. Routes to local or remote source based on URI
+    /// 3. Applies path rewriting if configured
+    /// 4. Handles OpenList resolution if needed
+    /// 5. Returns appropriate streaming response or redirect
+    ///
+    /// # Returns
+    /// - `Ok(AppStreamResult)` on success
+    /// - `Err(StatusCode)` on error
     async fn handle_request(
         &self,
         request: AppStreamRequest,
     ) -> Result<AppStreamResult, StatusCode>;
 }
 
+/// Main streaming service implementation
+///
+/// Handles all streaming requests, including decryption, routing, and streaming.
 pub struct AppStreamService {
     pub state: Arc<AppState>,
-    pub config: OnceCell<Arc<BackendConfig>>,
 }
 
 impl AppStreamService {
+    /// Create a new AppStreamService instance
+    ///
+    /// # Arguments
+    /// * `state` - Shared application state containing configuration and caches
     pub fn new(state: Arc<AppState>) -> Self {
-        Self {
-            state,
-            config: OnceCell::new(),
-        }
+        Self { state }
     }
 
     async fn decrypt_and_route(
@@ -63,6 +76,13 @@ impl AppStreamService {
             })
             .unwrap_or_default();
 
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "Decrypting and routing request: sign_present={}, device_id='{}'",
+            !params.sign.is_empty(),
+            params.device_id
+        );
+
         if params.sign.is_empty() {
             return Err(AppStreamError::EmptySignature);
         }
@@ -74,30 +94,45 @@ impl AppStreamService {
         }
 
         let mut uri = sign.uri.clone().ok_or(AppStreamError::InvalidUri)?;
-        uri = self.rewrite_uri_if_needed(uri).await;
+        debug_log!(STREAM_LOGGER_DOMAIN, "Original URI from sign: {}", uri);
 
-        uri = self
-            .fetch_remote_uri_if_openlist(&uri, request.user_agent())
-            .await?;
+        uri = self.rewrite_uri_if_needed(uri, request).await?;
+        uri = self.fetch_remote_uri_if_openlist(&uri, request).await?;
 
         let device_id = params.device_id;
+        let node = request
+            .node
+            .as_ref()
+            .ok_or(AppStreamError::BackendNodeNotFound)?;
+        let proxy_mode =
+            node.proxy_mode.parse::<ProxyMode>().unwrap_or_default();
 
-        // Remote url
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "Using node '{}' with proxy_mode: {:?}",
+            node.name,
+            proxy_mode
+        );
+
         if !Uri::is_local(&uri) {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "Routing to remote path {:?}",
                 uri
             );
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "→ Routing decision: Source::Remote {{ uri: {}, mode: {:?} }}",
+                uri,
+                proxy_mode
+            );
             return Ok(Source::Remote {
                 uri,
-                mode: params.proxy_mode,
+                mode: proxy_mode,
             });
         }
 
-        // Local path
         let path = PathBuf::from(Uri::to_path_or_url_string(&uri));
-
         debug_log!(STREAM_LOGGER_DOMAIN, "Routing to local path {:?}", path);
 
         if path.exists() {
@@ -130,28 +165,24 @@ impl AppStreamService {
     }
 
     async fn get_fallback_path(&self) -> Option<PathBuf> {
-        let config = self.get_backend_config().await;
+        let config = self.state.get_config().await;
 
-        config
-            .fallback_video_path
-            .as_ref()
-            .and_then(|fallback_path_str| {
-                if fallback_path_str.is_empty() {
-                    return None;
-                }
+        let fallback_path_str = &config.fallback.video_missing_path;
+        if fallback_path_str.is_empty() {
+            return None;
+        }
 
-                let fallback_path = PathBuf::from(fallback_path_str);
-                if !fallback_path.exists() {
-                    debug_log!(
-                        STREAM_LOGGER_DOMAIN,
-                        "Fallback path does not exist: {:?}",
-                        fallback_path_str
-                    );
-                    return None;
-                }
+        let fallback_path = PathBuf::from(fallback_path_str);
+        if !fallback_path.exists() {
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "Fallback path does not exist: {:?}",
+                fallback_path_str
+            );
+            return None;
+        }
 
-                Some(fallback_path)
-            })
+        Some(fallback_path)
     }
 
     async fn decrypt(
@@ -167,12 +198,12 @@ impl AppStreamService {
             return Ok(sign);
         }
 
-        let config = self.get_backend_config().await;
+        let config = self.state.get_config().await;
         let crypto_result = Crypto::execute(
             CryptoOperation::Decrypt,
             CryptoInput::Encrypted(sign.to_string()),
-            &config.crypto_key,
-            &config.crypto_iv,
+            &config.general.encipher_key,
+            &config.general.encipher_iv,
         )
         .map_err(AppStreamError::CommonError)?;
 
@@ -192,27 +223,60 @@ impl AppStreamService {
         }
     }
 
-    async fn rewrite_uri_if_needed(&self, uri: Uri) -> Uri {
+    async fn rewrite_uri_if_needed(
+        &self,
+        uri: Uri,
+        request: &AppStreamRequest,
+    ) -> Result<Uri, AppStreamError> {
         let original_uri_str = Uri::to_path_or_url_string(&uri);
-        let path_rewrites = self.state.get_backend_path_rewrite_cache().await;
+        let node = request
+            .node
+            .as_ref()
+            .ok_or(AppStreamError::BackendNodeNotFound)?;
 
-        if path_rewrites.is_empty() {
+        let path_rewriters = &node.path_rewriter_cache;
+        if path_rewriters.is_empty() {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "Backend path rewriting is empty. Skipping step."
             );
-            return uri;
+            return Ok(uri);
         }
 
         debug_log!(STREAM_LOGGER_DOMAIN, "Starting backend path rewrite.");
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "Original URI: '{}', Rewrite rules count: {}",
+            original_uri_str,
+            path_rewriters.len()
+        );
 
         let mut current_uri_str: Cow<str> = Cow::Borrowed(&original_uri_str);
-        for path_rewrite in path_rewrites {
-            if !path_rewrite.enable {
+
+        for (idx, rewriter) in path_rewriters.iter().enumerate() {
+            if !rewriter.enable {
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "  Rule #{}: DISABLED",
+                    idx + 1
+                );
                 continue;
             }
-            current_uri_str =
-                path_rewrite.rewrite(&current_uri_str).await.into();
+
+            let before = current_uri_str.clone();
+            let outcome = rewriter.rewrite(&current_uri_str).await;
+            let changed = before != outcome;
+
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "  Rule #{}: {} → {} [{}]",
+                idx + 1,
+                before,
+                outcome,
+                if changed { "APPLIED" } else { "NO CHANGE" }
+            );
+
+            current_uri_str = Cow::Owned(outcome);
         }
 
         let current_uri = Uri::force_from_path_or_url(&current_uri_str)
@@ -220,28 +284,31 @@ impl AppStreamService {
 
         debug_log!(
             STREAM_LOGGER_DOMAIN,
-            "Backend path rewrite completed. URI before: {:?}, URI after: {:?}",
+            "Backend path rewrite completed. \
+            URI before: '{}', URI after: '{}'",
             uri,
             current_uri
         );
 
-        current_uri
+        Ok(current_uri)
     }
 
     async fn fetch_remote_uri_if_openlist(
         &self,
         uri: &Uri,
-        user_agent: Option<String>,
+        request: &AppStreamRequest,
     ) -> Result<Uri, AppStreamError> {
         if !Uri::is_local(uri) {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
-                "OpenList mode enabled: skipping backend processing for remote URI: {:?}",
+                "OpenList mode enabled: \
+                skipping backend processing for remote URI: {:?}",
                 uri
             );
             return Ok(uri.clone());
         }
 
+        let user_agent = request.user_agent();
         let openlist_ua =
             user_agent.unwrap_or(SystemInfo::new().get_user_agent());
 
@@ -257,14 +324,23 @@ impl AppStreamService {
             return Ok(cached_uri);
         }
 
-        let config = self.get_backend_config().await;
-        let openlist_config = match &config.backend_config {
-            StreamBackendConfig::OpenList(open_list) => open_list,
-            _ => return Ok(uri.clone()),
+        let node = request
+            .node
+            .as_ref()
+            .ok_or(AppStreamError::BackendNodeNotFound)?;
+        let openlist_config = match &node.open_list {
+            Some(cfg) => cfg,
+            None => return Ok(uri.clone()),
         };
 
-        let path = Uri::to_path_or_url_string(uri);
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "Processing OpenList for node '{}': base_url='{}'",
+            node.name,
+            openlist_config.base_url
+        );
 
+        let path = Uri::to_path_or_url_string(uri);
         debug_log!(
             STREAM_LOGGER_DOMAIN,
             "Open list processing path: {:?}, user-agent: {:?}",
@@ -278,7 +354,7 @@ impl AppStreamService {
 
         let result = openlist_client
             .fetch_file_path(
-                &openlist_config.uri().to_string(),
+                &openlist_config.base_url,
                 &openlist_config.token,
                 path,
                 openlist_ua.clone(),
@@ -287,6 +363,12 @@ impl AppStreamService {
 
         match result {
             Ok(new_url) => {
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "✓ OpenList resolved: '{}' → '{}'",
+                    uri,
+                    new_url
+                );
                 let new_uri =
                     Uri::force_from_path_or_url(&new_url).map_err(|e| {
                         error_log!(
@@ -323,59 +405,21 @@ impl AppStreamService {
         }
     }
 
-    async fn get_backend_config(&self) -> Arc<BackendConfig> {
-        let config_arc = self
-            .config
-            .get_or_init(|| async {
-                let config = self.state.get_config().await;
-                let backend = config
-                    .backend
-                    .as_ref()
-                    .expect("Attempted to access backend, but backend is not configured");
-                let backend_config = config.backend_config.as_ref().expect(
-                    "Attempted to access backend config, but backend config is not configured",
-                );
-
-                let fallback_video_path = Some(&config.fallback.video_missing_path)
-                    .filter(|p| !p.is_empty())
-                    .map(PathBuf::from)
-                    .map(|path| {
-                        if path.is_absolute() {
-                            path
-                        } else {
-                            config.path.parent().unwrap_or_else(|| Path::new("")).join(path)
-                        }
-                    })
-                    .filter(|path| path.exists())
-                    .map(|path| path.to_string_lossy().into_owned());
-
-                Arc::new(BackendConfig {
-                    crypto_key: config.general.encipher_key.clone(),
-                    crypto_iv: config.general.encipher_iv.clone(),
-                    backend: backend.clone(),
-                    backend_config: backend_config.clone(),
-                    fallback_video_path
-                })
-            })
-            .await;
-
-        config_arc.clone()
-    }
-
     async fn build_redirect_info(
         &self,
         url: Uri,
-        original_headers: &HeaderMap,
-    ) -> RedirectInfo {
-        let mut final_headers = original_headers.clone();
-        let config = self.get_backend_config().await;
+        request: &AppStreamRequest,
+    ) -> Result<RedirectInfo, AppStreamError> {
+        let mut final_headers = request.original_headers.clone();
 
-        let user_agent = match &config.backend_config {
-            StreamBackendConfig::DirectLink(dirct_link) => {
-                Some(Arc::new(dirct_link.user_agent.to_string()))
-            }
-            _ => None,
-        };
+        let node = request
+            .node
+            .as_ref()
+            .ok_or(AppStreamError::BackendNodeNotFound)?;
+        let user_agent = node
+            .direct_link
+            .as_ref()
+            .map(|link| Arc::new(link.user_agent.to_string()));
 
         if let Some(user_agent) = user_agent {
             if !user_agent.is_empty() {
@@ -392,10 +436,10 @@ impl AppStreamService {
 
         final_headers.remove(header::HOST);
 
-        RedirectInfo {
+        Ok(RedirectInfo {
             target_url: url,
             final_headers,
-        }
+        })
     }
 
     fn decrypt_key(
@@ -429,6 +473,26 @@ impl StreamService for AppStreamService {
             error_log!("Routing stream error: {:?}", e);
             StatusCode::BAD_REQUEST
         })?;
+
+        let node = request.node.as_ref().ok_or_else(|| {
+            error_log!(
+                STREAM_LOGGER_DOMAIN,
+                "Backend node not found in request"
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let node_uuid = &node.uuid;
+
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "==== Routing completed for node '{}' (uuid={}): source type = {} ====",
+            node.name,
+            node_uuid,
+            match &source {
+                Source::Local { .. } => "Local",
+                Source::Remote { .. } => "Remote",
+            }
+        );
         info_log!(STREAM_LOGGER_DOMAIN, "Routing stream source: {:?}", source);
 
         match source {
@@ -443,25 +507,32 @@ impl StreamService for AppStreamService {
                     path,
                     request.content_range(),
                     client_info,
+                    node_uuid,
                 )
                 .await
             }
             Source::Remote { uri, mode } => match mode {
                 ProxyMode::Redirect => {
                     let redirect_info = self
-                        .build_redirect_info(uri, &request.original_headers)
-                        .await;
+                        .build_redirect_info(uri, &request)
+                        .await
+                        .map_err(|e| {
+                            error_log!(
+                                STREAM_LOGGER_DOMAIN,
+                                "Failed to build redirect info: {:?}",
+                                e
+                            );
+                            StatusCode::INTERNAL_SERVER_ERROR
+                        })?;
                     Ok(AppStreamResult::Redirect(redirect_info))
                 }
                 ProxyMode::Proxy => {
-                    let config = self.get_backend_config().await;
-                    let user_agent = match &config.backend_config {
-                        StreamBackendConfig::DirectLink(dirct_link) => {
-                            Some(dirct_link.user_agent.to_string())
-                        }
-                        _ => None,
-                    }
-                    .unwrap_or(SystemInfo::new().get_user_agent());
+                    let user_agent = node
+                        .direct_link
+                        .as_ref()
+                        .map(|link| link.user_agent.to_string())
+                        .unwrap_or(SystemInfo::new().get_user_agent());
+
                     RemoteStreamer::stream(
                         self.state.clone(),
                         uri,

@@ -46,4 +46,6 @@ pub enum Error {
     FileNotFound(String),
     #[error("IO error: {0}")]
     IoError(#[from] IoError),
+    #[error("Backend node not found in request")]
+    BackendNodeNotFound,
 }
