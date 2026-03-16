@@ -15,7 +15,8 @@ use embystream::{
     config::{core::Config, general::StreamMode},
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
-        CorsMiddleware, LoggerMiddleware, OptionsMiddleware, chain::Handler,
+        CorsMiddleware, LoggerMiddleware, OptionsMiddleware,
+        PlaylistMockMiddleware, ReverseProxyMiddleware, chain::Handler,
         client_filter::ClientAgentFilterMiddleware, context::Context,
         core::Gateway, response::ResponseBuilder,
         reverse_proxy_filter::ReverseProxyFilterMiddleware,
@@ -233,6 +234,15 @@ async fn setup_frontend_gateway(
     let addr = format!("0.0.0.0:{}", frontend.listen_port);
     let service = Arc::new(AppForwardService::new(app_state.clone()));
 
+    let emby_base_url = config.emby.get_uri().to_string();
+    let api_cache = app_state.get_api_response_cache().await.clone();
+
+    info_log!(
+        INIT_LOGGER_DOMAIN,
+        "Frontend reverse proxy target: {}",
+        emby_base_url
+    );
+
     let mut gateway = Gateway::new(&addr)
         .add_middleware(Box::new(LoggerMiddleware))
         .add_middleware(Box::new(ClientAgentFilterMiddleware::new(
@@ -243,7 +253,12 @@ async fn setup_frontend_gateway(
         )))
         .add_middleware(Box::new(CorsMiddleware))
         .add_middleware(Box::new(OptionsMiddleware))
-        .add_middleware(Box::new(ForwardMiddleware::new(service)));
+        .add_middleware(Box::new(PlaylistMockMiddleware))
+        .add_middleware(Box::new(ForwardMiddleware::new(service)))
+        .add_middleware(Box::new(ReverseProxyMiddleware::new(
+            emby_base_url,
+            api_cache,
+        )));
 
     gateway.set_handler(default_handler());
     gateway.listen().await?;

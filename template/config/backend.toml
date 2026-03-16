@@ -1,14 +1,13 @@
-[General]
-memory_mode = "high"
-stream_mode = "backend"
-
-encipher_key = "Q4eCbawEp3sCvDvx"
-encipher_iv = "a3cH2abhxnu9hGo5"
-
 [Log]
 level = "info"
 prefix = ""
 root_path = "./logs"
+
+[General]
+memory_mode = "high"
+stream_mode = "backend"
+encipher_key = "Q4eCbawEp3sCvDvx"
+encipher_iv = "a3cH2abhxnu9hGo5"
 
 [Emby]
 url = "http://127.0.0.1"
@@ -23,6 +22,9 @@ deny_ua = ["curl", "wget", "python", "fimily", "infuse-library"]
 [Http2]
 ssl_cert_file = ""
 ssl_key_file = ""
+
+[Fallback]
+video_missing_path = "/mnt/anime/fallback/video_missing.mp4"
 
 [Frontend]
 listen_port = 60001
@@ -103,6 +105,3 @@ host = ""
 
 [BackendNode.DirectLink]
 user_agent = "Mozilla/5.0 (MockClient)"
-
-[Fallback]
-video_missing_path = "/mnt/anime/fallback/video_missing.mp4"

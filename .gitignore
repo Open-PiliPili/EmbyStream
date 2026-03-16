@@ -38,6 +38,8 @@ logs/
 config/
 !src/config/
 !template/config/
+.cursor/
+doc/
 
 # === Web UI ===
 web_data/

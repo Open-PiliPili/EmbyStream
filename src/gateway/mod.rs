@@ -1,3 +1,4 @@
+pub mod cacheable_routes;
 pub mod chain;
 pub mod client_filter;
 pub mod context;
@@ -6,7 +7,9 @@ pub mod cors;
 pub mod error;
 pub mod logger;
 pub mod options;
+pub mod playlist_mock;
 pub mod response;
+pub mod reverse_proxy;
 pub mod reverse_proxy_filter;
 pub mod svc;
 
@@ -17,4 +20,6 @@ pub use cors::CorsMiddleware;
 pub use error::Error as GatewayError;
 pub use logger::LoggerMiddleware;
 pub use options::OptionsMiddleware;
+pub use playlist_mock::PlaylistMockMiddleware;
 pub use response::{BoxBodyType, ResponseBuilder};
+pub use reverse_proxy::ReverseProxyMiddleware;

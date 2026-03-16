@@ -24,6 +24,7 @@ pub struct AppState {
     strm_file_cache: OnceCell<GeneralCache>,
     forward_info_cache: OnceCell<GeneralCache>,
     open_list_cache: OnceCell<GeneralCache>,
+    api_response_cache: OnceCell<GeneralCache>,
     rate_limiter_cache: OnceCell<DashMap<String, RateLimiterCache>>,
 }
 
@@ -39,6 +40,7 @@ impl AppState {
             strm_file_cache: OnceCell::new(),
             forward_info_cache: OnceCell::new(),
             open_list_cache: OnceCell::new(),
+            api_response_cache: OnceCell::new(),
             rate_limiter_cache: OnceCell::new(),
         }
     }
@@ -142,6 +144,21 @@ impl AppState {
         let (capacity, ttl) = self.get_cache_settings().await;
         self.open_list_cache
             .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
+            .await
+    }
+
+    pub async fn get_api_response_cache(&self) -> &GeneralCache {
+        self.api_response_cache
+            .get_or_init(|| async move {
+                let config = self.get_config().await;
+                let (max_capacity, default_ttl) =
+                    match config.general.memory_mode.as_str() {
+                        "low" => (2048, 60 * 60 * 2),
+                        "high" => (8192, 60 * 60 * 4),
+                        _ => (4096, 60 * 60 * 2),
+                    };
+                GeneralCache::new(max_capacity, default_ttl)
+            })
             .await
     }
 

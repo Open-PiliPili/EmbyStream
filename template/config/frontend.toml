@@ -1,120 +1,46 @@
-# Application Configuration File
-# All values in this file are case-sensitive
-
 [Log]
-# Sets the application's logging verbosity.
-# Available options (from least to most verbose): "error", "warn", "info", "debug", "trace"
 level = "info"
-
-# The prefix of log files
-# Returns a date string formatted as "prefix-YYYY-MM-DD" if a prefix is provided (e.g., "myapp-2025-07-28"),
-# otherwise defaults to "YYYY-MM-DD".
 prefix = ""
-
-# Specifies the directory where log files will be stored.
 root_path = "/var/logs/embystream"
 
 [General]
-# Memory usage profile (options: "low", "middle", "high")
-# - low: Minimal memory usage, reduced performance
-# - middle: Balanced memory and performance (recommended)
-# - high: Maximum performance, higher memory usage
 memory_mode = "middle"
-
-# Stream running mode
-# - Options: "frontend", "backend", "dual"
-# - "frontend": Runs only the frontend service.
-# - "backend": Runs only the backend service.
-# - "dual": Runs both frontend and backend services.
-# - Default: "frontend"
 stream_mode = "frontend"
-
-# Backend type for media streaming (options: "disk", "direct_link", "openlist")
 backend_type = "disk"
-
-# Encryption key for secure communications (6-16 bytes)
-# WARNING: Change this from the default value in production
-encipher_key = "Q4eCbawEp3sCvDvx" # Replace encipher key
-
-# Encryption iv for secure communications (6-16 bytes)
-# WARNING: Change this from the default value in production
-encipher_iv = "a3cH2abhxnu9hGo5" # Replace encipher iv
+encipher_key = "Q4eCbawEp3sCvDvx"
+encipher_iv = "a3cH2abhxnu9hGo5"
 
 [Emby]
-# Base URL of your Emby server
 url = "http://127.0.0.1"
-
-# Port for Emby server
 port = "8096"
-
-# API key for Emby (leave empty if not using)
 token = "nmbp7mpixze8ghdfgki6yrijkeq5zuao"
 
 [UserAgent]
-# UserAgent filtering mode (options: "allow", "deny", "none")
 mode = "deny"
-
-# List of allowed User-Agents (used when mode = "allow")
-# Example: allow_ua = ["Mozilla/5.0", "AppleWebKit"]
 allow_ua = []
-
-# List of denied User-Agents (used when mode = "deny")
-# Example: deny_ua = ["curl/7.68.0", "wget"]
 deny_ua = ["curl", "wget", "python", "fimily", "infuse-library"]
 
 [Http2]
-# Path to SSL/TLS certificate file (PEM format)
-# Required for HTTPS/HTTP2 connections
-# Example: ssl_cert_file = "/path/to/certificate.pem"
 ssl_cert_file = ""
-
-# Path to SSL/TLS private key file (PEM format)
-# Required for HTTPS/HTTP2 connections
-# Example: ssl_key_file = "/path/to/private_key.pem"
 ssl_key_file = ""
 
 [Fallback]
-# The path to a fallback video file to play when the original video is missing.
-# If this path is set and the file exists, this video will be played instead of showing an error.
-# Note: For binary or Docker deployments in 'dual' or 'frontend' mode, this path must be accessible
-# from within the server or container for this feature to function.
-# Example: "/path/to/your/video_missing.mp4"
 video_missing_path = "/mnt/anime/fallback/video_missing.mp4"
 
 [Frontend]
-# Frontend web server configuration
-listen_port = 60001         # Replace port for the frontend web interface
-check_file_existence = true # Check if the file exists on the frontend before redirect to the backend (default: true).
+listen_port = 60001
+check_file_existence = true
 
-# ===================================================================
-# Frontend Path Rewrite Rules
-# ===================================================================
-#
-# You can define one or more rewrite rules for incoming request paths.
-# Rules are processed sequentially in the order they appear in this file.
-# The first rule that matches a path will be applied, giving topmost rules the highest priority.
-#
-# Each rule must be defined in a separate [[Frontend.PathRewrite]] block.
-# To add a new rule, simply copy an entire [[...]] block below, paste it
-# at the end, and modify its values.
-#
-# --- Rule 1: Example - Proxy all requests to a CDN ---
-# Description: Rewrites a path like "/path/video.mp4" to "https://my-cdn.com/path/video.mp4"
 [[Frontend.PathRewrite]]
-enable = false                       # Set to true to enable this rule.
-pattern = "^(/.*)$"                  # The regex pattern to search for.
-replacement = "https://my-cdn.com$1" # The replacement string. Use $1 for the first captured group.
+enable = false
+pattern = "^(/.*)$"
+replacement = "https://my-cdn.com$1"
 
-# --- Rule 2: Example - Remove a specific base path ---
-# Description: Rewrites "/media/movies/video.mp4" to "/movies/video.mp4".
-# Note: This rule is currently disabled (enable = false).
 [[Frontend.PathRewrite]]
 enable = false
 pattern = "^/media(/.*)$"
 replacement = "$1"
 
-# --- Rule 3: Example - Map one API path to another ---
-# Description: Rewrites "/stream/file.mkv" to "/proxy/file.mkv".
 [[Frontend.PathRewrite]]
 enable = false
 pattern = "^/stream(/.*)$"
@@ -123,5 +49,3 @@ replacement = "/proxy$1"
 [Frontend.AntiReverseProxy]
 enable = false
 host = ""
-
-# Backend configuration removed for Frontend-only template
