@@ -38,14 +38,32 @@ pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
     CacheableRoute {
         pattern: r"(?i)^/(?:emby/)?Users/[^/]+/Items/Resume",
         methods: &["GET"],
-        ttl_seconds: 7200, // 2 hours
-        description: "Continue-watching list — Emby processing takes ~2300ms",
+        ttl_seconds: 1200, // 20 minutes
+        description: "Continue-watching list — short TTL to keep playback progress accurate",
     },
     CacheableRoute {
         pattern: r"(?i)^/(?:emby/)?Items/[^/]+/PlaybackInfo",
         methods: &["POST"],
-        ttl_seconds: 14400, // 4 hours
+        ttl_seconds: 7200, // 2 hours
         description: "Playback info — Emby processing takes ~1400ms",
+    },
+    CacheableRoute {
+        pattern: r"(?i)^/(?:emby/)?Shows/NextUp",
+        methods: &["GET"],
+        ttl_seconds: 7200, // 2 hours
+        description: "Next-up episode for a series",
+    },
+    CacheableRoute {
+        pattern: r"(?i)^/(?:emby/)?Users/[^/]+/Items/[^/]+$",
+        methods: &["GET"],
+        ttl_seconds: 7200, // 2 hours
+        description: "Single item detail (series/movie metadata)",
+    },
+    CacheableRoute {
+        pattern: r"(?i)^/(?:emby/)?Shows/[^/]+/Episodes",
+        methods: &["GET"],
+        ttl_seconds: 7200, // 2 hours
+        description: "Episode list for a series season",
     },
 ];
 

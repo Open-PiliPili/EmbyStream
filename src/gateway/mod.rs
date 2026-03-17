@@ -5,6 +5,7 @@ pub mod context;
 pub mod core;
 pub mod cors;
 pub mod error;
+pub mod filtered_routes;
 pub mod logger;
 pub mod options;
 pub mod playlist_mock;

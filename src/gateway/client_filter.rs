@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use hyper::{Response, StatusCode, body::Incoming, header};
+use regex::Regex;
 use tokio::sync::OnceCell;
 
 use crate::{
@@ -22,6 +23,7 @@ const HEADER_CLIENT_KEY: &str = "Client";
 pub struct ClientAgentFilterMiddleware {
     pub state: Arc<AppState>,
     pub config: OnceCell<Arc<UserAgent>>,
+    filter_paths: Vec<Regex>,
 }
 
 impl ClientAgentFilterMiddleware {
@@ -29,7 +31,20 @@ impl ClientAgentFilterMiddleware {
         Self {
             state,
             config: OnceCell::new(),
+            filter_paths: vec![],
         }
+    }
+
+    pub fn with_filter_paths(mut self, patterns: Vec<Regex>) -> Self {
+        self.filter_paths = patterns;
+        self
+    }
+
+    fn should_filter(&self, path: &str) -> bool {
+        if self.filter_paths.is_empty() {
+            return true;
+        }
+        self.filter_paths.iter().any(|re| re.is_match(path))
     }
 
     async fn is_client_allowed(&self, client: &str) -> bool {
@@ -85,6 +100,10 @@ impl Middleware for ClientAgentFilterMiddleware {
             CLIENT_FILTER_LOGGER_DOMAIN,
             "Starting user agent filter middleware..."
         );
+
+        if !self.should_filter(&ctx.path) {
+            return next(ctx, body).await;
+        }
 
         let ua_lower = ctx
             .headers

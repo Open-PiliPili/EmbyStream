@@ -18,7 +18,8 @@ use embystream::{
         CorsMiddleware, LoggerMiddleware, OptionsMiddleware,
         PlaylistMockMiddleware, ReverseProxyMiddleware, chain::Handler,
         client_filter::ClientAgentFilterMiddleware, context::Context,
-        core::Gateway, response::ResponseBuilder,
+        core::Gateway, filtered_routes::COMPILED_UA_FILTERS,
+        response::ResponseBuilder,
         reverse_proxy_filter::ReverseProxyFilterMiddleware,
     },
     logger::{LogLevel, Logger},
@@ -243,9 +244,10 @@ async fn setup_frontend_gateway(
 
     let mut gateway = Gateway::new(&addr)
         .add_middleware(Box::new(LoggerMiddleware))
-        .add_middleware(Box::new(ClientAgentFilterMiddleware::new(
-            app_state.clone(),
-        )))
+        .add_middleware(Box::new(
+            ClientAgentFilterMiddleware::new(app_state.clone())
+                .with_filter_paths(COMPILED_UA_FILTERS.clone()),
+        ))
         .add_middleware(Box::new(ReverseProxyFilterMiddleware::new(
             frontend.clone().anti_reverse_proxy,
         )))
