@@ -20,6 +20,9 @@ use crate::{
     debug_log, error_log, info_log, warn_log,
 };
 
+const ROOT_PATH: &str = "/";
+const WEB_INDEX_REDIRECT: &str = "/web/index.html";
+
 #[derive(Clone, Debug)]
 struct CachedApiResponse {
     status: u16,
@@ -276,6 +279,14 @@ impl Middleware for ReverseProxyMiddleware {
             ctx.method,
             ctx.path
         );
+
+        if ctx.path == ROOT_PATH {
+            return ResponseBuilder::with_redirect(
+                WEB_INDEX_REDIRECT,
+                StatusCode::FOUND,
+                None,
+            );
+        }
 
         let cacheable_route =
             find_cacheable_route(&ctx.path, ctx.method.as_str());
