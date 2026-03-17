@@ -9,6 +9,7 @@ use super::{
     source::Source,
 };
 use crate::backend::types::ClientInfo;
+use crate::config::backend::BackendNode;
 use crate::core::redirect_info::RedirectInfo;
 use crate::{AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
@@ -101,19 +102,24 @@ impl AppStreamService {
         );
 
         if !Uri::is_local(&uri) {
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "Routing to remote path {:?}",
-                uri
-            );
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "→ Routing decision: Source::Remote {{ uri: {}, mode: {:?} }}",
-                uri,
-                proxy_mode
-            );
+            debug_log!(STREAM_LOGGER_DOMAIN, "URI is already remote: {}", uri);
             return Ok(Source::Remote {
                 uri,
+                mode: proxy_mode,
+            });
+        }
+
+        if !Self::is_node_local(node) {
+            let remote_uri =
+                Self::build_node_remote_uri(node, request.uri.query())?;
+            info_log!(
+                STREAM_LOGGER_DOMAIN,
+                "Node '{}' points to remote server, forwarding to: {}",
+                node.name,
+                remote_uri
+            );
+            return Ok(Source::Remote {
+                uri: remote_uri,
                 mode: proxy_mode,
             });
         }
@@ -148,6 +154,25 @@ impl AppStreamService {
                 Err(AppStreamError::FileNotFound(path.display().to_string()))
             }
         }
+    }
+
+    fn is_node_local(node: &BackendNode) -> bool {
+        let url = node.base_url.to_lowercase();
+        ["127.0.0.1", "localhost", "0.0.0.0"]
+            .iter()
+            .any(|host| url.contains(host))
+    }
+
+    fn build_node_remote_uri(
+        node: &BackendNode,
+        original_query: Option<&str>,
+    ) -> Result<Uri, AppStreamError> {
+        let base = node.uri().to_string();
+        let full = match original_query {
+            Some(q) if !q.is_empty() => format!("{}?{}", base, q),
+            _ => base,
+        };
+        full.parse().map_err(|_| AppStreamError::InvalidUri)
     }
 
     async fn get_fallback_path(&self) -> Option<PathBuf> {
