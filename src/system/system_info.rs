@@ -2,6 +2,8 @@ use std::env;
 
 use crate::system::Environment;
 
+pub const BUILTIN_REQUEST_UA: &str = "PStreamer";
+
 #[derive(Debug)]
 pub struct SystemInfo {
     pub version: String,
@@ -45,6 +47,6 @@ impl SystemInfo {
     }
 
     pub fn get_user_agent(&self) -> String {
-        format!("PStreamer/{}", self.version)
+        format!("{}/{}", BUILTIN_REQUEST_UA, self.version)
     }
 }

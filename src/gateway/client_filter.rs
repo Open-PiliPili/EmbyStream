@@ -7,6 +7,7 @@ use tokio::sync::OnceCell;
 
 use crate::{
     AppState, CLIENT_FILTER_LOGGER_DOMAIN, debug_log, error_log, info_log,
+    system::BUILTIN_REQUEST_UA,
 };
 use crate::{
     config::general::UserAgent,
@@ -50,6 +51,13 @@ impl ClientAgentFilterMiddleware {
     async fn is_client_allowed(&self, client: &str) -> bool {
         if client.is_empty() {
             return false;
+        }
+
+        if client
+            .to_lowercase()
+            .starts_with(&BUILTIN_REQUEST_UA.to_lowercase())
+        {
+            return true;
         }
 
         let client_config = self.get_client_config().await;
