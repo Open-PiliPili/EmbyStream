@@ -55,20 +55,21 @@ pub struct CompiledCacheableRoute {
     pub ttl_seconds: u64,
 }
 
-pub static COMPILED_ROUTES: Lazy<Vec<CompiledCacheableRoute>> = Lazy::new(|| {
-    CACHEABLE_ROUTES
-        .iter()
-        .filter_map(|route| {
-            Regex::new(route.pattern).ok().map(|regex| {
-                CompiledCacheableRoute {
-                    regex,
-                    methods: route.methods,
-                    ttl_seconds: route.ttl_seconds,
-                }
+pub static COMPILED_ROUTES: Lazy<Vec<CompiledCacheableRoute>> =
+    Lazy::new(|| {
+        CACHEABLE_ROUTES
+            .iter()
+            .filter_map(|route| {
+                Regex::new(route.pattern).ok().map(|regex| {
+                    CompiledCacheableRoute {
+                        regex,
+                        methods: route.methods,
+                        ttl_seconds: route.ttl_seconds,
+                    }
+                })
             })
-        })
-        .collect()
-});
+            .collect()
+    });
 
 /// Returns the matching cacheable route for the given path and method, if any.
 pub fn find_cacheable_route(
@@ -77,9 +78,6 @@ pub fn find_cacheable_route(
 ) -> Option<&'static CompiledCacheableRoute> {
     COMPILED_ROUTES.iter().find(|route| {
         route.regex.is_match(path)
-            && route
-                .methods
-                .iter()
-                .any(|m| m.eq_ignore_ascii_case(method))
+            && route.methods.iter().any(|m| m.eq_ignore_ascii_case(method))
     })
 }

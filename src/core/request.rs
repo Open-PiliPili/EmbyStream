@@ -3,12 +3,14 @@ use std::time::Instant;
 use hyper::{HeaderMap, Uri, header};
 
 use crate::config::backend::BackendNode;
+use crate::core::sign::Sign;
 
 pub struct Request {
     pub uri: Uri,
     pub original_headers: HeaderMap,
     pub request_start_time: Instant,
     pub node: Option<BackendNode>,
+    pub sign: Option<Sign>,
 }
 
 impl Request {
@@ -23,6 +25,7 @@ impl Request {
             original_headers,
             request_start_time,
             node,
+            sign: None,
         }
     }
 

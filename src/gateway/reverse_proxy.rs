@@ -16,8 +16,8 @@ use super::{
     response::{BoxBodyType, ResponseBuilder},
 };
 use crate::{
-    API_CACHE_LOGGER_DOMAIN, REVERSE_PROXY_LOGGER_DOMAIN,
-    cache::GeneralCache, debug_log, error_log, info_log, warn_log,
+    API_CACHE_LOGGER_DOMAIN, REVERSE_PROXY_LOGGER_DOMAIN, cache::GeneralCache,
+    debug_log, error_log, info_log, warn_log,
 };
 
 #[derive(Clone, Debug)]
@@ -45,8 +45,8 @@ impl CachedApiResponse {
             })
             .collect();
 
-        let status = StatusCode::from_u16(self.status)
-            .unwrap_or(StatusCode::OK);
+        let status =
+            StatusCode::from_u16(self.status).unwrap_or(StatusCode::OK);
 
         ResponseBuilder::with_bytes(
             status,
@@ -64,10 +64,7 @@ pub struct ReverseProxyMiddleware {
 }
 
 impl ReverseProxyMiddleware {
-    pub fn new(
-        emby_base_url: String,
-        api_cache: GeneralCache,
-    ) -> Self {
+    pub fn new(emby_base_url: String, api_cache: GeneralCache) -> Self {
         let http_client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -122,11 +119,7 @@ impl ReverseProxyMiddleware {
             return None;
         }
 
-        info_log!(
-            API_CACHE_LOGGER_DOMAIN,
-            "[CACHE HIT] key={}",
-            cache_key
-        );
+        info_log!(API_CACHE_LOGGER_DOMAIN, "[CACHE HIT] key={}", cache_key);
         Some(cached.to_response())
     }
 
@@ -141,9 +134,10 @@ impl ReverseProxyMiddleware {
         let header_pairs: Vec<(String, String)> = headers
             .iter()
             .filter_map(|(name, value)| {
-                value.to_str().ok().map(|v| {
-                    (name.as_str().to_owned(), v.to_owned())
-                })
+                value
+                    .to_str()
+                    .ok()
+                    .map(|v| (name.as_str().to_owned(), v.to_owned()))
             })
             .collect();
 
@@ -187,8 +181,9 @@ impl ReverseProxyMiddleware {
             target_url
         );
 
-        let method = reqwest::Method::from_bytes(ctx.method.as_str().as_bytes())
-            .unwrap_or(reqwest::Method::GET);
+        let method =
+            reqwest::Method::from_bytes(ctx.method.as_str().as_bytes())
+                .unwrap_or(reqwest::Method::GET);
 
         let mut request_builder = self.http_client.request(method, &target_url);
 
@@ -197,8 +192,8 @@ impl ReverseProxyMiddleware {
                 continue;
             }
             if let Ok(value_str) = value.to_str() {
-                request_builder = request_builder
-                    .header(name.as_str(), value_str);
+                request_builder =
+                    request_builder.header(name.as_str(), value_str);
             }
         }
 
@@ -222,7 +217,8 @@ impl ReverseProxyMiddleware {
                 if name == header::TRANSFER_ENCODING {
                     return None;
                 }
-                let hn = HeaderName::from_bytes(name.as_str().as_bytes()).ok()?;
+                let hn =
+                    HeaderName::from_bytes(name.as_str().as_bytes()).ok()?;
                 let hv = HeaderValue::from_bytes(value.as_bytes()).ok()?;
                 Some((hn, hv))
             })
@@ -293,11 +289,7 @@ impl Middleware for ReverseProxyMiddleware {
                 .map(|pq| pq.to_string())
                 .unwrap_or_else(|| ctx.path.clone());
 
-            Self::build_cache_key(
-                &ctx.method,
-                &uri_string,
-                body_bytes.as_ref(),
-            )
+            Self::build_cache_key(&ctx.method, &uri_string, body_bytes.as_ref())
         });
 
         if let Some(ref key) = cache_key {

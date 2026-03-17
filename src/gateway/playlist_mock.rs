@@ -19,8 +19,7 @@ static PLAYLISTS_BASE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static PLAYLISTS_ITEMS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^/(?:emby/)?Playlists/\w+/Items$")
-        .expect("Invalid regex")
+    Regex::new(r"(?i)^/(?:emby/)?Playlists/\w+/Items$").expect("Invalid regex")
 });
 
 static PLAYLISTS_ITEM_SINGLE: Lazy<Regex> = Lazy::new(|| {

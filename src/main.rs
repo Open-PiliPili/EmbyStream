@@ -150,9 +150,7 @@ fn setup_load_config(run_args: &RunArgs) -> Config {
     }
 }
 
-fn setup_logger(
-    config: &Config,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
+fn setup_logger(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
     let log_path = Path::new(&config.log.root_path);
     fs::create_dir_all(log_path)?;
 
@@ -304,6 +302,7 @@ async fn setup_backend_gateway(
         .add_middleware(Box::new(StreamMiddleware::new(
             config.backend_nodes.clone(),
             service,
+            app_state.clone(),
         )));
 
     gateway.set_handler(default_handler());

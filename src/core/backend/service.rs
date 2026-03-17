@@ -12,14 +12,12 @@ use crate::backend::types::ClientInfo;
 use crate::core::redirect_info::RedirectInfo;
 use crate::{AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log};
 use crate::{
-    CryptoInput, CryptoOperation, CryptoOutput,
     client::{ClientBuilder, OpenListClient},
     core::{
         error::Error as AppStreamError, request::Request as AppStreamRequest,
     },
-    crypto::Crypto,
     network::CurlPlugin,
-    sign::{Sign, SignParams},
+    sign::SignParams,
     system::SystemInfo,
     util::{StringUtil, UriExt},
 };
@@ -64,10 +62,15 @@ impl AppStreamService {
         Self { state }
     }
 
-    async fn decrypt_and_route(
+    async fn route_with_sign(
         &self,
         request: &AppStreamRequest,
     ) -> Result<Source, AppStreamError> {
+        let sign = request
+            .sign
+            .as_ref()
+            .ok_or(AppStreamError::EmptySignature)?;
+
         let params = request
             .uri
             .query()
@@ -75,23 +78,6 @@ impl AppStreamService {
                 serde_urlencoded::from_str::<SignParams>(query).ok()
             })
             .unwrap_or_default();
-
-        debug_log!(
-            STREAM_LOGGER_DOMAIN,
-            "Decrypting and routing request: sign_present={}, device_id='{}'",
-            !params.sign.is_empty(),
-            params.device_id
-        );
-
-        if params.sign.is_empty() {
-            return Err(AppStreamError::EmptySignature);
-        }
-
-        let sign = self.decrypt(params.sign.as_str(), &params).await?;
-
-        if !sign.is_valid() {
-            return Err(AppStreamError::ExpiredStream);
-        }
 
         let mut uri = sign.uri.clone().ok_or(AppStreamError::InvalidUri)?;
         debug_log!(STREAM_LOGGER_DOMAIN, "Original URI from sign: {}", uri);
@@ -183,44 +169,6 @@ impl AppStreamService {
         }
 
         Some(fallback_path)
-    }
-
-    async fn decrypt(
-        &self,
-        sign: &str,
-        params: &SignParams,
-    ) -> Result<Sign, AppStreamError> {
-        let decrypt_cache = self.state.get_decrypt_cache().await;
-        let cache_key = self.decrypt_key(params)?;
-
-        if let Some(sign) = decrypt_cache.get(&cache_key) {
-            debug_log!(STREAM_LOGGER_DOMAIN, "Sign cache hit: {:?}", sign);
-            return Ok(sign);
-        }
-
-        let config = self.state.get_config().await;
-        let crypto_result = Crypto::execute(
-            CryptoOperation::Decrypt,
-            CryptoInput::Encrypted(sign.to_string()),
-            &config.general.encipher_key,
-            &config.general.encipher_iv,
-        )
-        .map_err(AppStreamError::CommonError)?;
-
-        match crypto_result {
-            CryptoOutput::Encrypted(_) => {
-                Err(AppStreamError::InvalidEncryptedSignature)
-            }
-            CryptoOutput::Dictionary(sign_map) => {
-                debug_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "Succesfully decrypted signatures: {:?}",
-                    sign_map
-                );
-                decrypt_cache.insert(cache_key, sign_map.clone());
-                Ok(Sign::from_map(&sign_map))
-            }
-        }
     }
 
     async fn rewrite_uri_if_needed(
@@ -442,18 +390,6 @@ impl AppStreamService {
         })
     }
 
-    fn decrypt_key(
-        &self,
-        params: &SignParams,
-    ) -> Result<String, AppStreamError> {
-        if params.sign.is_empty() {
-            return Err(AppStreamError::InvalidEncryptedSignature);
-        }
-
-        let input = params.sign.to_lowercase();
-        Ok(StringUtil::md5(&input))
-    }
-
     fn open_list_cache_key(&self, uri: &Uri, user_agent: &str) -> String {
         let url_string = Uri::to_path_or_url_string(uri);
         let trimmed_url = url_string.trim_end();
@@ -469,8 +405,8 @@ impl StreamService for AppStreamService {
         &self,
         request: AppStreamRequest,
     ) -> Result<AppStreamResult, StatusCode> {
-        let source = self.decrypt_and_route(&request).await.map_err(|e| {
-            error_log!("Routing stream error: {:?}", e);
+        let source = self.route_with_sign(&request).await.map_err(|e| {
+            error_log!(STREAM_LOGGER_DOMAIN, "Routing stream error: {:?}", e);
             StatusCode::BAD_REQUEST
         })?;
 

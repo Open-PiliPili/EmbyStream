@@ -1,48 +1,91 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hyper::{Response, StatusCode, body::Incoming};
+use hyper::{Response, StatusCode, Uri, body::Incoming};
 
 use super::{result::Result as AppStreamResult, service::StreamService};
 use crate::{
-    GATEWAY_LOGGER_DOMAIN, REMOTE_STREAMER_LOGGER_DOMAIN, debug_log, info_log,
-    warn_log,
+    AppState, GATEWAY_LOGGER_DOMAIN, REMOTE_STREAMER_LOGGER_DOMAIN, debug_log,
+    error_log, info_log, warn_log,
 };
 use crate::{
     config::backend::BackendNode,
-    core::request::Request as AppStreamRequest,
+    core::{
+        request::Request as AppStreamRequest, sign_decryptor::SignDecryptor,
+    },
     gateway::{
         chain::{Middleware, Next},
         context::Context,
         response::{BoxBodyType, ResponseBuilder},
     },
+    sign::SignParams,
+    util::UriExt,
 };
 
-/// Middleware for routing requests to backend nodes
-///
-/// Matches incoming requests to backend nodes based on pattern matching
-/// and priority, then delegates to the stream service for processing.
 #[derive(Clone)]
 pub struct StreamMiddleware {
     backend_nodes: Vec<BackendNode>,
     stream_service: Arc<dyn StreamService>,
+    state: Arc<AppState>,
 }
 
 impl StreamMiddleware {
-    /// Create a new StreamMiddleware instance
-    ///
-    /// # Arguments
-    /// * `backend_nodes` - List of backend nodes to match against (sorted by priority)
-    /// * `stream_service` - Service to handle matched requests
     pub fn new(
         mut backend_nodes: Vec<BackendNode>,
         stream_service: Arc<dyn StreamService>,
+        state: Arc<AppState>,
     ) -> Self {
         backend_nodes.sort_by_key(|node| node.priority);
         Self {
             backend_nodes,
             stream_service,
+            state,
         }
+    }
+
+    fn find_matching_node<'a>(
+        nodes: &'a [BackendNode],
+        file_path: &str,
+    ) -> Option<&'a BackendNode> {
+        nodes.iter().find(|node| {
+            if let Some(ref regex) = node.pattern_regex {
+                let matches = regex.is_match(file_path);
+                debug_log!(
+                    GATEWAY_LOGGER_DOMAIN,
+                    "Checking node '{}': regex_pattern='{}', file_path='{}', matches={}",
+                    node.name,
+                    node.pattern,
+                    file_path,
+                    matches
+                );
+                matches
+            } else if !node.pattern.is_empty() {
+                let matches = file_path.starts_with(&node.pattern);
+                debug_log!(
+                    GATEWAY_LOGGER_DOMAIN,
+                    "Checking node '{}': pattern='{}', file_path='{}', matches={}",
+                    node.name,
+                    node.pattern,
+                    file_path,
+                    matches
+                );
+                matches
+            } else if !node.path.is_empty() {
+                let prefix = format!("/{}", node.path.trim_matches('/'));
+                let matches = file_path.starts_with(&prefix);
+                debug_log!(
+                    GATEWAY_LOGGER_DOMAIN,
+                    "Checking node '{}': path_prefix='{}', file_path='{}', matches={}",
+                    node.name,
+                    prefix,
+                    file_path,
+                    matches
+                );
+                matches
+            } else {
+                false
+            }
+        })
     }
 }
 
@@ -62,58 +105,72 @@ impl Middleware for StreamMiddleware {
             ctx.method
         );
 
-        let request_path = ctx.path.clone();
+        let params = ctx
+            .uri
+            .query()
+            .and_then(|query| {
+                serde_urlencoded::from_str::<SignParams>(query).ok()
+            })
+            .unwrap_or_default();
 
+        if params.sign.is_empty() {
+            debug_log!(
+                GATEWAY_LOGGER_DOMAIN,
+                "No sign parameter found, passing to next middleware"
+            );
+            return next(ctx, body).await;
+        }
+
+        let sign =
+            match SignDecryptor::decrypt(&params.sign, &params, &self.state)
+                .await
+            {
+                Ok(sign) => sign,
+                Err(e) => {
+                    error_log!(
+                        GATEWAY_LOGGER_DOMAIN,
+                        "Failed to decrypt sign: {:?}",
+                        e
+                    );
+                    return ResponseBuilder::with_status_code(
+                        StatusCode::BAD_REQUEST,
+                    );
+                }
+            };
+
+        if !sign.is_valid() {
+            error_log!(GATEWAY_LOGGER_DOMAIN, "Sign is expired or invalid");
+            return ResponseBuilder::with_status_code(StatusCode::GONE);
+        }
+
+        let sign_uri = match &sign.uri {
+            Some(uri) => uri.clone(),
+            None => {
+                error_log!(GATEWAY_LOGGER_DOMAIN, "Sign has no URI");
+                return ResponseBuilder::with_status_code(
+                    StatusCode::BAD_REQUEST,
+                );
+            }
+        };
+
+        let file_path = Uri::to_path_or_url_string(&sign_uri);
         debug_log!(
             GATEWAY_LOGGER_DOMAIN,
-            "Searching for matching backend node among {} nodes",
+            "Decrypted file path: '{}', searching among {} nodes",
+            file_path,
             self.backend_nodes.len()
         );
 
-        let matched_node = self.backend_nodes.iter().find(|node| {
-            if let Some(ref regex) = node.pattern_regex {
-                let matches = regex.is_match(&request_path);
-                debug_log!(
-                    GATEWAY_LOGGER_DOMAIN,
-                    "Checking node '{}': regex_pattern='{}', matches={}",
-                    node.name,
-                    node.pattern,
-                    matches
-                );
-                matches
-            } else if !node.pattern.is_empty() {
-                let matches = request_path.starts_with(&node.pattern);
-                debug_log!(
-                    GATEWAY_LOGGER_DOMAIN,
-                    "Checking node '{}': pattern='{}', matches={}",
-                    node.name,
-                    node.pattern,
-                    matches
-                );
-                matches
-            } else {
-            let prefix = format!("/{}", node.path.trim_matches('/'));
-            let matches = request_path.starts_with(&prefix);
-            debug_log!(
-                GATEWAY_LOGGER_DOMAIN,
-                    "Checking node '{}': path_prefix='{}', matches={}",
-                node.name,
-                prefix,
-                matches
-            );
-            matches
-            }
-        });
+        let matched_node =
+            Self::find_matching_node(&self.backend_nodes, &file_path);
 
         if let Some(node) = matched_node {
             debug_log!(
                 GATEWAY_LOGGER_DOMAIN,
-                "✓ Matched backend node: name='{}', \
-                 type='{}', proxy_mode='{}', base_url='{}', uuid='{}'",
+                "Matched backend node: name='{}', type='{}', proxy_mode='{}', uuid='{}'",
                 node.name,
                 node.backend_type,
                 node.proxy_mode,
-                node.base_url,
                 node.uuid
             );
 
@@ -140,6 +197,7 @@ impl Middleware for StreamMiddleware {
                 original_headers: ctx.headers,
                 request_start_time: ctx.start_time,
                 node: Some(node.clone()),
+                sign: Some(sign),
             };
 
             let result =
@@ -180,8 +238,8 @@ impl Middleware for StreamMiddleware {
         } else {
             warn_log!(
                 GATEWAY_LOGGER_DOMAIN,
-                "No backend node matched for path: {}",
-                ctx.path
+                "No backend node matched for file path: '{}'",
+                file_path
             );
             next(ctx, body).await
         }
