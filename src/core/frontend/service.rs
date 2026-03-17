@@ -24,8 +24,8 @@ use crate::{
     core::{
         error::Error as AppForwardError, redirect_info::RedirectInfo,
         request::Request as AppForwardRequest, sign::Sign,
+        sign_encryptor::SignEncryptor,
     },
-    crypto::{Crypto, CryptoInput, CryptoOperation, CryptoOutput},
     network::CurlPlugin,
     util::{StringUtil, UriExt, UriExtError},
 };
@@ -235,28 +235,10 @@ impl AppForwardService {
         &self,
         params: &ForwardInfo,
     ) -> Result<String, AppForwardError> {
-        let encrypt_map = self.get_sign(params).await?.to_map();
-        debug_log!(
-            FORWARD_LOGGER_DOMAIN,
-            "Ready to encrypt sign map: {:?}",
-            encrypt_map
-        );
+        let sign = self.get_sign(params).await?;
+        debug_log!(FORWARD_LOGGER_DOMAIN, "Ready to encrypt sign: {:?}", sign);
 
-        let config = self.get_forward_config().await;
-        let crypto_result = Crypto::execute(
-            CryptoOperation::Encrypt,
-            CryptoInput::Dictionary(encrypt_map),
-            &config.crypto_key,
-            &config.crypto_iv,
-        )
-        .map_err(AppForwardError::CommonError)?;
-
-        match crypto_result {
-            CryptoOutput::Encrypted(sign_value) => Ok(sign_value),
-            CryptoOutput::Dictionary(_) => {
-                Err(AppForwardError::EncryptSignatureFailed)
-            }
-        }
+        SignEncryptor::encrypt(&sign, &self.state).await
     }
 
     async fn get_sign(
