@@ -25,11 +25,15 @@ pub struct BackendNode {
     pub name: String,
     #[serde(rename = "type")]
     pub backend_type: String,
+    #[serde(default)]
     pub pattern: String,
     #[serde(skip)]
     pub pattern_regex: Option<Regex>,
+    #[serde(default)]
     pub base_url: String,
+    #[serde(default)]
     pub port: String,
+    #[serde(default)]
     pub path: String,
     #[serde(default)]
     pub priority: i32,
@@ -59,14 +63,21 @@ macro_rules! impl_uri {
     ($t:ty) => {
         impl $t {
             pub fn uri(&self) -> Uri {
-                let should_show_port =
-                    !(self.port == "443" || self.port == "80");
+                if self.base_url.is_empty() {
+                    return "/".parse().expect("Failed to parse fallback URI");
+                }
+
+                let should_show_port = !self.port.is_empty()
+                    && self.port != "443"
+                    && self.port != "80";
                 let clean_url = self.base_url.trim_end_matches('/');
                 let clean_path =
                     self.path.trim_start_matches('/').trim_end_matches('/');
 
                 let uri_str = if should_show_port {
                     format!("{}:{}/{}", clean_url, self.port, clean_path)
+                } else if clean_path.is_empty() {
+                    clean_url.to_string()
                 } else {
                     format!("{}/{}", clean_url, clean_path)
                 };

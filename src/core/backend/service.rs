@@ -158,9 +158,10 @@ impl AppStreamService {
 
     fn is_node_local(node: &BackendNode) -> bool {
         let url = node.base_url.to_lowercase();
-        ["127.0.0.1", "localhost", "0.0.0.0"]
-            .iter()
-            .any(|host| url.contains(host))
+        url.is_empty()
+            || ["127.0.0.1", "localhost", "0.0.0.0"]
+                .iter()
+                .any(|host| url.contains(host))
     }
 
     fn build_node_remote_uri(

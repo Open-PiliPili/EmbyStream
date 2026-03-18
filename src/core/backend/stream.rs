@@ -83,7 +83,12 @@ impl StreamMiddleware {
                 );
                 matches
             } else {
-                false
+                debug_log!(
+                    GATEWAY_LOGGER_DOMAIN,
+                    "Node '{}' has no pattern — matches all paths as fallback",
+                    node.name
+                );
+                true
             }
         })
     }
