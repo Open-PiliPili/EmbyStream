@@ -92,7 +92,7 @@ impl_uri!(Backend);
 impl_uri!(BackendNode);
 
 fn default_proxy_mode() -> String {
-    "proxy".to_string()
+    "redirect".to_string()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
