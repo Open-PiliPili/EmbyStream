@@ -4,6 +4,7 @@ pub mod client_filter;
 pub mod context;
 pub mod core;
 pub mod cors;
+pub mod debug_paths;
 pub mod error;
 pub mod filtered_routes;
 pub mod logger;

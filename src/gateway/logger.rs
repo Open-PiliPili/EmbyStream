@@ -2,11 +2,28 @@ use async_trait::async_trait;
 use hyper::{Response, body::Incoming, header};
 
 use super::{
+    cacheable_routes::find_cacheable_route,
     chain::{Middleware, Next},
+    context::Context,
+    debug_paths::is_debug_path,
     response::BoxBodyType,
 };
-use crate::gateway::context::Context;
 use crate::{GATEWAY_LOGGER_DOMAIN, debug_log, info_log};
+
+macro_rules! cond_log {
+    ($use_debug:expr, $domain:expr, $($args:tt)*) => {
+        if $use_debug {
+            debug_log!($domain, $($args)*);
+        } else {
+            info_log!($domain, $($args)*);
+        }
+    };
+}
+
+fn should_use_debug(ctx: &Context) -> bool {
+    is_debug_path(&ctx.path)
+        && find_cacheable_route(&ctx.path, ctx.method.as_str()).is_none()
+}
 
 #[derive(Clone)]
 pub struct LoggerMiddleware;
@@ -19,24 +36,38 @@ impl Middleware for LoggerMiddleware {
         body: Option<Incoming>,
         next: Next,
     ) -> Response<BoxBodyType> {
-        info_log!(GATEWAY_LOGGER_DOMAIN, "Incoming request details:");
-        info_log!(
+        let use_debug = should_use_debug(&ctx);
+
+        cond_log!(
+            use_debug,
+            GATEWAY_LOGGER_DOMAIN,
+            "Incoming request details:"
+        );
+        cond_log!(
+            use_debug,
             GATEWAY_LOGGER_DOMAIN,
             "Request scheme and host: {:?}",
             ctx.get_host()
         );
-        info_log!(
+        cond_log!(
+            use_debug,
             GATEWAY_LOGGER_DOMAIN,
             "Request query: {:?}",
             ctx.get_query_params()
         );
-        info_log!(
+        cond_log!(
+            use_debug,
             GATEWAY_LOGGER_DOMAIN,
             "Request method: {} path: {}",
             ctx.method,
             ctx.path
         );
-        info_log!(GATEWAY_LOGGER_DOMAIN, "Request headers: {:?}", ctx.headers);
+        cond_log!(
+            use_debug,
+            GATEWAY_LOGGER_DOMAIN,
+            "Request headers: {:?}",
+            ctx.headers
+        );
 
         if ctx.headers.contains_key(header::CONTENT_LENGTH) {
             debug_log!(
@@ -47,12 +78,14 @@ impl Middleware for LoggerMiddleware {
 
         let response = next(ctx, body).await;
 
-        info_log!(
+        cond_log!(
+            use_debug,
             GATEWAY_LOGGER_DOMAIN,
             "Response status: {}",
             response.status()
         );
-        info_log!(
+        cond_log!(
+            use_debug,
             GATEWAY_LOGGER_DOMAIN,
             "Response headers: {:?}",
             response.headers()
