@@ -14,8 +14,8 @@ use regex::Regex;
 /// ## Cache key strategy (precise matching — different params produce different entries)
 ///
 /// - **GET requests**: key = `GET:{full URI including path + all query params}`
-///   Example: `GET:/emby/Users/fe45.../Items/Resume?Fields=...&Limit=20&...`
-///   Different `Fields`, `Limit`, `EnableImageTypes`, etc. each produce a separate cache entry.
+///   Example: `GET:/emby/Shows/NextUp?UserId=...&Limit=24&...`
+///   Different query params each produce a separate cache entry.
 ///
 /// - **POST requests**: key = `POST:{full URI including path + all query params}:{MD5 of request body}`
 ///   Example: `POST:/emby/Items/251044/PlaybackInfo?MediaSourceId=...&UserId=...:a3f2b8c1...`
@@ -36,12 +36,6 @@ pub struct CacheableRoute {
 
 pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
     CacheableRoute {
-        pattern: r"(?i)^/(?:emby/)?Users/[^/]+/Items/Resume",
-        methods: &["GET"],
-        ttl_seconds: 1200, // 20 minutes
-        description: "Continue-watching list — short TTL to keep playback progress accurate",
-    },
-    CacheableRoute {
         pattern: r"(?i)^/(?:emby/)?Items/[^/]+/PlaybackInfo",
         methods: &["POST"],
         ttl_seconds: 7200, // 2 hours
@@ -52,12 +46,6 @@ pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
         methods: &["GET"],
         ttl_seconds: 7200, // 2 hours
         description: "Next-up episode for a series",
-    },
-    CacheableRoute {
-        pattern: r"(?i)^/(?:emby/)?Users/[^/]+/Items/[^/]+$",
-        methods: &["GET"],
-        ttl_seconds: 7200, // 2 hours
-        description: "Single item detail (series/movie metadata)",
     },
     CacheableRoute {
         pattern: r"(?i)^/(?:emby/)?Shows/[^/]+/Episodes",
