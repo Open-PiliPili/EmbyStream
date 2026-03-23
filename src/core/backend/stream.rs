@@ -3,10 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use hyper::{Method, Response, StatusCode, Uri, body::Incoming, header};
 
-use super::{
-    constants::STREAM_RELAY_BACKEND_TYPE, result::Result as AppStreamResult,
-    service::StreamService,
-};
+use super::{result::Result as AppStreamResult, service::StreamService};
 use crate::{
     AppState, GATEWAY_LOGGER_DOMAIN, REMOTE_STREAMER_LOGGER_DOMAIN, debug_log,
     error_log, info_log, warn_log,
@@ -51,9 +48,6 @@ impl StreamMiddleware {
         file_path: &str,
     ) -> Option<&'a BackendNode> {
         nodes.iter().find(|node| {
-            if node.backend_type.eq_ignore_ascii_case(STREAM_RELAY_BACKEND_TYPE) {
-                return false;
-            }
             if let Some(ref regex) = node.pattern_regex {
                 let matches = regex.is_match(file_path);
                 debug_log!(

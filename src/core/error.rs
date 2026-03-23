@@ -50,4 +50,8 @@ pub enum Error {
     BackendNodeNotFound,
     #[error("WebDav upstream URL: {0}")]
     WebDavUrl(String),
+    #[error(
+        "Disk backend must use a local base_url; use type StreamRelay to forward signed streams to a remote host"
+    )]
+    DiskRemoteNotSupported,
 }

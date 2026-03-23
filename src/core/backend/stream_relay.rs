@@ -27,8 +27,8 @@ fn relay_nodes_sorted(mut nodes: Vec<BackendNode>) -> Vec<BackendNode> {
     nodes
 }
 
-/// Matches `request_path` against a StreamRelay node. `pattern` is a regex on the **HTTP path**
-/// (e.g. `^/stream$`), not the decrypted Emby file path.
+/// Matches `request_path` against a StreamRelay node in this middleware only: the **HTTP path**
+/// (e.g. `^/stream$`). Decrypted file paths are matched in [`StreamMiddleware`](crate::core::backend::stream::StreamMiddleware).
 fn http_path_matches_node(request_path: &str, node: &BackendNode) -> bool {
     if let Some(re) = &node.pattern_regex {
         return re.is_match(request_path);
@@ -167,10 +167,9 @@ impl Middleware for StreamRelayMiddleware {
                 location_str
             );
 
-            // 307 Temporary Redirect: method preserved (RFC 9110); avoids 301 caching of volatile sign= URLs.
             return ResponseBuilder::with_redirect(
                 location_str.as_str(),
-                StatusCode::TEMPORARY_REDIRECT,
+                StatusCode::MOVED_PERMANENTLY,
                 None,
             );
         }
@@ -270,7 +269,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn middleware_307_preserves_query() {
+    async fn middleware_301_preserves_query() {
         let mw = StreamRelayMiddleware::new(vec![sample_relay_node()]);
         let uri: Uri = "http://127.0.0.1:60010/stream?sign=dummy&device_id=x"
             .parse()
@@ -286,7 +285,7 @@ mod tests {
         });
 
         let resp = mw.handle(ctx, None, next).await;
-        assert_eq!(resp.status(), StatusCode::TEMPORARY_REDIRECT);
+        assert_eq!(resp.status(), StatusCode::MOVED_PERMANENTLY);
         let loc = resp
             .headers()
             .get(header::LOCATION)

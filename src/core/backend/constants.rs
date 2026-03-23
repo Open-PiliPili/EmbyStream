@@ -5,5 +5,8 @@
 pub const LOCAL_NODE_HOST_MARKERS: &[&str] =
     &["127.0.0.1", "localhost", "0.0.0.0"];
 
-/// `BackendNode.type` value: HTTP 307 relay of signed `/stream` to another backend (no decrypt).
+/// `BackendNode.type` value: local filesystem streaming only (no remote `base_url` relay).
+pub const DISK_BACKEND_TYPE: &str = "Disk";
+
+/// `BackendNode.type` value: relay signed streams to another host (`base_url` + query).
 pub const STREAM_RELAY_BACKEND_TYPE: &str = "StreamRelay";

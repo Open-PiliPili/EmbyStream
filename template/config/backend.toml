@@ -106,9 +106,12 @@ host = ""
 [BackendNode.DirectLink]
 user_agent = "Mozilla/5.0 (MockClient)"
 
-# StreamRelay: signed stream GET is answered with 307 to `base_url`+`port`+`path` with the
-# same query string (no decrypt on this host). `pattern` is a regex on the HTTP path (e.g.
-# ^/stream$), not the decrypted Emby file path. Does not match normal stream routing.
+# StreamRelay: forward the signed GET to `base_url`+`port`+`path` with the same query string.
+# - `pattern` as a regex on the decrypted file path (e.g. ^/mnt/GD(/.*)$) selects this node in
+#   normal signed-stream handling (same as other backends).
+# - Optional: first middleware can also match the HTTP path (e.g. ^/stream$) and 301 without
+#   decrypting the sign on this host.
+# Disk: local files only; non-local base_url relay is not supported (use StreamRelay instead).
 # [[BackendNode]]
 # name = "RelayToOtherBackend"
 # type = "StreamRelay"

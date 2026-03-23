@@ -4,7 +4,9 @@ use async_trait::async_trait;
 use hyper::{StatusCode, Uri, header};
 
 use super::{
-    constants::LOCAL_NODE_HOST_MARKERS,
+    constants::{
+        DISK_BACKEND_TYPE, LOCAL_NODE_HOST_MARKERS, STREAM_RELAY_BACKEND_TYPE,
+    },
     local_streamer::LocalStreamer,
     proxy_mode::ProxyMode,
     remote_streamer::{RemoteStreamParams, RemoteStreamer},
@@ -133,15 +135,38 @@ impl AppStreamService {
             });
         }
 
-        if !Self::is_node_local(node) {
+        let stream_relay = node
+            .backend_type
+            .eq_ignore_ascii_case(STREAM_RELAY_BACKEND_TYPE);
+        let disk = node.backend_type.eq_ignore_ascii_case(DISK_BACKEND_TYPE);
+        let remote_host = !Self::is_node_local(node);
+
+        if stream_relay || remote_host {
+            if disk && remote_host {
+                error_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Disk node '{}' has non-local base_url; use type StreamRelay for remote relay",
+                    node.name
+                );
+                return Err(AppStreamError::DiskRemoteNotSupported);
+            }
             let remote_uri =
                 Self::build_node_remote_uri(node, request.uri.query())?;
-            info_log!(
-                STREAM_LOGGER_DOMAIN,
-                "Node '{}' points to remote server, forwarding to: {}",
-                node.name,
-                remote_uri
-            );
+            if stream_relay {
+                info_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "StreamRelay node '{}': forwarding signed request to {}",
+                    node.name,
+                    remote_uri
+                );
+            } else {
+                info_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Node '{}' points to remote server, forwarding to: {}",
+                    node.name,
+                    remote_uri
+                );
+            }
             return Ok(Source::Remote {
                 uri: remote_uri,
                 mode: proxy_mode,
