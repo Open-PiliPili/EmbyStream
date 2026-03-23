@@ -136,9 +136,6 @@ query_param = "path"
 url_template = ""
 username = ""
 password = ""
-# Upstream User-Agent when proxying or probing Basic auth: use the client's
-# User-Agent when present; if missing, use this value when non-empty; otherwise
-# the built-in default (app name + version).
 user_agent = ""
 
 # Example for url_template (set url_mode = "url_template" and fill url_template; fixed
