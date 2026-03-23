@@ -23,7 +23,11 @@ use crate::{
     CONFIG_LOGGER_DOMAIN,
     cli::RunArgs,
     config::general::{Log, types::Emby},
-    config_error_log, config_info_log,
+    config_error_log, config_info_log, config_warn_log,
+    core::backend::constants::{
+        STREAM_RELAY_BACKEND_TYPE, backend_base_url_is_empty,
+        backend_base_url_is_local_host,
+    },
     util::path_rewriter::PathRewriter,
 };
 
@@ -162,6 +166,23 @@ impl Config {
                 })
                 .collect();
         }
+
+        backend_nodes.retain(|node| {
+            let drop_relay = node
+                .backend_type
+                .eq_ignore_ascii_case(STREAM_RELAY_BACKEND_TYPE)
+                && (backend_base_url_is_empty(&node.base_url)
+                    || backend_base_url_is_local_host(&node.base_url));
+            if drop_relay {
+                config_warn_log!(
+                    CONFIG_LOGGER_DOMAIN,
+                    "StreamRelay node '{}' dropped: base_url is empty or loopback \
+                     (127.0.0.1, localhost, 0.0.0.0); fix or remove the entry",
+                    node.name
+                );
+            }
+            !drop_relay
+        });
 
         Ok(Config {
             path: path.to_path_buf(),

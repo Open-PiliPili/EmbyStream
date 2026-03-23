@@ -111,7 +111,11 @@ user_agent = "Mozilla/5.0 (MockClient)"
 #   normal signed-stream handling (same as other backends).
 # - Optional: first middleware can also match the HTTP path (e.g. ^/stream$) and 301 without
 #   decrypting the sign on this host.
-# Disk: local files only; non-local base_url relay is not supported (use StreamRelay instead).
+# - `proxy_mode`: `redirect` sends the client a Location; `proxy` GETs the remote stream URL
+#   (same query string) and pipes the response through this host.
+# - Invalid base_url (empty or loopback) is ignored: node is dropped with a startup WARN.
+# Disk: local files only. Omit `base_url` or use empty/127.0.0.1/localhost for local paths;
+# non-local base_url relay is not supported (use StreamRelay instead).
 # [[BackendNode]]
 # name = "RelayToOtherBackend"
 # type = "StreamRelay"

@@ -5,7 +5,8 @@ use hyper::{StatusCode, Uri, header};
 
 use super::{
     constants::{
-        DISK_BACKEND_TYPE, LOCAL_NODE_HOST_MARKERS, STREAM_RELAY_BACKEND_TYPE,
+        DISK_BACKEND_TYPE, STREAM_RELAY_BACKEND_TYPE,
+        backend_base_url_is_empty, backend_base_url_is_local_host,
     },
     local_streamer::LocalStreamer,
     proxy_mode::ProxyMode,
@@ -135,13 +136,24 @@ impl AppStreamService {
             });
         }
 
+        let disk = node.backend_type.eq_ignore_ascii_case(DISK_BACKEND_TYPE);
         let stream_relay = node
             .backend_type
             .eq_ignore_ascii_case(STREAM_RELAY_BACKEND_TYPE);
-        let disk = node.backend_type.eq_ignore_ascii_case(DISK_BACKEND_TYPE);
-        let remote_host = !Self::is_node_local(node);
+        let remote_host = Self::node_has_remote_stream_base(node);
 
         if stream_relay || remote_host {
+            if stream_relay
+                && (backend_base_url_is_empty(&node.base_url)
+                    || backend_base_url_is_local_host(&node.base_url))
+            {
+                error_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "StreamRelay node '{}' has loopback/empty base_url; refused to avoid redirect loops",
+                    node.name
+                );
+                return Err(AppStreamError::StreamRelayForbiddenLocalTarget);
+            }
             if disk && remote_host {
                 error_log!(
                     STREAM_LOGGER_DOMAIN,
@@ -205,12 +217,10 @@ impl AppStreamService {
         }
     }
 
-    fn is_node_local(node: &BackendNode) -> bool {
-        let url = node.base_url.to_lowercase();
-        url.is_empty()
-            || LOCAL_NODE_HOST_MARKERS
-                .iter()
-                .any(|host| url.contains(host))
+    /// Non-empty `base_url` that is not a loopback placeholder — use node's stream URL for relay.
+    fn node_has_remote_stream_base(node: &BackendNode) -> bool {
+        !backend_base_url_is_empty(&node.base_url)
+            && !backend_base_url_is_local_host(&node.base_url)
     }
 
     fn build_node_remote_uri(

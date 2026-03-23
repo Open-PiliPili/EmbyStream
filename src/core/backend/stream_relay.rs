@@ -3,7 +3,10 @@
 use async_trait::async_trait;
 use hyper::{Method, Response, StatusCode, Uri, body::Incoming, header};
 
-use super::constants::STREAM_RELAY_BACKEND_TYPE;
+use super::constants::{
+    STREAM_RELAY_BACKEND_TYPE, backend_base_url_is_empty,
+    backend_base_url_is_local_host,
+};
 use crate::{
     GATEWAY_LOGGER_DOMAIN, config::backend::BackendNode, debug_log, warn_log,
 };
@@ -134,6 +137,17 @@ impl Middleware for StreamRelayMiddleware {
                 continue;
             }
 
+            if backend_base_url_is_empty(&node.base_url)
+                || backend_base_url_is_local_host(&node.base_url)
+            {
+                warn_log!(
+                    GATEWAY_LOGGER_DOMAIN,
+                    "StreamRelay node '{}': base_url is empty or loopback; skipping (forbidden)",
+                    node.name
+                );
+                continue;
+            }
+
             let location_str = build_redirect_location(node, ctx.uri.query());
             let target_uri: Uri = match location_str.parse() {
                 Ok(u) => u,
@@ -197,7 +211,7 @@ mod tests {
             backend_type: STREAM_RELAY_BACKEND_TYPE.into(),
             pattern: "^/stream$".into(),
             pattern_regex: Some(Regex::new("^/stream$").unwrap()),
-            base_url: "http://127.0.0.1".into(),
+            base_url: "http://198.51.100.10".into(),
             port: "60012".into(),
             path: "stream".into(),
             priority: 0,
@@ -237,7 +251,10 @@ mod tests {
     fn build_redirect_location_preserves_query() {
         let n = sample_relay_node();
         let loc = build_redirect_location(&n, Some("sign=abc&device_id=1"));
-        assert_eq!(loc, "http://127.0.0.1:60012/stream?sign=abc&device_id=1");
+        assert_eq!(
+            loc,
+            "http://198.51.100.10:60012/stream?sign=abc&device_id=1"
+        );
     }
 
     #[test]
@@ -292,7 +309,10 @@ mod tests {
             .unwrap()
             .to_str()
             .unwrap();
-        assert_eq!(loc, "http://127.0.0.1:60012/stream?sign=dummy&device_id=x");
+        assert_eq!(
+            loc,
+            "http://198.51.100.10:60012/stream?sign=dummy&device_id=x"
+        );
     }
 
     #[tokio::test]

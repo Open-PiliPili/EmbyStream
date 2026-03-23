@@ -51,7 +51,13 @@ pub enum Error {
     #[error("WebDav upstream URL: {0}")]
     WebDavUrl(String),
     #[error(
-        "Disk backend must use a local base_url; use type StreamRelay to forward signed streams to a remote host"
+        "Disk backend must use a local base_url; use type StreamRelay to forward \
+         signed streams to a remote host"
     )]
     DiskRemoteNotSupported,
+    #[error(
+        "StreamRelay base_url must be a non-loopback remote host \
+         (not empty, 127.0.0.1, localhost, or 0.0.0.0)"
+    )]
+    StreamRelayForbiddenLocalTarget,
 }
