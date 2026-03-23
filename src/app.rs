@@ -26,7 +26,6 @@ pub struct AppState {
     open_list_cache: OnceCell<GeneralCache>,
     api_response_cache: OnceCell<GeneralCache>,
     rate_limiter_cache: OnceCell<DashMap<String, RateLimiterCache>>,
-    /// Cached `Authorization: Basic …` lines keyed by `webdav_auth::cache_key`.
     pub(crate) webdav_auth_cache: DashMap<String, String>,
 }
 
