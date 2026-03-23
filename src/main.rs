@@ -10,7 +10,10 @@ use embystream::{
     info_log,
 };
 use embystream::{
-    backend::{service::AppStreamService, stream::StreamMiddleware},
+    backend::{
+        service::AppStreamService, stream::StreamMiddleware,
+        stream_relay::StreamRelayMiddleware,
+    },
     cli::{Cli, Commands, RunArgs},
     config::{core::Config, general::StreamMode},
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
@@ -301,6 +304,9 @@ async fn setup_backend_gateway(
         )))
         .add_middleware(Box::new(CorsMiddleware))
         .add_middleware(Box::new(OptionsMiddleware))
+        .add_middleware(Box::new(StreamRelayMiddleware::new(
+            config.backend_nodes.clone(),
+        )))
         .add_middleware(Box::new(StreamMiddleware::new(
             config.backend_nodes.clone(),
             service,

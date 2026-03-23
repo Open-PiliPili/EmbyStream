@@ -8,6 +8,7 @@ pub mod result;
 pub mod service;
 pub mod source;
 pub mod stream;
+pub mod stream_relay;
 pub mod types;
 pub mod upstream_proxy;
 pub mod webdav;

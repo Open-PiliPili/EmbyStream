@@ -10,6 +10,7 @@ pub mod sign_encryptor;
 pub use backend::{
     service::{AppStreamService, StreamService},
     stream::StreamMiddleware,
+    stream_relay::StreamRelayMiddleware,
 };
 
 pub use sign::{Sign, SignParams};
