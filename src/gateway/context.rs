@@ -1,6 +1,6 @@
 use std::{collections::HashMap, str, time::Instant};
 
-use hyper::{HeaderMap, Method, Uri};
+use hyper::{HeaderMap, Method, Uri, header};
 
 pub struct Context {
     pub uri: Uri,
@@ -28,7 +28,10 @@ impl Context {
     }
 
     pub fn get_host(&self) -> Option<String> {
-        self.get_header("host").map(|h| h.to_string())
+        self.headers
+            .get(header::HOST)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
     }
 
     pub fn get_query_params(&self) -> Option<HashMap<String, String>> {

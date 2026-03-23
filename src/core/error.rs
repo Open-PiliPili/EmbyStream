@@ -48,4 +48,6 @@ pub enum Error {
     IoError(#[from] IoError),
     #[error("Backend node not found in request")]
     BackendNodeNotFound,
+    #[error("WebDav upstream URL: {0}")]
+    WebDavUrl(String),
 }

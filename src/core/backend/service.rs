@@ -4,9 +4,13 @@ use async_trait::async_trait;
 use hyper::{StatusCode, Uri, header};
 
 use super::{
-    local_streamer::LocalStreamer, proxy_mode::ProxyMode,
-    remote_streamer::RemoteStreamer, result::Result as AppStreamResult,
+    constants::LOCAL_NODE_HOST_MARKERS,
+    local_streamer::LocalStreamer,
+    proxy_mode::ProxyMode,
+    remote_streamer::{RemoteStreamParams, RemoteStreamer},
+    result::Result as AppStreamResult,
     source::Source,
+    webdav, webdav_auth,
 };
 use crate::backend::types::ClientInfo;
 use crate::config::backend::BackendNode;
@@ -17,7 +21,6 @@ use crate::{
     core::{
         error::Error as AppStreamError, request::Request as AppStreamRequest,
     },
-    network::CurlPlugin,
     sign::SignParams,
     system::SystemInfo,
     util::{StringUtil, UriExt},
@@ -101,6 +104,27 @@ impl AppStreamService {
             proxy_mode
         );
 
+        if node.backend_type.eq_ignore_ascii_case(webdav::BACKEND_TYPE)
+            && Uri::is_local(&uri)
+        {
+            let path_str = Uri::to_path_or_url_string(&uri);
+            let upstream = webdav::build_upstream_uri(
+                node,
+                &path_str,
+                node.webdav.as_ref(),
+            )
+            .map_err(|e| AppStreamError::WebDavUrl(e.to_string()))?;
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "WebDav upstream URI: {}",
+                upstream
+            );
+            return Ok(Source::Remote {
+                uri: upstream,
+                mode: proxy_mode,
+            });
+        }
+
         if !Uri::is_local(&uri) {
             debug_log!(STREAM_LOGGER_DOMAIN, "URI is already remote: {}", uri);
             return Ok(Source::Remote {
@@ -159,7 +183,7 @@ impl AppStreamService {
     fn is_node_local(node: &BackendNode) -> bool {
         let url = node.base_url.to_lowercase();
         url.is_empty()
-            || ["127.0.0.1", "localhost", "0.0.0.0"]
+            || LOCAL_NODE_HOST_MARKERS
                 .iter()
                 .any(|host| url.contains(host))
     }
@@ -322,9 +346,7 @@ impl AppStreamService {
             openlist_ua
         );
 
-        let openlist_client = ClientBuilder::<OpenListClient>::new()
-            .with_plugin(CurlPlugin)
-            .build();
+        let openlist_client = ClientBuilder::<OpenListClient>::new().build();
 
         let result = openlist_client
             .fetch_file_path(
@@ -390,21 +412,35 @@ impl AppStreamService {
             .node
             .as_ref()
             .ok_or(AppStreamError::BackendNodeNotFound)?;
-        let user_agent = node
-            .direct_link
-            .as_ref()
-            .map(|link| Arc::new(link.user_agent.to_string()));
+        let has_client_ua = final_headers
+            .get(header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
 
-        if let Some(user_agent) = user_agent {
-            if !user_agent.is_empty() {
-                if let Ok(parsed_header) = user_agent.parse() {
-                    debug_log!(
-                        STREAM_LOGGER_DOMAIN,
-                        "Insert user agent {:?} to header",
-                        user_agent
-                    );
-                    final_headers.insert(header::USER_AGENT, parsed_header);
-                }
+        if !has_client_ua {
+            let ua = node
+                .webdav
+                .as_ref()
+                .filter(|w| !w.user_agent.trim().is_empty())
+                .map(|w| w.user_agent.trim().to_string())
+                .or_else(|| {
+                    node.direct_link.as_ref().and_then(|link| {
+                        if link.user_agent.is_empty() {
+                            None
+                        } else {
+                            Some(link.user_agent.to_string())
+                        }
+                    })
+                })
+                .unwrap_or_else(|| SystemInfo::new().get_user_agent());
+            if let Ok(parsed_header) = ua.parse() {
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Insert user agent {:?} to redirect headers",
+                    ua
+                );
+                final_headers.insert(header::USER_AGENT, parsed_header);
             }
         }
 
@@ -422,6 +458,76 @@ impl AppStreamService {
         let input =
             format!("{}&user_agent={}", trimmed_url.to_lowercase(), user_agent);
         StringUtil::md5(&input)
+    }
+
+    fn resolve_upstream_user_agent(
+        node: &BackendNode,
+        request: &AppStreamRequest,
+    ) -> String {
+        if node.backend_type.eq_ignore_ascii_case(webdav::BACKEND_TYPE) {
+            if let Some(ua) = request.user_agent() {
+                let t = ua.trim();
+                if !t.is_empty() {
+                    return t.to_string();
+                }
+            }
+            if let Some(w) = &node.webdav {
+                let t = w.user_agent.trim();
+                if !t.is_empty() {
+                    return t.to_string();
+                }
+            }
+            return SystemInfo::new().get_user_agent();
+        }
+        if let Some(d) = &node.direct_link {
+            if !d.user_agent.is_empty() {
+                return d.user_agent.to_string();
+            }
+        }
+        request
+            .user_agent()
+            .unwrap_or_else(|| SystemInfo::new().get_user_agent())
+    }
+
+    async fn webdav_proxy_auth_headers(
+        &self,
+        node: &BackendNode,
+        uri: &Uri,
+        client_headers: &hyper::HeaderMap,
+    ) -> Result<Option<hyper::HeaderMap>, StatusCode> {
+        if !node.backend_type.eq_ignore_ascii_case(webdav::BACKEND_TYPE) {
+            return Ok(None);
+        }
+        let Some(cfg) = node.webdav.as_ref() else {
+            return Ok(None);
+        };
+        let no_creds =
+            cfg.username.trim().is_empty() && cfg.password.trim().is_empty();
+        if no_creds {
+            return Ok(None);
+        }
+
+        match webdav_auth::authorization_header_for_proxy(
+            &self.state.webdav_auth_cache,
+            node,
+            uri,
+            cfg,
+            Some(client_headers),
+        )
+        .await
+        {
+            Ok(Some(line)) => webdav_auth::extra_headers_from_auth_line(&line)
+                .map(Some)
+                .map_err(|_| {
+                    error_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "Invalid WebDav Authorization header value"
+                    );
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }),
+            Ok(None) => Ok(None),
+            Err(()) => Err(StatusCode::UNAUTHORIZED),
+        }
     }
 }
 
@@ -489,20 +595,26 @@ impl StreamService for AppStreamService {
                     Ok(AppStreamResult::Redirect(redirect_info))
                 }
                 ProxyMode::Proxy => {
-                    let user_agent = node
-                        .direct_link
-                        .as_ref()
-                        .map(|link| link.user_agent.to_string())
-                        .unwrap_or(SystemInfo::new().get_user_agent());
+                    let user_agent =
+                        Self::resolve_upstream_user_agent(node, &request);
+                    let extra_headers = self
+                        .webdav_proxy_auth_headers(
+                            node,
+                            &uri,
+                            &request.original_headers,
+                        )
+                        .await?;
 
-                    RemoteStreamer::stream(
-                        self.state.clone(),
-                        uri,
-                        Some(user_agent),
-                        &request.original_headers,
-                        request.client(),
-                        request.client_ip(),
-                    )
+                    RemoteStreamer::stream(RemoteStreamParams {
+                        state: self.state.clone(),
+                        url: uri,
+                        user_agent,
+                        client_headers: &request.original_headers,
+                        extra_upstream_headers: extra_headers,
+                        client: request.client(),
+                        client_ip: request.client_ip(),
+                        node,
+                    })
                     .await
                 }
             },

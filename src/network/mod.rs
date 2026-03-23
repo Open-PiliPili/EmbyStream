@@ -1,12 +1,8 @@
-//! A flexible and extensible network request handling system.
+//! HTTP helpers: plugin hooks around a shared **reqwest** client (`provider`).
 //!
-//! This module provides a plugin-based architecture for making HTTP requests with the following features:
-//! - Support for different HTTP methods
-//! - Plugin system for request/response processing
-//! - Curl-based implementation
-//! - Task-based request handling
-//!
-pub mod curl_plugin;
+//! Request execution uses rustls-backed reqwest; plugins are optional observers
+//! (e.g. logging) and are not required for transport.
+
 pub mod extension;
 pub mod http_method;
 pub mod plugin;
@@ -14,7 +10,6 @@ pub mod provider;
 pub mod target;
 pub mod task;
 
-pub use curl_plugin::*;
 pub use extension::*;
 pub use http_method::*;
 pub use plugin::*;

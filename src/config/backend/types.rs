@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     direct::types::DirectLink, disk::types::Disk, openlist::types::OpenList,
+    webdav::WebDavConfig,
 };
 use crate::{
     config::types::{AntiReverseProxyConfig, PathRewriteConfig},
@@ -57,6 +58,8 @@ pub struct BackendNode {
     pub open_list: Option<OpenList>,
     #[serde(rename = "DirectLink")]
     pub direct_link: Option<DirectLink>,
+    #[serde(rename = "WebDav")]
+    pub webdav: Option<WebDavConfig>,
 }
 
 macro_rules! impl_uri {
@@ -64,7 +67,7 @@ macro_rules! impl_uri {
         impl $t {
             pub fn uri(&self) -> Uri {
                 if self.base_url.is_empty() {
-                    return "/".parse().expect("Failed to parse fallback URI");
+                    return Uri::from_static("/");
                 }
 
                 let should_show_port = !self.port.is_empty()
@@ -82,7 +85,9 @@ macro_rules! impl_uri {
                     format!("{}/{}", clean_url, clean_path)
                 };
 
-                uri_str.parse().expect("Failed to parse backend URI")
+                uri_str
+                    .parse::<Uri>()
+                    .unwrap_or_else(|_| Uri::from_static("/"))
             }
         }
     };

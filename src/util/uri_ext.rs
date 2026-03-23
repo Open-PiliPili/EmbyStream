@@ -140,11 +140,9 @@ mod tests {
 
     #[test]
     fn test_is_local() {
-        let path = "****";
-
-        let uri = Uri::from_path_or_url(path);
-        let is_local = Uri::is_local(&uri.unwrap());
-        println!("is_local -> {:?}", is_local);
+        let uri = Uri::force_from_path_or_url("/virtual/media/file.mkv")
+            .expect("pseudo local uri");
+        assert!(Uri::is_local(&uri));
     }
 
     #[test]

@@ -1,3 +1,4 @@
+pub mod constants;
 pub mod local_streamer;
 pub mod proxy_mode;
 pub mod read_stream;
@@ -8,3 +9,6 @@ pub mod service;
 pub mod source;
 pub mod stream;
 pub mod types;
+pub mod upstream_proxy;
+pub mod webdav;
+pub mod webdav_auth;

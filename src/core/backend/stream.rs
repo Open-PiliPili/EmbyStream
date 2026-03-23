@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hyper::{Response, StatusCode, Uri, body::Incoming};
+use hyper::{Method, Response, StatusCode, Uri, body::Incoming, header};
 
 use super::{result::Result as AppStreamResult, service::StreamService};
 use crate::{
@@ -126,6 +126,17 @@ impl Middleware for StreamMiddleware {
             return next(ctx, body).await;
         }
 
+        if ctx.method != Method::GET {
+            warn_log!(
+                GATEWAY_LOGGER_DOMAIN,
+                "Signed stream rejected method {:?} (only GET allowed)",
+                ctx.method,
+            );
+            return ResponseBuilder::with_status_code(
+                StatusCode::METHOD_NOT_ALLOWED,
+            );
+        }
+
         let sign =
             match SignDecryptor::decrypt(&params.sign, &params, &self.state)
                 .await
@@ -181,7 +192,7 @@ impl Middleware for StreamMiddleware {
 
             let host = ctx
                 .headers
-                .get("host")
+                .get(header::HOST)
                 .and_then(|h| h.to_str().ok())
                 .unwrap_or("");
 
@@ -211,12 +222,19 @@ impl Middleware for StreamMiddleware {
             match result {
                 Ok(service_result) => match service_result {
                     AppStreamResult::Stream(stream_response) => {
-                        let mut response = Response::builder()
+                        match Response::builder()
                             .status(stream_response.status)
                             .body(stream_response.body)
-                            .expect("Failed to build stream response");
-                        *response.headers_mut() = stream_response.headers;
-                        response
+                        {
+                            Ok(mut response) => {
+                                *response.headers_mut() =
+                                    stream_response.headers;
+                                response
+                            }
+                            Err(_) => ResponseBuilder::with_status_code(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                            ),
+                        }
                     }
                     AppStreamResult::Redirect(redirect_info) => {
                         info_log!(

@@ -26,7 +26,6 @@ use crate::{
         request::Request as AppForwardRequest, sign::Sign,
         sign_encryptor::SignEncryptor,
     },
-    network::CurlPlugin,
     util::{StringUtil, UriExt, UriExtError},
 };
 
@@ -160,9 +159,7 @@ impl AppForwardService {
             return Err(AppForwardError::EmptyEmbyDeviceId);
         }
 
-        let emby_client = ClientBuilder::<EmbyClient>::new()
-            .with_plugin(CurlPlugin)
-            .build();
+        let emby_client = ClientBuilder::<EmbyClient>::new().build();
 
         let playback_info = emby_client
             .playback_info(

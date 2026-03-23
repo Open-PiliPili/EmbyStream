@@ -21,8 +21,8 @@ where
 {
     /// Creates a new builder with default configuration.
     ///
-    /// Starts with an empty set of network plugins. You'll typically want to add
-    /// at least one network implementation like `CurlPlugin`.
+    /// Starts with an empty set of network plugins (optional observers only;
+    /// transport is always the shared reqwest client inside `NetworkProvider`).
     pub fn new() -> Self {
         Self {
             plugins: Vec::new(),

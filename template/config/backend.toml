@@ -105,3 +105,43 @@ host = ""
 
 [BackendNode.DirectLink]
 user_agent = "Mozilla/5.0 (MockClient)"
+
+# WebDav: decrypted logical path is mapped to upstream HTTP(S). redirect does not send
+# credentials; proxy may use HTTP Basic (cached). url_mode: path_join | query_path |
+# url_template (default path_join when empty).
+[[BackendNode]]
+name = "RcloneWebDav"
+type = "WebDav"
+pattern = "/rclone/.*"
+base_url = "http://127.0.0.1"
+port = "60005"
+path = ""
+priority = 0
+proxy_mode = "proxy"
+client_speed_limit_kbs = 0
+client_burst_speed_kbs = 0
+
+[[BackendNode.PathRewrite]]
+enable = false
+pattern = "^/rclone(/.*)$"
+replacement = "$1"
+
+[BackendNode.AntiReverseProxy]
+enable = false
+host = ""
+
+[BackendNode.WebDav]
+url_mode = "path_join"
+query_param = "path"
+url_template = ""
+username = ""
+password = ""
+# Upstream User-Agent when proxying or probing Basic auth: use the client's
+# User-Agent when present; if missing, use this value when non-empty; otherwise
+# the built-in default (app name + version).
+user_agent = ""
+
+# Example for url_template (set url_mode = "url_template" and fill url_template; fixed
+# query params allowed):
+# url_mode = "url_template"
+# url_template = "http://127.0.0.1:60005/dav/item?path={file_path}&sort=desc"

@@ -1,4 +1,3 @@
-pub mod download;
 pub mod emby;
 pub mod openlist;
 pub mod telegram;
@@ -18,5 +17,3 @@ pub use openlist::{
     API as OpenListAPI, Operation as OpenListOperation,
     response::{FileData, FileResponse, LinkData, LinkResponse},
 };
-
-pub use download::API as DownloadAPI;

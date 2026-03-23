@@ -495,6 +495,7 @@ dependencies = [
  "http-range-header",
  "http-serde",
  "hyper",
+ "hyper-rustls",
  "hyper-util",
  "lazy_static",
  "libc",

@@ -1,29 +1,71 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
-use futures_util::TryStreamExt;
-use http_body_util::{BodyExt, StreamBody};
-use hyper::{HeaderMap, StatusCode, Uri, body::Frame, header};
-
-use super::{response::Response, result::Result as AppStreamResult};
-use crate::{AppState, REMOTE_STREAMER_LOGGER_DOMAIN, error_log};
-use crate::{
-    client::{ClientBuilder, DownloadClient},
-    network::CurlPlugin,
+use http_body_util::BodyExt;
+use hyper::{
+    HeaderMap, Response as HyperResponse, StatusCode, Uri, body::Incoming,
+    header,
 };
+
+use super::{
+    response::Response, result::Result as AppStreamResult, upstream_proxy,
+    webdav::BACKEND_TYPE as WEBDAV_BACKEND_TYPE, webdav_auth,
+};
+use crate::{
+    AppState, REMOTE_STREAMER_LOGGER_DOMAIN, config::backend::BackendNode,
+    error_log, gateway::error::Error as GatewayError,
+};
+
+/// Parameters for proxying a ranged GET to an upstream HTTP(S) origin.
+pub struct RemoteStreamParams<'a> {
+    pub state: Arc<AppState>,
+    pub url: Uri,
+    pub user_agent: String,
+    pub client_headers: &'a HeaderMap,
+    pub extra_upstream_headers: Option<HeaderMap>,
+    pub client: Option<String>,
+    pub client_ip: Option<String>,
+    pub node: &'a BackendNode,
+}
+
+fn is_webdav_node(node: &BackendNode) -> bool {
+    node.backend_type.eq_ignore_ascii_case(WEBDAV_BACKEND_TYPE)
+}
+
+fn webdav_needs_auth_retry(node: &BackendNode, status: StatusCode) -> bool {
+    status == StatusCode::UNAUTHORIZED
+        && is_webdav_node(node)
+        && node
+            .webdav
+            .as_ref()
+            .map(|w| {
+                !w.username.trim().is_empty() || !w.password.trim().is_empty()
+            })
+            .unwrap_or(false)
+}
+
+async fn drain_incoming(body: Incoming) -> Result<(), GatewayError> {
+    let _ = BodyExt::collect(body).await?;
+    Ok(())
+}
 
 pub(crate) struct RemoteStreamer;
 
 impl RemoteStreamer {
-    #[allow(unused_variables)]
     pub async fn stream(
-        state: Arc<AppState>,
-        url: Uri,
-        user_agent: Option<String>,
-        headers: &HeaderMap,
-        client: Option<String>,
-        client_ip: Option<String>,
+        params: RemoteStreamParams<'_>,
     ) -> Result<AppStreamResult, StatusCode> {
-        if !headers.contains_key(header::RANGE) {
+        let RemoteStreamParams {
+            state,
+            url,
+            user_agent,
+            client_headers,
+            extra_upstream_headers,
+            client,
+            client_ip,
+            node,
+        } = params;
+
+        if !client_headers.contains_key(header::RANGE) {
             error_log!(
                 REMOTE_STREAMER_LOGGER_DOMAIN,
                 "No-Range req for '{:?}' rejected. IP: {:?}, Client: {:?}",
@@ -34,56 +76,128 @@ impl RemoteStreamer {
             return Err(StatusCode::FORBIDDEN);
         }
 
-        let client = ClientBuilder::<DownloadClient>::new()
-            .with_plugin(CurlPlugin)
-            .build();
+        let extra_ref = extra_upstream_headers.as_ref();
 
-        let mut headers_to_forward = headers.clone();
-        headers_to_forward.remove(header::HOST);
+        let upstream_resp = upstream_proxy::forward_get(
+            url.clone(),
+            client_headers,
+            &user_agent,
+            extra_ref,
+        )
+        .await
+        .map_err(|e| {
+            error_log!(
+                REMOTE_STREAMER_LOGGER_DOMAIN,
+                "Upstream forward failed: {}",
+                e
+            );
+            StatusCode::BAD_GATEWAY
+        })?;
 
-        let forwarded_headers =
-            Self::header_map_to_option_hashmap(&headers_to_forward)
-                .filter(|h| !h.is_empty());
-        let remote_response = client
-            .download(url.to_string(), user_agent, forwarded_headers)
-            .await
-            .map_err(|e| {
-                error_log!(
-                    REMOTE_STREAMER_LOGGER_DOMAIN,
-                    "Failed to connect to remote stream source: {}",
-                    e
-                );
-                StatusCode::BAD_GATEWAY
-            })?;
+        let upstream_resp = Self::maybe_retry_webdav_401(
+            state,
+            node,
+            upstream_resp,
+            url,
+            client_headers,
+            &user_agent,
+        )
+        .await?;
 
-        let response_status = remote_response.status();
-        let response_headers = remote_response.headers().clone();
+        let status = upstream_resp.status();
+        if !status.is_success() {
+            error_log!(
+                REMOTE_STREAMER_LOGGER_DOMAIN,
+                "Upstream returned error status: {}",
+                status
+            );
+            let (_, body) = upstream_resp.into_parts();
+            let _ = drain_incoming(body).await;
+            if status == StatusCode::UNAUTHORIZED && is_webdav_node(node) {
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+            return Err(StatusCode::BAD_GATEWAY);
+        }
 
-        let stream = remote_response
-            .bytes_stream()
-            .map_ok(Frame::data)
-            .map_err(Into::into);
+        let (response_status, response_headers, body) =
+            upstream_proxy::map_upstream_to_stream_response(upstream_resp)
+                .map_err(|e| {
+                    error_log!(
+                        REMOTE_STREAMER_LOGGER_DOMAIN,
+                        "Map upstream response failed: {}",
+                        e
+                    );
+                    StatusCode::BAD_GATEWAY
+                })?;
 
         Ok(AppStreamResult::Stream(Response {
             status: response_status,
             headers: response_headers,
-            body: BodyExt::boxed(StreamBody::new(stream)),
+            body,
         }))
     }
 
-    fn header_map_to_option_hashmap(
+    async fn maybe_retry_webdav_401(
+        state: Arc<AppState>,
+        node: &BackendNode,
+        upstream_resp: HyperResponse<Incoming>,
+        url: Uri,
         headers: &HeaderMap,
-    ) -> Option<HashMap<String, String>> {
-        headers.iter().next().map(|_| {
-            headers
-                .iter()
-                .fold(HashMap::new(), |mut acc, (name, value)| {
-                    acc.insert(
-                        name.as_str().to_owned(),
-                        String::from_utf8_lossy(value.as_bytes()).into_owned(),
-                    );
-                    acc
-                })
-        })
+        user_agent: &str,
+    ) -> Result<HyperResponse<Incoming>, StatusCode> {
+        let status = upstream_resp.status();
+
+        if !webdav_needs_auth_retry(node, status) {
+            return Ok(upstream_resp);
+        }
+
+        let (_, body) = upstream_resp.into_parts();
+        drain_incoming(body).await.map_err(|e| {
+            error_log!(
+                REMOTE_STREAMER_LOGGER_DOMAIN,
+                "Drain upstream body: {}",
+                e
+            );
+            StatusCode::BAD_GATEWAY
+        })?;
+
+        let Some(cfg) = node.webdav.as_ref() else {
+            return Err(StatusCode::UNAUTHORIZED);
+        };
+
+        webdav_auth::invalidate(&state.webdav_auth_cache, node);
+
+        let auth_line = match webdav_auth::authorization_header_for_proxy(
+            &state.webdav_auth_cache,
+            node,
+            &url,
+            cfg,
+            Some(headers),
+        )
+        .await
+        {
+            Ok(Some(line)) => line,
+            Ok(None) | Err(()) => return Err(StatusCode::UNAUTHORIZED),
+        };
+
+        let refreshed = webdav_auth::extra_headers_from_auth_line(&auth_line)
+            .map_err(|_| {
+            error_log!(
+                REMOTE_STREAMER_LOGGER_DOMAIN,
+                "Invalid WebDav auth header after refresh"
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        upstream_proxy::forward_get(url, headers, user_agent, Some(&refreshed))
+            .await
+            .map_err(|e| {
+                error_log!(
+                    REMOTE_STREAMER_LOGGER_DOMAIN,
+                    "Upstream retry failed: {}",
+                    e
+                );
+                StatusCode::BAD_GATEWAY
+            })
     }
 }
