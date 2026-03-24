@@ -36,7 +36,7 @@ Architecture background: [**EmbyStream Wiki**](https://github.com/Open-PiliPili/
 - **STRM-friendly** paths, path rewrite rules, and optional **fallback** video when a file is missing.
 - **Signed / encrypted playback URLs** with expiry; **per-node** redirect vs proxy and **per-device** speed limits.
 - **User-Agent** allow/deny; **anti–reverse-proxy** host checks on the frontend (and per node where configured).
-- **Interactive config wizard:** `embystream config template` / `config show` (English prompts).
+- **Interactive config wizard:** `embystream config template` / `config show`; use **`--lang zh`** for Simplified Chinese prompts and localized `--help` (default `en`).
 - **CORS / OPTIONS**, playlist handling, API response caching on the forward path, and **HTTP/2 TLS** for the backend via `[Http2]` or CLI overrides.
 
 Detailed behavior and every TOML field: **[Configuration reference](docs/configuration-reference.md)**.
@@ -109,7 +109,7 @@ Compose: [`template/docker/docker-compose.yaml`](template/docker/docker-compose.
 
 ## CLI (summary)
 
-Use **`embystream run`** to start gateways. See **[CLI usage](docs/cli.md)** for `config show`, `config template`, and TLS overrides.
+Use **`embystream run`** to start gateways. Pass **`--lang zh`** (global) for Chinese wizard text and Chinese top-level `--help`. Details: **[CLI usage](docs/cli.md)**.
 
 ## License
 

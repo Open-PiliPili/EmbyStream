@@ -43,3 +43,9 @@ doc/
 
 # === Web UI ===
 web_data/
+
+# === i18n
+locales/_en_to_key.json
+locales/_reverse_en_to_key.json
+scripts/apply_wizard_semantic_migration.py
+scripts/wizard_w_to_semantic_map.json

@@ -7,6 +7,7 @@ use chrono::Utc;
 use dialoguer::{Input, Select};
 use rand::Rng;
 
+use crate::i18n::{tr, tr_fmt};
 use crate::{
     cli::ConfigArgs,
     config::{
@@ -30,6 +31,7 @@ use crate::{
 use super::{
     discover::{DiscoveredConfig, discover_configs},
     emit::emit_wizard_config_toml,
+    l10n::{auto_generated_display, empty_display, secret_masked_display},
     mask::mask_toml_secrets,
     persist::{path_exists, safe_join_cwd, write_atomic},
     regex_lab::{prompt_regex_until_ok, regex_playground, try_compile_regex},
@@ -53,23 +55,27 @@ fn input_theme() -> &'static WizardInputTheme {
     &WIZ_INPUT_THEME
 }
 
-/// `intro()` prints `===> field (…, Default: … / Example: …)`; no `===> ? …` preview — use `wiz_input_*` after.
+/// `intro()` prints `===> field (…, Default: … / Example: …)`; no `===> ? …` preview —
+/// use `wiz_input_*` after.
 const WIZARD_INPUT_PROMPT: &str = "";
 
 /// Yes/No via arrow-key selection (default option highlighted).
-fn confirm_yes_no(prompt: &str, default_yes: bool) -> Result<bool> {
-    const ITEMS: &[&str] = &["Yes", "No"];
+fn confirm_yes_no(prompt: impl AsRef<str>, default_yes: bool) -> Result<bool> {
+    let prompt = prompt.as_ref();
+    let yes_l = tr("wizard.yes");
+    let no_l = tr("wizard.no");
+    let items = [&yes_l, &no_l];
     let default = if default_yes { 0usize } else { 1 };
     print_field_intro_line(prompt, "", None, None);
     let i = Select::with_theme(&theme())
         .with_prompt("")
-        .items(ITEMS)
+        .items(&items)
         .default(default)
         .report(false)
         .interact()
         .map_err(|e| anyhow!(e.to_string()))?;
     let yes = i == 0;
-    print_yes_no_result(if yes { "Yes" } else { "No" });
+    print_yes_no_result(if yes { yes_l.as_str() } else { no_l.as_str() });
     Ok(yes)
 }
 
@@ -98,22 +104,22 @@ fn wiz_input_string(
         if trimmed.is_empty() {
             if let Some(ref d) = default {
                 let disp = if d.trim().is_empty() {
-                    "(empty)"
+                    empty_display()
                 } else {
-                    d.trim()
+                    d.trim().to_string()
                 };
                 rewrite_default_prompt_as_checkmark(
-                    disp,
+                    &disp,
                     WIZ_DIALOG_LINES_BELOW_QUESTION,
                     None,
                 );
                 return Ok(d.clone());
             }
             if allow_empty {
-                print_field_value_line("(empty)");
+                print_field_value_line(&empty_display());
                 return Ok(String::new());
             }
-            print_error("A value is required.");
+            print_error(tr("wizard.error.value_required"));
             continue;
         }
         if previewed_default {
@@ -157,7 +163,7 @@ fn wiz_input_string_no_echo(
             if allow_empty {
                 return Ok(String::new());
             }
-            print_error("A value is required.");
+            print_error(tr("wizard.error.value_required"));
             continue;
         }
         return Ok(trimmed.to_string());
@@ -190,7 +196,7 @@ fn wiz_input_u16(default: u16) -> Result<u16> {
                 );
                 return Ok(v);
             }
-            Err(_) => print_error("Enter a number between 0 and 65535."),
+            Err(_) => print_error(tr("wizard.error.port_range")),
         }
     }
 }
@@ -221,7 +227,7 @@ fn wiz_input_i32(default: i32) -> Result<i32> {
                 );
                 return Ok(v);
             }
-            Err(_) => print_error("Enter a valid integer."),
+            Err(_) => print_error(tr("wizard.error.integer_invalid")),
         }
     }
 }
@@ -252,7 +258,7 @@ fn wiz_input_u64(default: u64) -> Result<u64> {
                 );
                 return Ok(v);
             }
-            Err(_) => print_error("Enter a valid non-negative integer."),
+            Err(_) => print_error(tr("wizard.error.non_negative_integer")),
         }
     }
 }
@@ -271,10 +277,15 @@ fn run_show_flow(cwd: &Path) -> Result<()> {
     let list = discover_configs(cwd)?;
     print_discovered_table(&list);
     if list.is_empty() {
-        print_hint("No valid EmbyStream TOML files in this directory.");
+        print_hint(tr("wizard.error.no_valid_toml_here"));
         return Ok(());
     }
-    print_field_intro_line("Select file to display", "", None, None);
+    print_field_intro_line(
+        tr("wizard.menu.select_file_display"),
+        "",
+        None,
+        None,
+    );
     print_select_file_list_tip();
     let idx = Select::with_theme(&theme())
         .with_prompt("")
@@ -298,18 +309,15 @@ fn run_show_flow(cwd: &Path) -> Result<()> {
     };
     let content = fs::read_to_string(&list[idx].path)?;
     let mut masked = true;
-    if confirm_yes_no(
-        "Show secrets in plain text? (unsafe if others can see your screen)",
-        false,
-    )? {
+    if confirm_yes_no(tr("wizard.confirm.show_secrets_plain"), false)? {
         masked = false;
     }
     print_field_result_separator();
     if masked {
-        print_title("Masked content");
+        print_title(tr("wizard.section.masked_content"));
         print!("{}", mask_toml_secrets(&content));
     } else {
-        print_title("File content");
+        print_title(tr("wizard.section.file_content"));
         print!("{content}");
     }
     std::io::stdout().flush()?;
@@ -322,17 +330,14 @@ fn default_template_filename(mode: StreamMode) -> String {
 }
 
 fn run_template_flow(cwd: &Path) -> Result<()> {
-    print_title("Configuration template");
-    print_hint(
-        "Choose stream_mode. A comment-free starter TOML is built in a temp file, \
-         then written atomically to the name you choose.",
-    );
+    print_title(tr("wizard.section.configuration_template"));
+    print_hint(tr("wizard.prompt.new_config_stream_mode"));
     let mode = select_stream_mode()?;
     let default_name = default_template_filename(mode);
     let fname: String = {
         print_field_intro_line(
-            "file_name",
-            "Write under the current directory (bare file name or relative path).",
+            tr("wizard.field.file_name"),
+            tr("wizard.prompt.write_under_cwd"),
             Some(default_name.as_str()),
             None,
         );
@@ -357,14 +362,18 @@ fn run_template_flow(cwd: &Path) -> Result<()> {
     let dest = safe_join_cwd(cwd, fname.trim())
         .ok_or_else(|| anyhow!("invalid file name"))?;
     if path_exists(&dest) {
-        print_error("That file already exists. Choose another name.");
+        print_error(tr("wizard.error.file_exists"));
         return Ok(());
     }
     let raw = build_template_raw(mode);
     finish_raw_config(dest.clone(), raw.clone()).map_err(|e| anyhow!("{e}"))?;
     let toml = emit_wizard_config_toml(&raw)?;
     write_atomic(&dest, &toml).map_err(|e| anyhow!("{e}"))?;
-    print_ok(&format!("Wrote template {}", dest.display()));
+    print_ok(&format!(
+        "{}{}",
+        tr("wizard.msg.prefix.wrote_template"),
+        dest.display()
+    ));
     Ok(())
 }
 
@@ -378,16 +387,16 @@ fn run_main_menu(cwd: &Path) -> Result<()> {
         let list = discover_configs(cwd)?;
         print_discovered_table(&list);
         let items = vec![
-            "New configuration file",
-            "Edit existing",
-            "Delete",
-            "Rename",
-            "Copy",
-            "Quit",
+            tr("wizard.menu.new_config_file"),
+            tr("wizard.menu.edit_existing"),
+            tr("wizard.menu.delete"),
+            tr("wizard.menu.rename"),
+            tr("wizard.menu.copy"),
+            tr("wizard.menu.quit"),
         ];
         print_field_intro_line(
-            "Main menu",
-            "Pick an action (↑ / ↓ and Enter).",
+            tr("wizard.menu.main"),
+            tr("wizard.prompt.pick_action_arrows"),
             None,
             None,
         );
@@ -402,84 +411,85 @@ fn run_main_menu(cwd: &Path) -> Result<()> {
             0 => run_new_flow(cwd)?,
             1 => {
                 if list.is_empty() {
-                    print_error("No config files to edit.");
+                    print_error(tr("wizard.error.no_configs_to_edit"));
                     continue;
                 }
-                let Some(i) = pick_discovered(&list, "Select file to edit")?
-                else {
+                let p_edit = tr("wizard.menu.select_file_edit");
+                let Some(i) = pick_discovered(&list, &p_edit)? else {
                     continue;
                 };
                 let path = list[i].path.clone();
                 let raw = parse_raw_config_str(&fs::read_to_string(&path)?)?;
                 let mut updated = run_edit_loop(raw)?;
                 save_config_file(&path, &mut updated)?;
-                print_ok("Saved.");
+                print_ok(tr("wizard.msg.status.saved"));
             }
             2 => {
                 if list.is_empty() {
-                    print_error("No config files to delete.");
+                    print_error(tr("wizard.error.no_configs_to_delete"));
                     continue;
                 }
-                let Some(i) = pick_discovered(&list, "Select file to delete")?
-                else {
+                let p_del = tr("wizard.menu.select_file_delete");
+                let Some(i) = pick_discovered(&list, &p_del)? else {
                     continue;
                 };
                 let p = &list[i].path;
-                if confirm_yes_no(
-                    &format!("Permanently delete {}?", p.display()),
-                    false,
-                )? {
+                let del_msg = tr_fmt(
+                    "wizard.confirm.permanent_delete",
+                    &[("path", &p.display().to_string())],
+                );
+                if confirm_yes_no(&del_msg, false)? {
                     fs::remove_file(p)?;
-                    print_ok("Deleted.");
+                    print_ok(tr("wizard.msg.status.deleted"));
                 }
             }
             3 => {
                 if list.is_empty() {
-                    print_error("No config files to rename.");
+                    print_error(tr("wizard.error.no_configs_to_rename"));
                     continue;
                 }
-                let Some(i) = pick_discovered(&list, "Select file to rename")?
-                else {
+                let p_ren = tr("wizard.menu.select_file_rename");
+                let Some(i) = pick_discovered(&list, &p_ren)? else {
                     continue;
                 };
                 print_field_input_tip();
                 let new_name: String = Input::with_theme(input_theme())
-                    .with_prompt("New file name (e.g. my.toml)")
+                    .with_prompt(tr("wizard.prompt.new_file_name_example"))
                     .report(false)
                     .interact_text()
                     .map_err(|e| anyhow!(e.to_string()))?;
                 let dest = safe_join_cwd(cwd, &new_name)
                     .ok_or_else(|| anyhow!("invalid file name"))?;
                 if path_exists(&dest) {
-                    print_error("Target already exists.");
+                    print_error(tr("wizard.error.target_exists"));
                     continue;
                 }
                 fs::rename(&list[i].path, &dest)?;
-                print_ok("Renamed.");
+                print_ok(tr("wizard.msg.status.renamed"));
             }
             4 => {
                 if list.is_empty() {
-                    print_error("No config files to copy.");
+                    print_error(tr("wizard.error.no_configs_to_copy"));
                     continue;
                 }
-                let Some(i) = pick_discovered(&list, "Select file to copy")?
-                else {
+                let p_cp = tr("wizard.menu.select_file_copy");
+                let Some(i) = pick_discovered(&list, &p_cp)? else {
                     continue;
                 };
                 print_field_input_tip();
                 let new_name: String = Input::with_theme(input_theme())
-                    .with_prompt("New file name")
+                    .with_prompt(tr("wizard.prompt.new_file_name"))
                     .report(false)
                     .interact_text()
                     .map_err(|e| anyhow!(e.to_string()))?;
                 let dest = safe_join_cwd(cwd, &new_name)
                     .ok_or_else(|| anyhow!("invalid file name"))?;
                 if path_exists(&dest) {
-                    print_error("Target already exists.");
+                    print_error(tr("wizard.error.target_exists"));
                     continue;
                 }
                 fs::copy(&list[i].path, &dest)?;
-                print_ok("Copied.");
+                print_ok(tr("wizard.msg.status.copied"));
             }
             5 => break,
             _ => break,
@@ -490,9 +500,9 @@ fn run_main_menu(cwd: &Path) -> Result<()> {
 
 fn pick_discovered(
     list: &[DiscoveredConfig],
-    prompt: &str,
+    prompt: impl AsRef<str>,
 ) -> Result<Option<usize>> {
-    print_field_intro_line(prompt, "", None, None);
+    print_field_intro_line(prompt.as_ref(), "", None, None);
     print_select_file_list_tip();
     Select::with_theme(&theme())
         .with_prompt("")
@@ -508,13 +518,17 @@ fn pick_discovered(
 }
 
 fn print_discovered_table(list: &[DiscoveredConfig]) {
-    print_title("Configurations in current directory");
+    print_title(tr("wizard.section.configs_in_cwd"));
     if list.is_empty() {
-        print_hint("(none)");
+        print_hint(tr("wizard.placeholder.paren_none"));
         print_field_result_separator();
         return;
     }
-    print_table_header("idx", "file", "stream_mode");
+    print_table_header(
+        tr("wizard.field.idx"),
+        tr("wizard.field.file"),
+        tr("wizard.field.stream_mode"),
+    );
     for (i, d) in list.iter().enumerate() {
         let name = d.path.file_name().and_then(|s| s.to_str()).unwrap_or("?");
         println!("  {:<4}  {:<38}  {}", i, name, d.stream_mode);
@@ -527,8 +541,8 @@ fn run_new_flow(cwd: &Path) -> Result<()> {
     let default_name = default_filename(mode);
     let fname: String = {
         print_field_intro_line(
-            "file_name",
-            "Write under the current directory (bare file name or relative path).",
+            tr("wizard.field.file_name"),
+            tr("wizard.prompt.write_under_cwd"),
             Some(default_name.as_str()),
             None,
         );
@@ -553,7 +567,7 @@ fn run_new_flow(cwd: &Path) -> Result<()> {
     let dest = safe_join_cwd(cwd, fname.trim())
         .ok_or_else(|| anyhow!("invalid file name"))?;
     if path_exists(&dest) {
-        print_error("That file already exists. Choose another name.");
+        print_error(tr("wizard.error.file_exists"));
         return Ok(());
     }
 
@@ -576,14 +590,18 @@ fn run_new_flow(cwd: &Path) -> Result<()> {
     }
 
     validate_and_preview(&mut raw, &dest)?;
-    if !confirm_yes_no("Write this configuration to disk?", true)? {
-        print_hint("Discarded.");
+    if !confirm_yes_no(tr("wizard.confirm.write_config_disk"), true)? {
+        print_hint(tr("wizard.msg.status.discarded"));
         return Ok(());
     }
     save_config_file(&dest, &mut raw)?;
-    print_ok(&format!("Wrote {}", dest.display()));
+    print_ok(&format!(
+        "{}{}",
+        tr("wizard.msg.prefix.wrote"),
+        dest.display()
+    ));
 
-    if confirm_yes_no("Create another new configuration?", false)? {
+    if confirm_yes_no(tr("wizard.confirm.create_another_config"), false)? {
         run_new_flow(cwd)?;
     }
     Ok(())
@@ -601,21 +619,22 @@ fn resolve_dual_listen_ports(raw: &mut RawConfig) -> Result<()> {
         if fe.listen_port != be.listen_port {
             return Ok(());
         }
-        print_error(&format!(
-            "Dual mode: frontend listen_port {} cannot equal backend listen_port. Change one of them.",
-            fe.listen_port
+        print_error(&tr_fmt(
+            "wizard.error.dual_port",
+            &[("port", &fe.listen_port.to_string())],
         ));
-        let items =
-            ["Change Frontend.listen_port", "Change Backend.listen_port"];
+        let a = tr("wizard.menu.change_frontend_listen_port");
+        let b = tr("wizard.menu.change_backend_listen_port");
+        let items = [&a, &b];
         print_field_intro_line(
-            "Which port to change",
-            "Pick Frontend or Backend listen_port to edit.",
+            tr("wizard.prompt.which_port_to_change"),
+            tr("wizard.prompt.pick_frontend_or_backend_port"),
             None,
             None,
         );
         let sel = Select::with_theme(&theme())
             .with_prompt("")
-            .items(items)
+            .items(&items)
             .default(0)
             .report(false)
             .interact()
@@ -626,8 +645,8 @@ fn resolve_dual_listen_ports(raw: &mut RawConfig) -> Result<()> {
                     let cur = fe_mut.listen_port;
                     let cur_s = cur.to_string();
                     intro(
-                        "listen_port",
-                        "Must differ from Backend.listen_port in dual mode.",
+                        tr("wizard.field.listen_port"),
+                        tr("wizard.error.dual_must_differ_backend_port"),
                         Some(cur_s.as_str()),
                         None,
                     );
@@ -639,8 +658,8 @@ fn resolve_dual_listen_ports(raw: &mut RawConfig) -> Result<()> {
                     let cur = be_mut.listen_port;
                     let cur_s = cur.to_string();
                     intro(
-                        "listen_port",
-                        "Must differ from Frontend.listen_port in dual mode.",
+                        tr("wizard.field.listen_port"),
+                        tr("wizard.error.dual_must_differ_frontend_port"),
                         Some(cur_s.as_str()),
                         None,
                     );
@@ -661,19 +680,21 @@ fn default_filename(mode: StreamMode) -> String {
 }
 
 fn select_stream_mode() -> Result<StreamMode> {
-    print_title("Stream mode");
-    print_hint("frontend: proxy clients to Emby only.");
-    print_hint("backend: signed stream gateway + storage nodes.");
-    print_hint(
-        "dual: both; frontend and backend must use different listen_port.",
-    );
+    print_title(tr("wizard.section.stream_mode"));
+    print_hint(tr("wizard.hint.stream_mode.frontend"));
+    print_hint(tr("wizard.hint.stream_mode.backend"));
+    print_hint(tr("wizard.hint.stream_mode.dual"));
     print_field_intro_line(
-        "stream_mode",
-        "Choose frontend, backend, or dual (↑ / ↓ and Enter).",
+        tr("wizard.field.stream_mode"),
+        tr("wizard.prompt.choose_stream_mode_three"),
         None,
         None,
     );
-    let items = vec!["frontend", "backend", "dual"];
+    let items = vec![
+        tr("wizard.option.stream_mode.frontend"),
+        tr("wizard.option.stream_mode.backend"),
+        tr("wizard.option.stream_mode.dual"),
+    ];
     let i = Select::with_theme(&theme())
         .with_prompt("")
         .items(&items)
@@ -686,11 +707,12 @@ fn select_stream_mode() -> Result<StreamMode> {
         2 => StreamMode::Dual,
         _ => StreamMode::Frontend,
     };
-    print_field_value_line(match mode {
-        StreamMode::Frontend => "frontend",
-        StreamMode::Backend => "backend",
-        StreamMode::Dual => "dual",
-    });
+    let mode_label = match mode {
+        StreamMode::Frontend => tr("wizard.option.stream_mode.frontend"),
+        StreamMode::Backend => tr("wizard.option.stream_mode.backend"),
+        StreamMode::Dual => tr("wizard.option.stream_mode.dual"),
+    };
+    print_field_value_line(&mode_label);
     Ok(mode)
 }
 
@@ -708,7 +730,7 @@ fn build_new_raw_skeleton(mode: StreamMode) -> Result<RawConfig> {
             root_path: "./logs".into(),
         },
         emby: Emby {
-            url: "http://127.0.0.1".into(),
+            url: tr("wizard.example.url.local_emby").into(),
             port: "8096".into(),
             token: String::new(),
         },
@@ -729,8 +751,8 @@ fn build_new_raw_skeleton(mode: StreamMode) -> Result<RawConfig> {
 }
 
 fn intro(
-    field: &str,
-    purpose: &str,
+    field: impl AsRef<str>,
+    purpose: impl AsRef<str>,
     default_hint: Option<&str>,
     example: Option<&str>,
 ) {
@@ -753,65 +775,63 @@ fn input_secret_w_echo(allow_empty: bool) -> Result<String> {
         .interact_text()
         .map_err(|e| anyhow!(e.to_string()))?;
     let disp = if s.trim().is_empty() {
-        "(empty)"
+        empty_display()
     } else {
-        "· · ·"
+        secret_masked_display()
     };
-    print_field_value_line(disp);
+    print_field_value_line(&disp);
     Ok(s)
 }
 
 fn prompt_shared_sections(raw: &mut RawConfig) -> Result<()> {
-    print_title("Log");
+    print_title(tr("wizard.section.log"));
     let def_level = raw.log.level.clone();
     intro(
-        "level",
-        "tracing filter for the app (info/warn/debug/error)",
+        tr("wizard.field.level"),
+        tr("wizard.prompt.log_level_tracing"),
         Some(def_level.as_str()),
         None,
     );
     raw.log.level = wiz_input_string(Some(def_level), false)?;
     let def_root = raw.log.root_path.clone();
     let root_disp = if def_root.trim().is_empty() {
-        "(empty)"
+        empty_display()
     } else {
-        def_root.trim()
+        def_root.trim().to_string()
     };
     intro(
-        "root_path",
-        "directory for log files (created on run if possible).",
-        Some(root_disp),
+        tr("wizard.field.root_path"),
+        tr("wizard.prompt.log_root_path"),
+        Some(root_disp.as_str()),
         None,
     );
     raw.log.root_path = wiz_input_string(Some(def_root), false)?;
     let def_prefix = raw.log.prefix.clone();
     let prefix_disp = if def_prefix.trim().is_empty() {
-        "(empty)"
+        empty_display()
     } else {
-        def_prefix.trim()
+        def_prefix.trim().to_string()
     };
     intro(
-        "prefix",
-        "optional prefix for log file names.",
-        Some(prefix_disp),
+        tr("wizard.field.prefix"),
+        tr("wizard.prompt.log_prefix_optional"),
+        Some(prefix_disp.as_str()),
         None,
     );
     raw.log.prefix = wiz_input_string(Some(def_prefix), true)?;
 
-    print_title("General");
+    print_title(tr("wizard.section.general"));
     raw.general.memory_mode = prompt_memory_mode(&raw.general.memory_mode)?;
     intro(
-        "encipher_key",
-        "AES key material for stream signing (keep secret). \
-         Press Enter to auto-generate 16 random letters and digits (mixed case); \
-         or type your own value.",
+        tr("wizard.field.encipher_key"),
+        tr("wizard.prompt.encipher_key_aes"),
         None,
-        Some("(auto-generate on Enter)"),
+        Some(tr("wizard.hint.press_enter_auto_generate").as_str()),
     );
     let key_in: String = wiz_input_string_no_echo(None, true)?;
     raw.general.encipher_key = if key_in.trim().is_empty() {
         let v = random_alnum(16);
-        print_field_value_line("(auto-generated)");
+        print_field_value_line(auto_generated_display());
         v
     } else {
         print_field_value_line(key_in.trim());
@@ -819,35 +839,32 @@ fn prompt_shared_sections(raw: &mut RawConfig) -> Result<()> {
     };
 
     intro(
-        "encipher_iv",
-        "AES IV for stream signing (keep secret). \
-         Press Enter to auto-generate 16 random letters and digits (mixed case); \
-         or type your own value.",
+        tr("wizard.field.encipher_iv"),
+        tr("wizard.prompt.encipher_iv_aes"),
         None,
-        Some("(auto-generate on Enter)"),
+        Some(tr("wizard.hint.press_enter_auto_generate").as_str()),
     );
     let iv_in: String = wiz_input_string_no_echo(None::<String>, true)?;
     raw.general.encipher_iv = if iv_in.trim().is_empty() {
         let v = random_alnum(16);
-        print_field_value_line("(auto-generated)");
+        print_field_value_line(auto_generated_display());
         v
     } else {
         print_field_value_line(iv_in.trim());
         iv_in
     };
 
-    print_title("Emby");
+    print_title(tr("wizard.section.emby"));
     let def_url = raw.emby.url.clone();
     let url_disp = if def_url.trim().is_empty() {
-        "(empty)"
+        empty_display()
     } else {
-        def_url.trim()
+        def_url.trim().to_string()
     };
     intro(
-        "url",
-        "Base URL of your Emby server (no trailing path). \
-         Press Enter for http://127.0.0.1. You may omit the scheme (e.g. 127.0.0.1); http:// is added automatically.",
-        Some(url_disp),
+        tr("wizard.field.url"),
+        tr("wizard.prompt.emby_base_url"),
+        Some(url_disp.as_str()),
         None,
     );
     let url_in: String = wiz_input_string_no_echo(Some(def_url), true)?;
@@ -859,44 +876,47 @@ fn prompt_shared_sections(raw: &mut RawConfig) -> Result<()> {
     );
     let def_emby_port = raw.emby.port.clone();
     intro(
-        "port",
-        "Emby HTTP port (omit if url already includes port).",
+        tr("wizard.field.port"),
+        tr("wizard.prompt.emby_http_port"),
         Some(def_emby_port.as_str()),
         None,
     );
     raw.emby.port = wiz_input_string(Some(def_emby_port), false)?;
     intro(
-        "token",
-        "Emby API access token from dashboard.",
+        tr("wizard.field.token"),
+        tr("wizard.prompt.emby_api_token"),
         None,
-        Some("paste_token_here"),
+        Some(tr("wizard.example.token.paste_here").as_str()),
     );
     raw.emby.token = wiz_input_string(None, false)?;
 
-    print_title("UserAgent");
+    print_title(tr("wizard.section.user_agent"));
     raw.user_agent.mode = prompt_user_agent_mode(&raw.user_agent.mode)?;
     raw.user_agent.allow_ua = prompt_ua_token_list(
-        "allow_ua",
-        "Tokens matched as substrings of the client User-Agent; matching is case-insensitive. \
-         In allow mode, only matching clients pass.",
+        tr("wizard.field.allow_ua"),
+        tr("wizard.prompt.user_agent_allow_tokens"),
         false,
     )?;
     raw.user_agent.deny_ua = prompt_ua_token_list(
-        "deny_ua",
-        "Tokens matched as substrings of the client User-Agent; matching is case-insensitive. \
-         In deny mode, matching clients are blocked.",
+        tr("wizard.field.deny_ua"),
+        tr("wizard.prompt.user_agent_deny_tokens"),
         true,
     )?;
 
-    print_title("Http2 (TLS cert paths, optional)");
+    print_title(tr("wizard.section.http2"));
     intro(
-        "ssl_cert_file",
-        "PEM certificate path for backend HTTPS (empty = default layout next to config).",
+        tr("wizard.field.ssl_cert_file"),
+        tr("wizard.prompt.ssl_cert_pem_path"),
         None,
         None,
     );
     let cert: String = wiz_input_string(None, true)?;
-    intro("ssl_key_file", "PEM private key path.", None, None);
+    intro(
+        tr("wizard.field.ssl_key_file"),
+        tr("wizard.prompt.ssl_private_key_pem_path"),
+        None,
+        None,
+    );
     let key: String = wiz_input_string(None, true)?;
     if !cert.is_empty() || !key.is_empty() {
         raw.http2 = Some(Http2 {
@@ -905,12 +925,12 @@ fn prompt_shared_sections(raw: &mut RawConfig) -> Result<()> {
         });
     }
 
-    print_title("Fallback");
+    print_title(tr("wizard.section.fallback"));
     intro(
-        "video_missing_path",
-        "Local file served when a video resource is missing (empty to disable).",
+        tr("wizard.field.video_missing_path"),
+        tr("wizard.prompt.video_missing_local_file"),
         None,
-        Some("/mnt/media/fallback.mp4"),
+        Some(tr("wizard.example.file.fallback_mp4").as_str()),
     );
     raw.fallback.video_missing_path = wiz_input_string(None, true)?;
 
@@ -927,7 +947,7 @@ fn split_csv(s: &str) -> Vec<String> {
 fn normalize_emby_url(raw_input: &str) -> String {
     let t = raw_input.trim();
     if t.is_empty() {
-        return "http://127.0.0.1".into();
+        return tr("wizard.example.url.local_emby");
     }
     if t.contains("://") {
         t.to_string()
@@ -938,19 +958,19 @@ fn normalize_emby_url(raw_input: &str) -> String {
 
 fn prompt_user_agent_mode(current: &str) -> Result<String> {
     const VALUES: &[&str] = &["allow", "deny"];
-    const LABELS: &[&str] = &[
-        "allow — only listed User-Agent tokens pass",
-        "deny — listed User-Agent tokens are blocked",
-    ];
     let t = current.trim();
     let def_disp = VALUES
         .iter()
         .copied()
         .find(|v| v.eq_ignore_ascii_case(t))
         .unwrap_or("allow");
+    let labels = vec![
+        tr("wizard.option.ua_mode.allow"),
+        tr("wizard.option.ua_mode.deny"),
+    ];
     intro(
-        "mode",
-        "allow: only listed User-Agent tokens pass; deny: listed tokens are blocked.",
+        tr("wizard.field.mode"),
+        tr("wizard.prompt.ua_mode_explainer"),
         Some(def_disp),
         None,
     );
@@ -960,7 +980,7 @@ fn prompt_user_agent_mode(current: &str) -> Result<String> {
         .unwrap_or(0);
     let i = Select::with_theme(&theme())
         .with_prompt("")
-        .items(LABELS)
+        .items(&labels)
         .default(idx)
         .report(false)
         .interact()
@@ -972,21 +992,21 @@ fn prompt_user_agent_mode(current: &str) -> Result<String> {
 
 fn prompt_memory_mode(current: &str) -> Result<String> {
     intro(
-        "memory_mode",
-        "cache footprint hint used by the app (low / middle / high).",
+        tr("wizard.field.memory_mode"),
+        tr("wizard.prompt.memory_mode_explainer"),
         Some(current),
         None,
     );
     const VALUES: &[&str] = &["low", "middle", "high"];
-    const LABELS: &[&str] = &[
-        "low — minimal caching",
-        "middle — balanced (default)",
-        "high — more aggressive caching",
+    let labels = vec![
+        tr("wizard.option.memory.low"),
+        tr("wizard.option.memory.middle"),
+        tr("wizard.option.memory.high"),
     ];
     if let Some(idx) = VALUES.iter().position(|&v| v == current) {
         let i = Select::with_theme(&theme())
             .with_prompt("")
-            .items(LABELS)
+            .items(&labels)
             .default(idx)
             .report(false)
             .interact()
@@ -1002,15 +1022,20 @@ fn prompt_memory_mode(current: &str) -> Result<String> {
 /// `skip_leading_input_tip`: set true for the second of back-to-back UA lists (`deny_ua` after `allow_ua`)
 /// so the same `Tip:` line is not printed twice in a row.
 fn prompt_ua_token_list(
-    field_label: &str,
-    purpose: &str,
+    field_label: impl AsRef<str>,
+    purpose: impl AsRef<str>,
     skip_leading_input_tip: bool,
 ) -> Result<Vec<String>> {
-    intro(field_label, purpose, None, Some("Mozilla/5.0"));
+    intro(
+        field_label,
+        purpose,
+        None,
+        Some(tr("wizard.example.user_agent.mozilla").as_str()),
+    );
     if !skip_leading_input_tip {
         print_field_input_tip();
     }
-    print_hint("One token per line; empty line finishes the list.");
+    print_hint(tr("wizard.prompt.ua_token_one_per_line"));
     let mut out = Vec::new();
     loop {
         let line: String = Input::with_theme(input_theme())
@@ -1041,27 +1066,35 @@ fn random_alnum(len: usize) -> String {
 }
 
 fn prompt_frontend_section() -> Result<Frontend> {
-    print_title("Frontend");
+    print_title(tr("wizard.section.frontend"));
     intro(
-        "listen_port",
-        "TCP port this process listens on for frontend clients.",
+        tr("wizard.field.listen_port"),
+        tr("wizard.prompt.frontend_listen_port_tcp"),
         Some("60001"),
         None,
     );
     let listen_port: u16 = wiz_input_u16(60001)?;
     const CHECK_DEFAULT: bool = true;
+    let check_default_label = if CHECK_DEFAULT {
+        tr("wizard.yes")
+    } else {
+        tr("wizard.no")
+    };
     intro(
-        "check_file_existence",
-        "When true, verify the resource exists on Emby before streaming.",
-        Some(if CHECK_DEFAULT { "Yes" } else { "No" }),
+        tr("wizard.field.check_file_existence"),
+        tr("wizard.prompt.check_file_existence_true"),
+        Some(check_default_label.as_str()),
         None,
     );
-    let check = confirm_yes_no("Probe Emby before streaming?", CHECK_DEFAULT)?;
-    let path_rewrites = prompt_path_rewrites(
-        "PathRewrite",
-        "Rewrite outgoing paths to Emby/CDN.",
+    let check = confirm_yes_no(
+        tr("wizard.confirm.probe_emby_before_stream"),
+        CHECK_DEFAULT,
     )?;
-    let anti = prompt_anti_reverse("AntiReverseProxy")?;
+    let path_rewrites = prompt_path_rewrites(
+        tr("wizard.label.path_rewrite"),
+        tr("wizard.prompt.path_rewrite_to_emby_cdn"),
+    )?;
+    let anti = prompt_anti_reverse(tr("wizard.label.anti_reverse_proxy"))?;
     Ok(Frontend {
         listen_port,
         check_file_existence: check,
@@ -1071,45 +1104,43 @@ fn prompt_frontend_section() -> Result<Frontend> {
 }
 
 fn prompt_backend_section() -> Result<Backend> {
-    print_title("Backend");
+    print_title(tr("wizard.section.backend"));
     intro(
-        "listen_port",
-        "TCP port for backend gateway (HTTPS if certs configured).",
+        tr("wizard.field.listen_port"),
+        tr("wizard.prompt.backend_listen_port_tcp"),
         Some("60001"),
         None,
     );
     let listen_port: u16 = wiz_input_u16(60001)?;
     intro(
-        "base_url",
-        "Public base URL clients use to reach this backend.",
+        tr("wizard.field.base_url"),
+        tr("wizard.prompt.backend_public_base_url"),
         None,
-        Some("https://stream.example.com"),
+        Some(tr("wizard.example.url.stream_https").as_str()),
     );
     let base_url: String = wiz_input_string(None, false)?;
     intro(
-        "port",
-        "Port embedded in published URLs (often 443).",
+        tr("wizard.field.port"),
+        tr("wizard.prompt.published_url_port"),
         Some("443"),
         None,
     );
     let port: String = wiz_input_string(Some("443".into()), false)?;
     intro(
-        "path",
-        "URL path prefix for stream routes (e.g. stream).",
+        tr("wizard.field.path"),
+        tr("wizard.prompt.stream_url_path_prefix"),
         None,
         Some("stream"),
     );
     let path: String = wiz_input_string(None, true)?;
     intro(
-        "problematic_clients",
-        "Comma-separated substrings of User-Agent to treat specially.",
-        Some("yamby, hills, embytolocalplayer, Emby/"),
+        tr("wizard.field.problematic_clients"),
+        tr("wizard.prompt.problematic_clients_csv"),
+        Some(tr("wizard.example.problematic_clients").as_str()),
         None,
     );
-    let pc: String = wiz_input_string(
-        Some("yamby, hills, embytolocalplayer, Emby/".into()),
-        true,
-    )?;
+    let pc: String =
+        wiz_input_string(Some(tr("wizard.example.problematic_clients")), true)?;
     let problematic_clients = split_csv(&pc);
     Ok(Backend {
         listen_port,
@@ -1120,31 +1151,30 @@ fn prompt_backend_section() -> Result<Backend> {
     })
 }
 
-fn prompt_anti_reverse(ctx: &str) -> Result<AntiReverseProxyConfig> {
+fn prompt_anti_reverse(ctx: impl AsRef<str>) -> Result<AntiReverseProxyConfig> {
+    let ctx = ctx.as_ref();
     intro(
         ctx,
-        "Reject requests whose Host header does not match trusted host when enabled.",
+        tr("wizard.prompt.anti_reverse_reject_bad_host"),
         None,
-        Some("host = \"stream.example.com\""),
+        Some(tr("wizard.example.toml.host_line").as_str()),
     );
-    let enable = confirm_yes_no(
-        &format!("Enable {ctx}? (reject requests when Host ≠ trusted host)"),
-        false,
-    )?;
+    let enable_msg = tr_fmt("wizard.prompt.enable_anti", &[("ctx", ctx)]);
+    let enable = confirm_yes_no(&enable_msg, false)?;
     let host: String = if enable {
         intro(
-            "host",
-            "Trusted Host header when anti-reverse-proxy is enabled.",
+            tr("wizard.field.host"),
+            tr("wizard.prompt.trusted_host_header"),
             None,
-            Some("stream.example.com"),
+            Some(tr("wizard.example.host.stream_example").as_str()),
         );
         let h: String = wiz_input_string_no_echo(None, false)?;
         let disp = if h.trim().is_empty() {
-            "(empty)"
+            empty_display()
         } else {
-            h.trim()
+            h.trim().to_string()
         };
-        print_field_value_line(disp);
+        print_field_value_line(&disp);
         h
     } else {
         String::new()
@@ -1156,26 +1186,31 @@ fn prompt_anti_reverse(ctx: &str) -> Result<AntiReverseProxyConfig> {
 }
 
 fn prompt_path_rewrites(
-    ctx: &str,
-    purpose: &str,
+    ctx: impl AsRef<str>,
+    purpose: impl AsRef<str>,
 ) -> Result<Vec<PathRewriteConfig>> {
+    let ctx = ctx.as_ref();
+    let purpose = purpose.as_ref();
     let mut out = vec![];
     print_field_intro_line(ctx, purpose, None, None);
-    while confirm_yes_no("Add a PathRewrite entry?", false)? {
-        let enable = confirm_yes_no("Enable this PathRewrite rule?", false)?;
+    while confirm_yes_no(tr("wizard.confirm.add_path_rewrite_entry"), false)? {
+        let enable = confirm_yes_no(
+            tr("wizard.confirm.enable_path_rewrite_rule"),
+            false,
+        )?;
         intro(
-            "pattern",
-            "Rust regex applied to the path when enable=true.",
+            tr("wizard.field.pattern"),
+            tr("wizard.prompt.path_rewrite_rust_regex"),
             None,
-            Some("^/media(/.*)$"),
+            Some(tr("wizard.example.regex.path_rewrite_media").as_str()),
         );
         let pattern: String = if enable {
             let Some(p) = prompt_regex_until_ok()? else {
-                print_error("Skipped entry (empty pattern).");
+                print_error(tr("wizard.msg.skipped_empty_pattern"));
                 continue;
             };
             if confirm_yes_no(
-                "Open regex match playground for this pattern?",
+                tr("wizard.confirm.regex_playground_for_pattern"),
                 true,
             )? {
                 if let Some(re) = try_compile_regex(&p) {
@@ -1186,18 +1221,18 @@ fn prompt_path_rewrites(
         } else {
             let p: String = wiz_input_string_no_echo(None, true)?;
             let disp = if p.trim().is_empty() {
-                "(empty)"
+                empty_display()
             } else {
-                p.trim()
+                p.trim().to_string()
             };
-            print_field_value_line(disp);
+            print_field_value_line(&disp);
             p
         };
         intro(
-            "replacement",
-            "Replacement string (supports capture groups).",
+            tr("wizard.field.replacement"),
+            tr("wizard.prompt.replacement_capture_groups"),
             None,
-            Some("$1"),
+            Some(tr("wizard.example.regex_group_1").as_str()),
         );
         let replacement: String = wiz_input_string(None, true)?;
         out.push(PathRewriteConfig {
@@ -1209,24 +1244,24 @@ fn prompt_path_rewrites(
     Ok(out)
 }
 
-fn backend_type_labels() -> Vec<&'static str> {
+fn backend_type_labels() -> Vec<String> {
     vec![
-        "Disk — local filesystem root",
-        "OpenList — AList/OpenList HTTP API",
-        "DirectLink — plain HTTP fetch with custom User-Agent",
-        "WebDav — WebDAV upstream",
-        "StreamRelay — 307 relay signed /stream to another backend",
+        tr("wizard.option.backend_type.disk"),
+        tr("wizard.option.backend_type.openlist"),
+        tr("wizard.option.backend_type.direct_link"),
+        tr("wizard.option.backend_type.webdav_long"),
+        tr("wizard.option.backend_type.stream_relay"),
     ]
 }
 
 fn prompt_backend_nodes_loop() -> Result<Vec<BackendNode>> {
     let mut nodes = vec![];
     loop {
-        print_title("BackendNode");
+        print_title(tr("wizard.section.backend_node"));
         let prompt = if nodes.is_empty() {
-            "Add a BackendNode?"
+            tr("wizard.confirm.add_backend_node")
         } else {
-            "Add another BackendNode?"
+            tr("wizard.confirm.add_another_backend_node")
         };
         let default_first = nodes.is_empty();
         if !confirm_yes_no(prompt, default_first)? {
@@ -1239,16 +1274,16 @@ fn prompt_backend_nodes_loop() -> Result<Vec<BackendNode>> {
 
 fn prompt_one_backend_node() -> Result<BackendNode> {
     intro(
-        "name",
-        "Short label for logs (unique recommended).",
+        tr("wizard.field.name"),
+        tr("wizard.prompt.node_log_label"),
         None,
-        Some("MyOpenList"),
+        Some(tr("wizard.example.name.my_openlist").as_str()),
     );
     let name: String = wiz_input_string(None, false)?;
 
     intro(
-        "type",
-        "Storage or upstream kind for this node.",
+        tr("wizard.field.type"),
+        tr("wizard.prompt.node_storage_kind"),
         None,
         None,
     );
@@ -1262,28 +1297,27 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
         .map_err(|e| anyhow!(e.to_string()))?;
 
     let backend_type = match tidx {
-        0 => "Disk",
-        1 => "OpenList",
-        2 => "DirectLink",
-        3 => BACKEND_TYPE,
-        4 => STREAM_RELAY_BACKEND_TYPE,
-        _ => "Disk",
-    }
-    .to_string();
+        0 => tr("wizard.value.backend_type.disk"),
+        1 => tr("wizard.value.backend_type.openlist"),
+        2 => tr("wizard.value.backend_type.direct_link"),
+        3 => BACKEND_TYPE.to_string(),
+        4 => STREAM_RELAY_BACKEND_TYPE.to_string(),
+        _ => tr("wizard.value.backend_type.disk"),
+    };
     print_field_value_line(&backend_type);
 
     intro(
-        "pattern",
-        "Rust regex on request path; empty uses path-prefix fallback rules.",
+        tr("wizard.field.pattern"),
+        tr("wizard.prompt.node_path_regex"),
         None,
-        Some("/openlist/.*"),
+        Some(tr("wizard.example.regex.openlist_path").as_str()),
     );
     let pattern: String = wiz_input_string(None, true)?;
     if !pattern.is_empty() {
         if try_compile_regex(&pattern).is_none() {
-            return Err(anyhow!("invalid regex pattern"));
+            return Err(anyhow!(tr("wizard.error.regex_pattern_invalid")));
         }
-        if confirm_yes_no("Open regex match playground?", true)? {
+        if confirm_yes_no(tr("wizard.confirm.open_regex_playground"), true)? {
             if let Some(re) = try_compile_regex(&pattern) {
                 regex_playground(&re)?;
             }
@@ -1291,36 +1325,36 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
     }
 
     intro(
-        "base_url",
-        "Upstream origin for this node (scheme + host).",
+        tr("wizard.field.base_url"),
+        tr("wizard.prompt.node_upstream_origin"),
         None,
-        Some("http://127.0.0.1"),
+        Some(tr("wizard.example.url.local_emby").as_str()),
     );
     let base_url: String = wiz_input_string(None, true)?;
     intro(
-        "port",
-        "Upstream port (empty if not needed).",
+        tr("wizard.field.port"),
+        tr("wizard.prompt.node_upstream_port"),
         None,
         Some("5244"),
     );
     let port: String = wiz_input_string(None, true)?;
     intro(
-        "path",
-        "Path segment appended to base (no leading slash required).",
+        tr("wizard.field.path"),
+        tr("wizard.prompt.node_path_append"),
         None,
-        Some("openlist"),
+        Some(tr("wizard.example.path.openlist_segment").as_str()),
     );
     let path: String = wiz_input_string(None, true)?;
 
     intro(
-        "proxy_mode",
-        "redirect: client follows Location; proxy: server fetches upstream.",
+        tr("wizard.field.proxy_mode"),
+        tr("wizard.prompt.proxy_mode_long"),
         None,
         None,
     );
     let proxy_items = vec![
-        "redirect — client follows Location",
-        "proxy — server fetches upstream",
+        tr("wizard.option.proxy_mode.redirect_long"),
+        tr("wizard.option.proxy_mode.proxy_long"),
     ];
     let pidx = Select::with_theme(&theme())
         .with_prompt("")
@@ -1329,59 +1363,75 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
         .report(false)
         .interact()
         .map_err(|e| anyhow!(e.to_string()))?;
-    let proxy_mode = if pidx == 1 { "proxy" } else { "redirect" }.to_string();
+    let proxy_mode = if pidx == 1 {
+        tr("wizard.value.proxy_mode.proxy")
+    } else {
+        tr("wizard.value.proxy_mode.redirect")
+    }
+    .to_string();
     print_field_value_line(&proxy_mode);
 
     intro(
-        "priority",
-        "Lower runs earlier when multiple nodes match.",
+        tr("wizard.field.priority"),
+        tr("wizard.prompt.node_priority_order"),
         Some("0"),
         None,
     );
     let priority: i32 = wiz_input_i32(0)?;
     intro(
-        "client_speed_limit_kbs",
-        "Per-client speed limit in KiB/s (0 = unlimited).",
+        tr("wizard.field.client_speed_limit_kbs"),
+        tr("wizard.prompt.client_speed_limit_kibs"),
         Some("0"),
         None,
     );
     let client_speed_limit_kbs: u64 = wiz_input_u64(0)?;
     intro(
-        "client_burst_speed_kbs",
-        "Burst allowance in KiB/s (0 = default / none).",
+        tr("wizard.field.client_burst_speed_kbs"),
+        tr("wizard.prompt.client_burst_kibs"),
         Some("0"),
         None,
     );
     let client_burst_speed_kbs: u64 = wiz_input_u64(0)?;
 
     let path_rewrites = prompt_path_rewrites(
-        "PathRewrite",
-        "Rewrite path before hitting upstream.",
+        tr("wizard.label.path_rewrite"),
+        tr("wizard.prompt.path_rewrite_before_upstream"),
     )?;
-    let anti_reverse_proxy = prompt_anti_reverse("AntiReverseProxy")?;
+    let anti_reverse_proxy =
+        prompt_anti_reverse(tr("wizard.label.anti_reverse_proxy"))?;
 
     let (disk, open_list, direct_link, webdav) = match backend_type.as_str() {
         "Disk" => {
             intro(
-                "description",
-                "Optional human note (not used for routing).",
+                tr("wizard.field.description"),
+                tr("wizard.prompt.node_description_note"),
                 None,
-                Some("local NAS"),
+                Some(tr("wizard.example.disk.description").as_str()),
             );
             let description: String = wiz_input_string(None, true)?;
             (Some(Disk { description }), None, None, None)
         }
         "OpenList" => {
             intro(
-                "base_url",
-                "AList base URL.",
+                tr("wizard.field.base_url"),
+                tr("wizard.prompt.alist_base_url"),
                 None,
-                Some("http://127.0.0.1"),
+                Some(tr("wizard.example.url.local_emby").as_str()),
             );
             let b: String = wiz_input_string(None, false)?;
-            intro("port", "AList port if not in URL.", None, Some("5244"));
+            intro(
+                tr("wizard.field.port"),
+                tr("wizard.prompt.alist_port_if_missing"),
+                None,
+                Some("5244"),
+            );
             let p: String = wiz_input_string(None, true)?;
-            intro("token", "AList API token.", None, None);
+            intro(
+                tr("wizard.field.token"),
+                tr("wizard.prompt.alist_api_token"),
+                None,
+                None,
+            );
             let tok: String = wiz_input_string(None, false)?;
             (
                 None,
@@ -1396,44 +1446,59 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
         }
         "DirectLink" => {
             intro(
-                "user_agent",
-                "User-Agent header for upstream fetch.",
+                tr("wizard.field.user_agent"),
+                tr("wizard.prompt.direct_link_fetch_ua"),
                 None,
-                Some("Mozilla/5.0"),
+                Some(tr("wizard.example.user_agent.mozilla").as_str()),
             );
             let ua: String = wiz_input_string(None, false)?;
             (None, None, Some(DirectLink { user_agent: ua }), None)
         }
         t if t.eq_ignore_ascii_case(BACKEND_TYPE) => {
-            print_subsection_title("BackendNode.WebDav");
+            print_subsection_title(tr("wizard.section.backend_node_webdav"));
             intro(
-                "url_mode",
-                "path_join | query_path | url_template",
+                tr("wizard.field.url_mode"),
+                tr("wizard.hint.webdav_url_mode_values"),
                 Some("path_join"),
                 None,
             );
             let url_mode: String =
                 input_text_w_echo(Some("path_join".into()), false)?;
             intro(
-                "query_param",
-                "Query key when url_mode=query_path.",
+                tr("wizard.field.query_param"),
+                tr("wizard.prompt.webdav_query_param_key"),
                 Some("path"),
                 None,
             );
             let query_param: String =
                 input_text_w_echo(Some("path".into()), false)?;
             intro(
-                "url_template",
-                "When url_mode=url_template, URL with {file_path} placeholder.",
+                tr("wizard.field.url_template"),
+                tr("wizard.prompt.webdav_url_template"),
                 None,
                 None,
             );
             let url_template: String = input_text_w_echo(None, true)?;
-            intro("username", "Optional HTTP basic user.", None, None);
+            intro(
+                tr("wizard.field.username"),
+                tr("wizard.prompt.optional_http_basic_user"),
+                None,
+                None,
+            );
             let username: String = input_text_w_echo(None, true)?;
-            intro("password", "Optional HTTP basic password.", None, None);
+            intro(
+                tr("wizard.field.password"),
+                tr("wizard.prompt.optional_http_basic_password"),
+                None,
+                None,
+            );
             let password: String = input_secret_w_echo(true)?;
-            intro("user_agent", "Optional custom User-Agent.", None, None);
+            intro(
+                tr("wizard.field.user_agent"),
+                tr("wizard.prompt.optional_custom_user_agent"),
+                None,
+                None,
+            );
             let user_agent: String = input_text_w_echo(None, true)?;
             (
                 None,
@@ -1480,7 +1545,7 @@ fn validate_and_preview(raw: &mut RawConfig, dest: &Path) -> Result<()> {
     finish_raw_config(dest.to_path_buf(), raw.clone())
         .map_err(|e| anyhow!("{e}"))?;
     let toml = emit_wizard_config_toml(raw)?;
-    print_title("Preview (comment-free TOML)");
+    print_title(tr("wizard.section.preview_toml"));
     print!("{toml}");
     std::io::stdout().flush()?;
     Ok(())
@@ -1494,46 +1559,58 @@ fn save_config_file(dest: &Path, raw: &mut RawConfig) -> Result<()> {
     write_atomic(dest, &toml).map_err(|e| anyhow!("{e}"))
 }
 
+#[derive(Clone, Copy)]
+enum EditMenuChoice {
+    Shared,
+    Frontend,
+    Backend,
+    BackendNodes,
+    Done,
+}
+
 fn run_edit_loop(mut raw: RawConfig) -> Result<RawConfig> {
     loop {
-        let mut opts: Vec<&'static str> = Vec::new();
-        opts.push("Log / General / Emby / UserAgent / Http2 / Fallback");
+        let mut choices: Vec<EditMenuChoice> = vec![EditMenuChoice::Shared];
+        let mut labels: Vec<String> = vec![tr("wizard.menu.edit_shared_group")];
         if raw.frontend.is_some() {
-            opts.push("Frontend section");
+            choices.push(EditMenuChoice::Frontend);
+            labels.push(tr("wizard.menu.frontend_section"));
         }
         if raw.backend.is_some() {
-            opts.push("Backend section");
-            opts.push("Backend nodes");
+            choices.push(EditMenuChoice::Backend);
+            labels.push(tr("wizard.menu.backend_section"));
+            choices.push(EditMenuChoice::BackendNodes);
+            labels.push(tr("wizard.menu.backend_nodes"));
         }
-        opts.push("Done (save)");
+        choices.push(EditMenuChoice::Done);
+        labels.push(tr("wizard.menu.done_save"));
         print_field_intro_line(
-            "Edit which part",
-            "Choose a config section to change (↑ / ↓ and Enter).",
+            tr("wizard.prompt.edit_which_part"),
+            tr("wizard.prompt.choose_config_section"),
             None,
             None,
         );
         let sel = Select::with_theme(&theme())
             .with_prompt("")
-            .items(&opts)
+            .items(&labels)
             .report(false)
             .interact()
             .map_err(|e| anyhow!(e.to_string()))?;
 
-        match opts[sel] {
-            "Log / General / Emby / UserAgent / Http2 / Fallback" => {
+        match choices[sel] {
+            EditMenuChoice::Shared => {
                 prompt_shared_sections(&mut raw)?;
             }
-            "Frontend section" => {
+            EditMenuChoice::Frontend => {
                 raw.frontend = Some(prompt_frontend_section()?);
             }
-            "Backend section" => {
+            EditMenuChoice::Backend => {
                 raw.backend = Some(prompt_backend_section()?);
             }
-            "Backend nodes" => {
+            EditMenuChoice::BackendNodes => {
                 raw.backend_nodes = Some(prompt_backend_nodes_loop()?);
             }
-            "Done (save)" => break,
-            _ => break,
+            EditMenuChoice::Done => break,
         }
     }
     Ok(raw)

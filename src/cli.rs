@@ -1,12 +1,29 @@
 use std::path::PathBuf;
 
 use clap::{
-    Parser, Subcommand,
+    Parser, Subcommand, ValueEnum,
     builder::Styles,
     builder::styling::{AnsiColor, Effects},
 };
 
 /// Clap 4: `Styles::default()` is plain (no ANSI). Use `styled()` + accents so `--help` is not all gray.
+/// UI language for config wizard and localized `--help` (`--lang zh`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum UiLang {
+    #[default]
+    En,
+    Zh,
+}
+
+impl std::fmt::Display for UiLang {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UiLang::En => write!(f, "en"),
+            UiLang::Zh => write!(f, "zh"),
+        }
+    }
+}
+
 fn embystream_styles() -> Styles {
     Styles::styled()
         .header(AnsiColor::Yellow.on_default() | Effects::BOLD)
@@ -27,6 +44,14 @@ fn embystream_styles() -> Styles {
 #[command(styles = embystream_styles())]
 #[command(color = clap::ColorChoice::Auto)]
 pub struct Cli {
+    /// UI language: en (default) or zh (Simplified Chinese); affects config wizard and --help.
+    #[arg(
+        long = "lang",
+        global = true,
+        default_value_t = UiLang::En,
+        value_name = "LANG"
+    )]
+    pub lang: UiLang,
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -35,7 +60,7 @@ pub struct Cli {
 pub enum Commands {
     /// Start HTTP gateways (default when no subcommand: use `run` explicitly).
     Run(RunArgs),
-    /// Interactive TOML configuration wizard (English prompts).
+    /// Interactive TOML configuration wizard (prompt language follows `--lang`).
     Config(ConfigArgs),
 }
 

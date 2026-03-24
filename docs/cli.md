@@ -12,6 +12,15 @@ embystream [COMMAND]
 - **`embystream --version`** — print version.
 - **`embystream --help`** — list commands.
 
+## Language (`--lang`)
+
+| Value | Effect |
+|-------|--------|
+| `en` (default) | English `--help` text and English prompts in `embystream config …`. |
+| `zh` | Simplified Chinese `--help` (top-level descriptions) and Chinese prompts in the configuration wizard. |
+
+Put `--lang` before `--help` if you want localized help, e.g. `embystream --lang zh --help` or `embystream --lang zh config template --help`.
+
 ---
 
 ## `embystream run`

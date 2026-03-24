@@ -1,13 +1,13 @@
 use std::{error::Error, fs, path::Path, process, str::FromStr, sync::Arc};
 
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches};
 use figlet_rs::FIGfont;
 use hyper::{StatusCode, body::Incoming};
 use tokio::signal as TokioSignal;
 
 use embystream::{
     AppState, GATEWAY_LOGGER_DOMAIN, INIT_LOGGER_DOMAIN, debug_log, error_log,
-    info_log,
+    i18n::lookup, info_log,
 };
 use embystream::{
     backend::{
@@ -15,6 +15,7 @@ use embystream::{
         stream_relay::StreamRelayMiddleware,
     },
     cli::{Cli, Commands, RunArgs},
+    cli_lang::{detect_lang_from_env_early, localize_cli_command},
     cli_wizard,
     config::{core::Config, general::StreamMode},
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
@@ -32,14 +33,20 @@ use embystream::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let cli = Cli::parse();
+    let help_lang = detect_lang_from_env_early();
+    let mut cmd = Cli::command();
+    localize_cli_command(&mut cmd, help_lang);
+    let matches = cmd.get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+
     match cli.command {
         Some(Commands::Run(run_args)) => {
             run_app(&run_args).await?;
         }
         Some(Commands::Config(ref cfg_args)) => {
-            if let Err(e) = cli_wizard::run(cfg_args) {
-                eprintln!("config wizard: {e}");
+            if let Err(e) = cli_wizard::run(cfg_args, cli.lang) {
+                let prefix = lookup(cli.lang, "error.wizard_prefix");
+                eprintln!("{prefix}: {e}");
                 process::exit(1);
             }
         }

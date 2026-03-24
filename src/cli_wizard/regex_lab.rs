@@ -9,15 +9,16 @@ use super::terminal::{
     print_field_value_line, print_step_dim_line,
 };
 use super::wizard_input_theme::WIZ_INPUT_THEME;
+use crate::i18n::{tr, tr_fmt};
 
-/// Compile pattern or print English error and return None.
+/// Compile pattern or print localized error and return None.
 pub fn try_compile_regex(pattern: &str) -> Option<Regex> {
     match Regex::new(pattern) {
         Ok(re) => Some(re),
         Err(e) => {
-            print_error(&format!(
-                "Invalid regex: {e}. Try again or fix the pattern."
-            ));
+            let msg =
+                tr_fmt("regex.error.invalid", &[("detail", &e.to_string())]);
+            print_error(&msg);
             None
         }
     }
@@ -48,7 +49,7 @@ pub fn prompt_regex_until_ok() -> Result<Option<String>> {
 pub fn regex_playground(re: &Regex) -> Result<()> {
     print_field_intro_line(
         "test_path",
-        "Sample path to match against the regex; empty line exits.",
+        &tr("wizard.msg.prefix.wrote_template"),
         None,
         None,
     );
@@ -68,14 +69,19 @@ pub fn regex_playground(re: &Regex) -> Result<()> {
             break;
         }
         let m = re.is_match(&line);
-        print_step_dim_line(&format!("matches: {m}"));
+        let msg = tr_fmt("regex.output.matches", &[("value", &format!("{m}"))]);
+        print_step_dim_line(&msg);
         if let Some(caps) = re.captures(&line) {
             for (i, g) in caps.iter().enumerate() {
                 if let Some(g) = g {
-                    print_step_dim_line(&format!(
-                        "group {i}: {:?}",
-                        g.as_str()
-                    ));
+                    let msg = tr_fmt(
+                        "regex.output.group",
+                        &[
+                            ("idx", &i.to_string()),
+                            ("value", &format!("{:?}", g.as_str())),
+                        ],
+                    );
+                    print_step_dim_line(&msg);
                 }
             }
         }

@@ -1,8 +1,10 @@
-//! Styled terminal output (English only).
+//! Styled terminal output (language from `l10n` / `--lang`).
 
 use std::io::Write;
 
 use console::Style;
+
+use crate::i18n::tr;
 
 /// Full-width rule for primary sections (titles, banners).
 const RULE_FULL: usize = 60;
@@ -30,7 +32,7 @@ fn purpose_one_line(purpose: &str) -> String {
         .join(" ")
 }
 
-/// Short banner when opening the config wizard menu (once per session feel).
+/// Welcome lines when opening the config wizard main menu (once per session).
 pub fn print_welcome_banner() {
     println!();
     println!("{}", Style::new().dim().apply_to(rule(RULE_FULL)));
@@ -39,33 +41,34 @@ pub fn print_welcome_banner() {
         Style::new()
             .cyan()
             .bold()
-            .apply_to("EmbyStream · configuration")
+            .apply_to(tr("wizard.banner.title"))
     );
     println!(
         "  {}",
-        Style::new()
-            .dim()
-            .apply_to("Create or edit TOML files in the current directory.")
+        Style::new().dim().apply_to(tr("wizard.banner.subtitle"))
     );
     println!("{}", Style::new().dim().apply_to(rule(RULE_FULL)));
 }
 
 /// Section banner: rules with the title flush left (no extra blank lines).
-pub fn print_title(s: &str) {
+pub fn print_title(s: impl AsRef<str>) {
+    let s = s.as_ref();
     println!("{}", Style::new().dim().apply_to(rule(RULE_FULL)));
     println!("{}", Style::new().cyan().bold().apply_to(s));
     println!("{}", Style::new().dim().apply_to(rule(RULE_FULL)));
 }
 
 /// Nested block — same geometry as `print_title`, different accent color.
-pub fn print_subsection_title(s: &str) {
+pub fn print_subsection_title(s: impl AsRef<str>) {
+    let s = s.as_ref();
     println!("{}", Style::new().dim().apply_to(rule(RULE_SUB)));
     println!("{}", Style::new().magenta().bold().apply_to(s));
     println!("{}", Style::new().dim().apply_to(rule(RULE_SUB)));
 }
 
 /// Dim hint lines with the same step prefix as prompts (no bare empty lines).
-pub fn print_hint(s: &str) {
+pub fn print_hint(s: impl AsRef<str>) {
+    let s = s.as_ref();
     for line in s.lines() {
         let t = line.trim();
         if !t.is_empty() {
@@ -74,11 +77,13 @@ pub fn print_hint(s: &str) {
     }
 }
 
-pub fn print_error(s: &str) {
+pub fn print_error(s: impl AsRef<str>) {
+    let s = s.as_ref();
     eprintln!("{}", Style::new().red().bold().apply_to(format!("  ✗ {s}")));
 }
 
-pub fn print_ok(s: &str) {
+pub fn print_ok(s: impl AsRef<str>) {
+    let s = s.as_ref();
     println!(
         "{}",
         Style::new().green().bold().apply_to(format!("  ✓ {s}"))
@@ -88,11 +93,13 @@ pub fn print_ok(s: &str) {
 /// One line before `Input`: `===> level (…, Default: info)` and/or `Example: …`.
 /// Section title gives context; `name` is the field only. Omit `? value` preview — defaults live here.
 pub fn print_field_intro_line(
-    name: &str,
-    purpose: &str,
+    name: impl AsRef<str>,
+    purpose: impl AsRef<str>,
     default_hint: Option<&str>,
     example: Option<&str>,
 ) {
+    let name = name.as_ref();
+    let purpose = purpose.as_ref();
     let body = purpose_one_line(purpose);
     print!("{}", style_step());
     print!("{}", Style::new().bold().apply_to(name));
@@ -113,7 +120,12 @@ pub fn print_field_intro_line(
         if need_sep {
             print!("{}", Style::new().dim().apply_to(", "));
         }
-        print!("{}", Style::new().dim().apply_to("Default: "));
+        print!(
+            "{}",
+            Style::new()
+                .dim()
+                .apply_to(tr("wizard.label.default_prefix"))
+        );
         print!("{}", Style::new().magenta().dim().apply_to(d));
         need_sep = true;
     }
@@ -121,7 +133,12 @@ pub fn print_field_intro_line(
         if need_sep {
             print!("{}", Style::new().dim().apply_to(", "));
         }
-        print!("{}", Style::new().dim().apply_to("Example: "));
+        print!(
+            "{}",
+            Style::new()
+                .dim()
+                .apply_to(tr("wizard.label.example_prefix"))
+        );
         print!("{}", Style::new().magenta().dim().apply_to(ex));
     }
     print!("{}", Style::new().dim().apply_to(")"));
@@ -182,18 +199,18 @@ pub fn print_yes_no_result(answer: &str) {
 
 /// After text input when there was **no** `===> ? …` preview line (e.g. selects, secrets).
 /// `===> ✔ value`, or `===> ? ›` when `display` is `(empty)`.
-pub fn print_field_value_line(display: &str) {
-    print_field_value_line_inner(display, true);
+pub fn print_field_value_line(display: impl AsRef<str>) {
+    print_field_value_line_inner(display.as_ref(), true);
 }
 
 /// Same as [`print_field_value_line`] but does not print [`print_field_result_separator`] after —
 /// for multi-line token lists so consecutive `✔` rows stay visually grouped.
-pub fn print_field_value_line_compact(display: &str) {
-    print_field_value_line_inner(display, false);
+pub fn print_field_value_line_compact(display: impl AsRef<str>) {
+    print_field_value_line_inner(display.as_ref(), false);
 }
 
 fn print_field_value_line_inner(display: &str, separator_after: bool) {
-    if display == "(empty)" {
+    if display == tr("wizard.display.empty") {
         println!(
             "{}{} {}",
             style_step(),
@@ -220,19 +237,13 @@ pub fn print_select_file_list_tip() {
         style_step(),
         Style::new()
             .dim()
-            .apply_to("Tip: ↑ / ↓ and Enter to choose · Esc or q to go back",)
+            .apply_to(tr("wizard.tip.select_file_list"))
     );
 }
 
-/// Shown before wizard `Input` (dim line with `===>` prefix).
-pub const FIELD_INPUT_TIP: &str = "Tip: Press Enter to keep the default from the field line (Default: …), or type a new value and press Enter.";
-
 pub fn print_field_input_tip() {
-    println!(
-        "{}{}",
-        style_step(),
-        Style::new().dim().apply_to(FIELD_INPUT_TIP)
-    );
+    let tip = tr("wizard.tip.field_input");
+    println!("{}{}", style_step(), Style::new().dim().apply_to(tip));
 }
 
 /// Single dim line prefixed with `===>` (e.g. regex playground match output).
@@ -241,7 +252,14 @@ pub fn print_step_dim_line(msg: &str) {
 }
 
 /// Table header row styling for discovered configs.
-pub fn print_table_header(c1: &str, c2: &str, c3: &str) {
+pub fn print_table_header(
+    c1: impl AsRef<str>,
+    c2: impl AsRef<str>,
+    c3: impl AsRef<str>,
+) {
+    let c1 = c1.as_ref();
+    let c2 = c2.as_ref();
+    let c3 = c3.as_ref();
     println!(
         "  {}  {:<38}  {}",
         Style::new().bold().dim().apply_to(c1),
