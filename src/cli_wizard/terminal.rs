@@ -50,30 +50,26 @@ pub fn print_welcome_banner() {
     println!("{}", Style::new().dim().apply_to(rule(RULE_FULL)));
 }
 
-/// Section banner: rules with the title flush left (no indent), blank line after.
+/// Section banner: rules with the title flush left (no extra blank lines).
 pub fn print_title(s: &str) {
-    println!();
     println!("{}", Style::new().dim().apply_to(rule(RULE_FULL)));
     println!("{}", Style::new().cyan().bold().apply_to(s));
     println!("{}", Style::new().dim().apply_to(rule(RULE_FULL)));
-    println!();
 }
 
 /// Nested block — same geometry as `print_title`, different accent color.
 pub fn print_subsection_title(s: &str) {
-    println!();
     println!("{}", Style::new().dim().apply_to(rule(RULE_SUB)));
     println!("{}", Style::new().magenta().bold().apply_to(s));
     println!("{}", Style::new().dim().apply_to(rule(RULE_SUB)));
-    println!();
 }
 
-/// Dim hint lines, flush left (no indent).
+/// Dim hint lines with the same step prefix as prompts (no bare empty lines).
 pub fn print_hint(s: &str) {
     for line in s.lines() {
         let t = line.trim();
         if !t.is_empty() {
-            println!("{}", Style::new().dim().apply_to(t));
+            println!("{}{}", style_step(), Style::new().dim().apply_to(t));
         }
     }
 }
@@ -178,7 +174,7 @@ pub fn rewrite_default_prompt_as_checkmark(
     print_field_result_separator();
 }
 
-/// After Yes/No: `===> ✔ Yes` (no repeated question text), then dim `===>` before the next field.
+/// After Yes/No: `===> ✔ Yes`, then dim `===>` on the next line (no blank line between).
 pub fn print_yes_no_result(answer: &str) {
     println!(
         "{}{} {}",
@@ -186,7 +182,6 @@ pub fn print_yes_no_result(answer: &str) {
         Style::new().green().bold().apply_to("✔"),
         Style::new().bold().apply_to(answer)
     );
-    println!();
     print_field_result_separator();
 }
 
@@ -223,38 +218,31 @@ fn print_field_value_line_inner(display: &str, separator_after: bool) {
     }
 }
 
-/// Shown before long `Select` prompts (arrow keys + Enter).
-pub fn print_select_tip() {
-    println!(
-        "{}",
-        Style::new()
-            .dim()
-            .apply_to("Tip: ↑ / ↓ and Enter to choose · Yes/No lists default is highlighted")
-    );
-}
-
 /// Before file-list `Select` prompts that use `interact_opt` (Esc / q cancels).
 pub fn print_select_file_list_tip() {
     println!(
-        "{}",
+        "{}{}",
+        style_step(),
         Style::new()
             .dim()
             .apply_to("Tip: ↑ / ↓ and Enter to choose · Esc or q to go back",)
     );
 }
 
-/// Shown before wizard `Input` (same dim style as `print_select_tip`).
+/// Shown before wizard `Input` (dim line with `===>` prefix).
 pub const FIELD_INPUT_TIP: &str = "Tip: Press Enter to keep the default from the field line (Default: …), or type a new value and press Enter.";
 
 pub fn print_field_input_tip() {
-    println!("{}", Style::new().dim().apply_to(FIELD_INPUT_TIP));
+    println!(
+        "{}{}",
+        style_step(),
+        Style::new().dim().apply_to(FIELD_INPUT_TIP)
+    );
 }
 
-pub const REGEX_TEST_PATH_TIP: &str =
-    "Tip: Enter a sample path to test the pattern, or leave empty to finish.";
-
-pub fn print_regex_test_path_tip() {
-    println!("{}", Style::new().dim().apply_to(REGEX_TEST_PATH_TIP));
+/// Single dim line prefixed with `===>` (e.g. regex playground match output).
+pub fn print_step_dim_line(msg: &str) {
+    println!("{}{}", style_step(), Style::new().dim().apply_to(msg));
 }
 
 /// Table header row styling for discovered configs.

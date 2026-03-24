@@ -39,9 +39,9 @@ use super::{
         print_field_intro_line, print_field_name_line,
         print_field_result_separator, print_field_value_line,
         print_field_value_line_compact, print_hint, print_ok,
-        print_select_file_list_tip, print_select_tip, print_subsection_title,
-        print_table_header, print_title, print_welcome_banner,
-        print_yes_no_result, rewrite_default_prompt_as_checkmark,
+        print_select_file_list_tip, print_subsection_title, print_table_header,
+        print_title, print_welcome_banner, print_yes_no_result,
+        rewrite_default_prompt_as_checkmark,
     },
     wizard_input_theme::{WIZ_INPUT_THEME, WizardInputTheme},
 };
@@ -61,8 +61,9 @@ const WIZARD_INPUT_PROMPT: &str = "";
 fn confirm_yes_no(prompt: &str, default_yes: bool) -> Result<bool> {
     const ITEMS: &[&str] = &["Yes", "No"];
     let default = if default_yes { 0usize } else { 1 };
+    print_field_intro_line(prompt, "", None, None);
     let i = Select::with_theme(&theme())
-        .with_prompt(prompt)
+        .with_prompt("")
         .items(ITEMS)
         .default(default)
         .report(false)
@@ -274,9 +275,10 @@ fn run_show_flow(cwd: &Path) -> Result<()> {
         print_hint("No valid EmbyStream TOML files in this directory.");
         return Ok(());
     }
+    print_field_intro_line("Select file to display", "", None, None);
     print_select_file_list_tip();
     let idx = Select::with_theme(&theme())
-        .with_prompt("Select file to display")
+        .with_prompt("")
         .items(
             list.iter()
                 .map(|d| {
@@ -303,7 +305,7 @@ fn run_show_flow(cwd: &Path) -> Result<()> {
     )? {
         masked = false;
     }
-    println!();
+    print_field_result_separator();
     if masked {
         print_title("Masked content");
         print!("{}", mask_toml_secrets(&content));
@@ -384,9 +386,14 @@ fn run_main_menu(cwd: &Path) -> Result<()> {
             "Copy",
             "Quit",
         ];
-        print_select_tip();
+        print_field_intro_line(
+            "Main menu",
+            "Pick an action (↑ / ↓ and Enter).",
+            None,
+            None,
+        );
         let sel = Select::with_theme(&theme())
-            .with_prompt("Main menu")
+            .with_prompt("")
             .items(&items)
             .default(0)
             .report(false)
@@ -486,9 +493,10 @@ fn pick_discovered(
     list: &[DiscoveredConfig],
     prompt: &str,
 ) -> Result<Option<usize>> {
+    print_field_intro_line(prompt, "", None, None);
     print_select_file_list_tip();
     Select::with_theme(&theme())
-        .with_prompt(prompt)
+        .with_prompt("")
         .items(
             list.iter()
                 .map(|d| format!("{}  ({})", d.path.display(), d.stream_mode))
@@ -504,7 +512,7 @@ fn print_discovered_table(list: &[DiscoveredConfig]) {
     print_title("Configurations in current directory");
     if list.is_empty() {
         print_hint("(none)");
-        println!();
+        print_field_result_separator();
         return;
     }
     print_table_header("idx", "file", "stream_mode");
@@ -512,7 +520,7 @@ fn print_discovered_table(list: &[DiscoveredConfig]) {
         let name = d.path.file_name().and_then(|s| s.to_str()).unwrap_or("?");
         println!("  {:<4}  {:<38}  {}", i, name, d.stream_mode);
     }
-    println!();
+    print_field_result_separator();
 }
 
 fn run_new_flow(cwd: &Path) -> Result<()> {
@@ -600,8 +608,14 @@ fn resolve_dual_listen_ports(raw: &mut RawConfig) -> Result<()> {
         ));
         let items =
             ["Change Frontend.listen_port", "Change Backend.listen_port"];
+        print_field_intro_line(
+            "Which port to change",
+            "Pick Frontend or Backend listen_port to edit.",
+            None,
+            None,
+        );
         let sel = Select::with_theme(&theme())
-            .with_prompt("Which port do you want to change?")
+            .with_prompt("")
             .items(items)
             .default(0)
             .report(false)
@@ -654,10 +668,15 @@ fn select_stream_mode() -> Result<StreamMode> {
     print_hint(
         "dual: both; frontend and backend must use different listen_port.",
     );
-    print_select_tip();
+    print_field_intro_line(
+        "stream_mode",
+        "Choose frontend, backend, or dual (↑ / ↓ and Enter).",
+        None,
+        None,
+    );
     let items = vec!["frontend", "backend", "dual"];
     let i = Select::with_theme(&theme())
-        .with_prompt("Choose stream_mode")
+        .with_prompt("")
         .items(&items)
         .default(0)
         .report(false)
@@ -941,9 +960,8 @@ fn prompt_user_agent_mode(current: &str) -> Result<String> {
         .iter()
         .position(|v| v.eq_ignore_ascii_case(t))
         .unwrap_or(0);
-    print_select_tip();
     let i = Select::with_theme(&theme())
-        .with_prompt("Choose mode")
+        .with_prompt("")
         .items(LABELS)
         .default(idx)
         .report(false)
@@ -969,7 +987,7 @@ fn prompt_memory_mode(current: &str) -> Result<String> {
     ];
     if let Some(idx) = VALUES.iter().position(|&v| v == current) {
         let i = Select::with_theme(&theme())
-            .with_prompt("Choose memory_mode")
+            .with_prompt("")
             .items(LABELS)
             .default(idx)
             .report(false)
@@ -1040,7 +1058,6 @@ fn prompt_frontend_section() -> Result<Frontend> {
         Some(if CHECK_DEFAULT { "Yes" } else { "No" }),
         None,
     );
-    print_select_tip();
     let check = confirm_yes_no("Probe Emby before streaming?", CHECK_DEFAULT)?;
     let path_rewrites = prompt_path_rewrites(
         "PathRewrite",
@@ -1145,7 +1162,6 @@ fn prompt_path_rewrites(
     purpose: &str,
 ) -> Result<Vec<PathRewriteConfig>> {
     let mut out = vec![];
-    println!();
     print_field_intro_line(ctx, purpose, None, None);
     while confirm_yes_no("Add a PathRewrite entry?", false)? {
         let enable = confirm_yes_no("Enable this PathRewrite rule?", false)?;
@@ -1240,7 +1256,7 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
     );
     let labels = backend_type_labels();
     let tidx = Select::with_theme(&theme())
-        .with_prompt("type")
+        .with_prompt("")
         .items(&labels)
         .default(0)
         .report(false)
@@ -1309,7 +1325,7 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
         "proxy — server fetches upstream",
     ];
     let pidx = Select::with_theme(&theme())
-        .with_prompt("proxy_mode")
+        .with_prompt("")
         .items(&proxy_items)
         .default(0)
         .report(false)
@@ -1492,8 +1508,14 @@ fn run_edit_loop(mut raw: RawConfig) -> Result<RawConfig> {
             opts.push("Backend nodes");
         }
         opts.push("Done (save)");
+        print_field_intro_line(
+            "Edit which part",
+            "Choose a config section to change (↑ / ↓ and Enter).",
+            None,
+            None,
+        );
         let sel = Select::with_theme(&theme())
-            .with_prompt("Edit which part?")
+            .with_prompt("")
             .items(&opts)
             .report(false)
             .interact()

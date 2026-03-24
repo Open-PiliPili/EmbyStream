@@ -5,8 +5,8 @@ use dialoguer::Input;
 use regex::Regex;
 
 use super::terminal::{
-    print_error, print_field_input_tip, print_field_value_line,
-    print_regex_test_path_tip,
+    print_error, print_field_input_tip, print_field_intro_line,
+    print_field_value_line, print_step_dim_line,
 };
 use super::wizard_input_theme::WIZ_INPUT_THEME;
 
@@ -46,10 +46,20 @@ pub fn prompt_regex_until_ok() -> Result<Option<String>> {
 
 /// After a valid pattern, optionally test matches until empty line.
 pub fn regex_playground(re: &Regex) -> Result<()> {
-    print_regex_test_path_tip();
+    print_field_intro_line(
+        "test_path",
+        "Sample path to match against the regex; empty line exits.",
+        None,
+        None,
+    );
+    let mut first_input = true;
     loop {
+        if first_input {
+            print_field_input_tip();
+            first_input = false;
+        }
         let line: String = Input::with_theme(&WIZ_INPUT_THEME)
-            .with_prompt("Test path")
+            .with_prompt("")
             .allow_empty(true)
             .report(false)
             .interact_text()
@@ -58,11 +68,14 @@ pub fn regex_playground(re: &Regex) -> Result<()> {
             break;
         }
         let m = re.is_match(&line);
-        println!("  matches: {m}");
+        print_step_dim_line(&format!("matches: {m}"));
         if let Some(caps) = re.captures(&line) {
             for (i, g) in caps.iter().enumerate() {
                 if let Some(g) = g {
-                    println!("  group {i}: {:?}", g.as_str());
+                    print_step_dim_line(&format!(
+                        "group {i}: {:?}",
+                        g.as_str()
+                    ));
                 }
             }
         }
