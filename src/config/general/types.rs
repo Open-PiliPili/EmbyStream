@@ -3,7 +3,9 @@ use std::fmt;
 use hyper::Uri;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum StreamMode {
     #[default]
@@ -22,8 +24,13 @@ impl fmt::Display for StreamMode {
     }
 }
 
+fn default_memory_mode_str() -> String {
+    "middle".to_string()
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct General {
+    #[serde(default = "default_memory_mode_str")]
     pub memory_mode: String,
     #[serde(default)]
     pub stream_mode: StreamMode,
@@ -31,10 +38,21 @@ pub struct General {
     pub encipher_iv: String,
 }
 
+fn default_log_level_str() -> String {
+    "info".to_string()
+}
+
+fn default_logs_root_str() -> String {
+    "./logs".to_string()
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Log {
+    #[serde(default = "default_log_level_str")]
     pub level: String,
+    #[serde(default)]
     pub prefix: String,
+    #[serde(default = "default_logs_root_str")]
     pub root_path: String,
 }
 
@@ -60,10 +78,17 @@ impl Emby {
     }
 }
 
+fn default_user_agent_mode_str() -> String {
+    "allow".to_string()
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UserAgent {
+    #[serde(default = "default_user_agent_mode_str")]
     pub mode: String,
+    #[serde(default)]
     pub allow_ua: Vec<String>,
+    #[serde(default)]
     pub deny_ua: Vec<String>,
 }
 

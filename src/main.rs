@@ -15,6 +15,7 @@ use embystream::{
         stream_relay::StreamRelayMiddleware,
     },
     cli::{Cli, Commands, RunArgs},
+    cli_wizard,
     config::{core::Config, general::StreamMode},
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
@@ -35,6 +36,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     match cli.command {
         Some(Commands::Run(run_args)) => {
             run_app(&run_args).await?;
+        }
+        Some(Commands::Config(ref cfg_args)) => {
+            if let Err(e) = cli_wizard::run(cfg_args) {
+                eprintln!("config wizard: {e}");
+                process::exit(1);
+            }
         }
         None => {}
     }
@@ -64,7 +71,7 @@ async fn run_app(
 
     let mode = {
         let config_guard = app_state.get_config().await;
-        config_guard.general.stream_mode.clone()
+        config_guard.general.stream_mode
     };
 
     if matches!(mode, StreamMode::Frontend | StreamMode::Dual) {

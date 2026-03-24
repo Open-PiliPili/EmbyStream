@@ -2,6 +2,7 @@ pub mod api;
 pub mod app;
 pub mod cache;
 pub mod cli;
+pub mod cli_wizard;
 pub mod client;
 pub mod config;
 pub mod core;

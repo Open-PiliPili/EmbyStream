@@ -16,6 +16,7 @@ pub struct Backend {
     pub listen_port: u16,
     pub base_url: String,
     pub port: String,
+    #[serde(default)]
     pub path: String,
     #[serde(default)]
     pub problematic_clients: Vec<String>,

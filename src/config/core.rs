@@ -17,7 +17,7 @@ use super::{
     frontend::Frontend,
     general::{General, StreamMode, UserAgent},
     http2::Http2,
-    types::{FallbackConfig, RawConfig},
+    types::{FallbackConfig, PathRewriteConfig, RawConfig},
 };
 use crate::{
     CONFIG_LOGGER_DOMAIN,
@@ -37,7 +37,7 @@ const SSL_DIR_NAME: &str = "ssl";
 const SSL_CER_FILE_NAME: &str = "ssl-cert";
 const SSL_KEY_FILE_NAME: &str = "ssl-key";
 const DOCKER_CONFIG_PATH: &str = "/config/embystream/config.toml";
-const TEMPLATE_CONFIG_PATH: &str = "src/config.toml.template";
+const TEMPLATE_CONFIG_PATH: &str = "src/config/config.toml.template";
 const ROOT_CONFIG_PATH: &str = "/root/.config/embystream";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -130,72 +130,7 @@ impl Config {
     fn load_from_path(path: &Path) -> Result<Self, ConfigError> {
         let content = fs::read_to_string(path)?;
         let raw_config: RawConfig = toml::from_str(&content)?;
-
-        let stream_mode = &raw_config.general.stream_mode;
-
-        if (stream_mode == &StreamMode::Frontend
-            || stream_mode == &StreamMode::Dual)
-            && raw_config.frontend.is_none()
-        {
-            return Err(ConfigError::MissingConfig("Frontend".to_string()));
-        }
-
-        if (stream_mode == &StreamMode::Backend
-            || stream_mode == &StreamMode::Dual)
-            && raw_config.backend.is_none()
-        {
-            return Err(ConfigError::MissingConfig("Backend".to_string()));
-        }
-
-        let mut backend_nodes = raw_config.backend_nodes.unwrap_or_default();
-        for node in &mut backend_nodes {
-            node.uuid = Uuid::new_v4().to_string();
-
-            if !node.pattern.is_empty() {
-                node.pattern_regex = Some(
-                    Regex::new(&node.pattern)
-                        .map_err(ConfigError::InvalidRegex)?,
-                );
-            }
-
-            node.path_rewriter_cache = node
-                .path_rewrites
-                .iter()
-                .map(|pr| {
-                    PathRewriter::new(pr.enable, &pr.pattern, &pr.replacement)
-                })
-                .collect();
-        }
-
-        backend_nodes.retain(|node| {
-            let drop_relay = node
-                .backend_type
-                .eq_ignore_ascii_case(STREAM_RELAY_BACKEND_TYPE)
-                && (backend_base_url_is_empty(&node.base_url)
-                    || backend_base_url_is_local_host(&node.base_url));
-            if drop_relay {
-                config_warn_log!(
-                    CONFIG_LOGGER_DOMAIN,
-                    "StreamRelay node '{}' dropped: base_url is empty or loopback \
-                     (127.0.0.1, localhost, 0.0.0.0); fix or remove the entry",
-                    node.name
-                );
-            }
-            !drop_relay
-        });
-
-        Ok(Config {
-            path: path.to_path_buf(),
-            log: raw_config.log,
-            general: raw_config.general,
-            emby: raw_config.emby,
-            user_agent: raw_config.user_agent,
-            frontend: raw_config.frontend,
-            backend: raw_config.backend,
-            backend_nodes,
-            http2: raw_config.http2.unwrap_or_default(),
-            fallback: raw_config.fallback,
-        })
+        finish_raw_config(path.to_path_buf(), raw_config)
     }
 
     fn get_default_config_path() -> Result<PathBuf, ConfigError> {
@@ -272,4 +207,109 @@ impl Config {
         );
         process::exit(0);
     }
+}
+
+/// Parse TOML into `RawConfig` (wizard and tests).
+pub fn parse_raw_config_str(content: &str) -> Result<RawConfig, ConfigError> {
+    Ok(toml::from_str(content)?)
+}
+
+/// Ensure `Frontend` / `Backend` sections exist for the selected `stream_mode`.
+pub fn validate_raw_structure(raw: &RawConfig) -> Result<(), ConfigError> {
+    let stream_mode = &raw.general.stream_mode;
+    if (stream_mode == &StreamMode::Frontend
+        || stream_mode == &StreamMode::Dual)
+        && raw.frontend.is_none()
+    {
+        return Err(ConfigError::MissingConfig("Frontend".to_string()));
+    }
+    if (stream_mode == &StreamMode::Backend || stream_mode == &StreamMode::Dual)
+        && raw.backend.is_none()
+    {
+        return Err(ConfigError::MissingConfig("Backend".to_string()));
+    }
+    Ok(())
+}
+
+fn compile_path_rewrite_regexes(
+    rewrites: &[PathRewriteConfig],
+) -> Result<(), ConfigError> {
+    for pr in rewrites {
+        if pr.enable && !pr.pattern.is_empty() {
+            Regex::new(&pr.pattern).map_err(ConfigError::InvalidRegex)?;
+        }
+    }
+    Ok(())
+}
+
+/// Validate regex syntax for node patterns and enabled path rewrites.
+pub fn validate_raw_regexes(raw: &RawConfig) -> Result<(), ConfigError> {
+    if let Some(ref fe) = raw.frontend {
+        compile_path_rewrite_regexes(&fe.path_rewrites)?;
+    }
+    for node in raw.backend_nodes.as_deref().unwrap_or(&[]) {
+        if !node.pattern.is_empty() {
+            Regex::new(&node.pattern).map_err(ConfigError::InvalidRegex)?;
+        }
+        compile_path_rewrite_regexes(&node.path_rewrites)?;
+    }
+    Ok(())
+}
+
+/// Build runtime [`Config`] from parsed TOML (UUIDs, compiled regex, path rewriters).
+pub fn finish_raw_config(
+    path: PathBuf,
+    raw_config: RawConfig,
+) -> Result<Config, ConfigError> {
+    validate_raw_structure(&raw_config)?;
+    validate_raw_regexes(&raw_config)?;
+
+    let mut backend_nodes = raw_config.backend_nodes.unwrap_or_default();
+    for node in &mut backend_nodes {
+        node.uuid = Uuid::new_v4().to_string();
+
+        if !node.pattern.is_empty() {
+            node.pattern_regex = Some(
+                Regex::new(&node.pattern).map_err(ConfigError::InvalidRegex)?,
+            );
+        }
+
+        node.path_rewriter_cache = node
+            .path_rewrites
+            .iter()
+            .map(|pr| {
+                PathRewriter::new(pr.enable, &pr.pattern, &pr.replacement)
+            })
+            .collect();
+    }
+
+    backend_nodes.retain(|node| {
+        let drop_relay = node
+            .backend_type
+            .eq_ignore_ascii_case(STREAM_RELAY_BACKEND_TYPE)
+            && (backend_base_url_is_empty(&node.base_url)
+                || backend_base_url_is_local_host(&node.base_url));
+        if drop_relay {
+            config_warn_log!(
+                CONFIG_LOGGER_DOMAIN,
+                "StreamRelay node '{}' dropped: base_url is empty or loopback \
+                 (127.0.0.1, localhost, 0.0.0.0); fix or remove the entry",
+                node.name
+            );
+        }
+        !drop_relay
+    });
+
+    Ok(Config {
+        path,
+        log: raw_config.log,
+        general: raw_config.general,
+        emby: raw_config.emby,
+        user_agent: raw_config.user_agent,
+        frontend: raw_config.frontend,
+        backend: raw_config.backend,
+        backend_nodes,
+        http2: raw_config.http2.unwrap_or_default(),
+        fallback: raw_config.fallback,
+    })
 }

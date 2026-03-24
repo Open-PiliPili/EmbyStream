@@ -74,7 +74,7 @@ pub struct FallbackConfig {
     pub video_missing_path: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct RawConfig {
     #[serde(rename = "General")]
     pub general: General,
