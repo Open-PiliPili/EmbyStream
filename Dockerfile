@@ -3,11 +3,21 @@
 # =========================================================================
 FROM rust:1.88.0-slim AS builder
 
-# Build argument to receive the target platform from the `docker buildx` command
-# e.g., linux/amd64 or linux/arm64
+# BuildKit sets TARGETPLATFORM per --platform (e.g. linux/amd64, linux/arm64).
+# Do NOT default TARGETARCH to amd64: multi-platform + cache can otherwise
+# compile the wrong triple (e.g. x86_64-musl under an arm64 target), breaking aws-lc-sys (-m64).
 ARG TARGETPLATFORM
-# buildx sets this per platform; default helps plain `docker build` without --platform
-ARG TARGETARCH=amd64
+ARG TARGETARCH
+
+# Resolve musl triple from TARGETPLATFORM (single source of truth for cross/QEMU builds).
+RUN set -eu; \
+    case "${TARGETPLATFORM:-linux/amd64}" in \
+        linux/amd64) echo amd64 > /musl-arch; echo x86_64-unknown-linux-musl > /rust-target ;; \
+        linux/arm64) echo arm64 > /musl-arch; echo aarch64-unknown-linux-musl > /rust-target ;; \
+        *) echo "unsupported TARGETPLATFORM=${TARGETPLATFORM}" >&2; exit 1 ;; \
+    esac; \
+    ARCH="$(cat /musl-arch)"; \
+    echo "Docker build: TARGETPLATFORM=${TARGETPLATFORM:-} TARGETARCH=${TARGETARCH:-} -> ARCH=${ARCH}"
 
 # aws-lc-sys (rustls) needs CMake + a C/C++ toolchain; musl-tools for *-linux-musl link.
 # rust-version in Cargo.toml must stay <= image rustc (see FROM above).
@@ -16,12 +26,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     musl-tools \
     && \
-    case "${TARGETARCH}" in \
+    ARCH="$(cat /musl-arch)"; \
+    case "$ARCH" in \
         amd64) rustup target add x86_64-unknown-linux-musl ;; \
         arm64) rustup target add aarch64-unknown-linux-musl ;; \
-        *) echo "unsupported TARGETARCH=${TARGETARCH} (need amd64 or arm64)" >&2; exit 1 ;; \
+        *) echo "unsupported ARCH=$ARCH" >&2; exit 1 ;; \
     esac && \
     rm -rf /var/lib/apt/lists/*
+
+# Point aws-lc-sys / cc-rs at the arch-correct musl GCC (matches CI musl-tools layout).
+RUN set -eu; \
+    ARCH="$(cat /musl-arch)"; \
+    case "$ARCH" in \
+        amd64) \
+            printf '%s\n' \
+                'export CC_x86_64_unknown_linux_musl=x86_64-linux-musl-gcc' \
+                'export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=x86_64-linux-musl-gcc' \
+                > /etc/musl-cargo-env.sh \
+            ;; \
+        arm64) \
+            printf '%s\n' \
+                'export CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc' \
+                'export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc' \
+                > /etc/musl-cargo-env.sh \
+            ;; \
+        *) echo "unsupported ARCH=$ARCH" >&2; exit 1 ;; \
+    esac
 
 WORKDIR /usr/src/app
 
@@ -33,30 +63,23 @@ COPY Cargo.toml Cargo.lock ./
 
 # Build only the dependencies for the specified target
 # This step is cached as long as Cargo.toml/Cargo.lock don't change.
-RUN case "${TARGETARCH}" in \
-        amd64) cargo build --release --target x86_64-unknown-linux-musl ;; \
-        arm64) cargo build --release --target aarch64-unknown-linux-musl ;; \
-        *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
-    esac
+RUN . /etc/musl-cargo-env.sh && \
+    RUST_TARGET="$(cat /rust-target)" && \
+    cargo build --release --target "$RUST_TARGET"
 
 # Now, copy the actual application source code and build it
 RUN rm src/*.rs
 COPY src ./src
 # Embedded at compile time via include_str! in src/i18n.rs (../locales/...)
 COPY locales ./locales
-RUN case "${TARGETARCH}" in \
-        amd64) cargo build --release --target x86_64-unknown-linux-musl ;; \
-        arm64) cargo build --release --target aarch64-unknown-linux-musl ;; \
-        *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
-    esac
+RUN . /etc/musl-cargo-env.sh && \
+    RUST_TARGET="$(cat /rust-target)" && \
+    cargo build --release --target "$RUST_TARGET"
 
 # Create a symlink to the final build artifact with a predictable name
 # This solves the problem of the COPY command in the next stage not being able to use logic.
-RUN case "${TARGETARCH}" in \
-        amd64) ln -s /usr/src/app/target/x86_64-unknown-linux-musl /usr/src/app/target/final_target ;; \
-        arm64) ln -s /usr/src/app/target/aarch64-unknown-linux-musl /usr/src/app/target/final_target ;; \
-        *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
-    esac
+RUN RUST_TARGET="$(cat /rust-target)" && \
+    ln -s "/usr/src/app/target/${RUST_TARGET}" /usr/src/app/target/final_target
 
 # =========================================================================
 # Stage 2: Create the final, minimal production image using Alpine
