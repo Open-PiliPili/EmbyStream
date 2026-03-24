@@ -7,7 +7,7 @@
 </p>
 <h1 align="center">EmbyStream</h1>
 <p align="center">
-A highly customizable, decoupled frontend/backend application for Emby, written entirely in Rust.
+A highly customizable Emby streaming proxy (frontend / backend split), written in Rust.
 </p>
 <p align="center">
 <a href="https://t.me/openpilipili_chat"><img src="https://img.shields.io/badge/-Telegram_Group-red?color=blue&logo=telegram&logoColor=white" alt="Telegram"></a>
@@ -17,11 +17,11 @@ A highly customizable, decoupled frontend/backend application for Emby, written 
 <a href="https://github.com/Open-PiliPili/EmbyStream/actions/workflows/ci.yaml"><img src="https://github.com/Open-PiliPili/EmbyStream/actions/workflows/ci.yaml/badge.svg" alt="Linux CI"></a> <a href="https://github.com/open-pilipili/EmbyStream/wiki"><img src="https://img.shields.io/badge/-Wiki-red?color=blue&logo=github&logoColor=white" alt="Wiki"></a>
 </p>
 
-## PART 1. About
+## About
 
-EmbyStream is a highly customizable, decoupled frontend/backend application for Emby. It is written entirely in Rust for ultimate performance and memory safety.
+EmbyStream is a reverse proxy and stream gateway for Emby: a **frontend** gateway talks to Emby and rewrites traffic; a **backend** gateway serves or redirects media with signed, expiring links. You can run either side alone or both in **dual** mode (two ports). The stack is async Rust (Hyper / Tokio) with optional TLS on the backend listener.
 
-To learn more about the architecture of a decoupled Emby setup, please refer to [**Wiki**](https://www.google.com/search?q=https://github.com/Open-PiliPili/EmbyStream/wiki).
+Architecture background: [**EmbyStream Wiki**](https://github.com/Open-PiliPili/EmbyStream/wiki).
 
 **Screenshot:**
 
@@ -29,94 +29,73 @@ To learn more about the architecture of a decoupled Emby setup, please refer to 
  <img src="https://raw.githubusercontent.com/Open-PiliPili/EmbyStream/main/res/imgs/run_log.png"/>
 </div>
 
-## PART 2. Features
+## Features (overview)
 
-- **Dual-Mode Support**: Can operate as both a frontend and backend service simultaneously, or as standalone services.
-- **Universal Compatibility**: Supports all versions of Emby.
-- **Multiple Backend Types**:
-    - `disk`: For locally mounted storage.
-    - `openlist`: For integration with [OpenList](https://github.com/OpenListTeam/OpenList).
-    - `direct_link`: For direct links or CDN streaming.
-- **STRM Format Support**: Perfectly compatible with `.strm` files, integrating seamlessly with plugins like [StrmAssistant](https://github.com/sjtuross/StrmAssistant/wiki).
-- **Link Encryption**: Secures data transmission with link encryption.
-- **Link Expiration Protection**: All generated media links automatically expire after a configurable duration, preventing unauthorized redistribution.
-- **User-Agent Filtering**: Includes both allowlist and denylist modes for precise access control.
-- **Anti-Reverse Proxy Filtering**: Prevents unauthorized playback by restricting access to a specified host.
-- **Speed Limit Support**: Supports configurable speed limits per user device, with no limit applied by default.
+- **Stream modes:** `frontend`, `backend`, or `dual` (distinct ports required in dual).
+- **Storage drivers** (`[[BackendNode]].type`): **Disk**, **OpenList**, **DirectLink**, **WebDav**, plus **StreamRelay** for chaining gateways without decrypting `sign`.
+- **STRM-friendly** paths, path rewrite rules, and optional **fallback** video when a file is missing.
+- **Signed / encrypted playback URLs** with expiry; **per-node** redirect vs proxy and **per-device** speed limits.
+- **User-Agent** allow/deny; **anti–reverse-proxy** host checks on the frontend (and per node where configured).
+- **Interactive config wizard:** `embystream config template` / `config show` (English prompts).
+- **CORS / OPTIONS**, playlist handling, API response caching on the forward path, and **HTTP/2 TLS** for the backend via `[Http2]` or CLI overrides.
 
-## PART 3. Install
+Detailed behavior and every TOML field: **[Configuration reference](docs/configuration-reference.md)**.
 
-### From Cargo Crates
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [User guide](docs/user-guide.md) | Deployment patterns, security notes, Docker notes, first-time setup |
+| [Configuration reference](docs/configuration-reference.md) | All config sections, scenarios, and examples (English) |
+| [CLI usage](docs/cli.md) | `run`, `config`, flags |
+
+## Install
+
+### From crates.io
+
 ```shell
 cargo install embystream
 ```
 
-### From Source (with Cargo)
+### From source
 
-1. Clone the repository:
-
-   ```shell
-   git clone https://github.com/Open-PiliPili/EmbyStream.git
-   ```
-
-2. Enter the directory and build the project:
-
-   ```shell
-   cd EmbyStream && cargo build --release
-   ```
-
-3. Copy the compiled binary to your system's PATH:
-
-    **Linux:**
-    ```shell
-    cp ./target/release/embystream /usr/bin
-    ```
-
-    **macOS:**
-
-    ```shell
-    cp ./target/release/embystream /usr/local/bin
-    ```
-
-### From Docker
-You can access the Docker Hub URL below and use Docker to install the image.   
-[DockerHub: openpilipili/embystream](https://hub.docker.com/r/openpilipili/embystream)
-
-### From Binaries
-
-You can download pre-compiled binaries for macOS and Linux from the [**GitHub Releases**](https://github.com/Open-PiliPili/EmbyStream/tags) page. Simply unzip the file and add the `embystream` executable to your `$PATH`.
-
-## PART 4. Run
-
-Create `config.toml` based on one of the two templates below, and modify the contents as needed afterward.   
-
-[frontend.toml](https://github.com/Open-PiliPili/EmbyStream/blob/main/template/config/frontend.toml)   
-[backend.toml](https://github.com/Open-PiliPili/EmbyStream/blob/main/template/config/backend.toml)
-
-> [!NOTE]
-> The dual mode simply requires you to fill in both the frontend and backend configuration sections, and set the `stream_mode` in the template configuration file to `dual`.
-
-### With Binaries
 ```shell
-## Default
-/usr/bin/embystream run
-
-## Custom
-/usr/bin/embystream run --config "$HOME/.config/embystream/config.toml"
+git clone https://github.com/Open-PiliPili/EmbyStream.git
+cd EmbyStream && cargo build --release
 ```
 
-### With Docker Run
+Install the binary (example paths):
+
+- **Linux:** `cp ./target/release/embystream /usr/local/bin/`
+- **macOS:** `cp ./target/release/embystream /usr/local/bin/`
+
+### Docker
+
+Image: [Docker Hub — openpilipili/embystream](https://hub.docker.com/r/openpilipili/embystream). Mount your `config.toml` and publish the ports that match your config (the bundled template listens on **60001** / **60002**).
+
+### Prebuilt binaries
+
+See [**GitHub Releases**](https://github.com/Open-PiliPili/EmbyStream/releases).
+
+## Run
+
+1. Start from the template [`src/config/config.toml.template`](src/config/config.toml.template) or run `embystream config template`.
+2. Adjust `[Emby]`, `[[BackendNode]]`, and ports for your layout (see [User guide](docs/user-guide.md)).
+3. Start the service:
+
+```shell
+embystream run
+embystream run --config "$HOME/.config/embystream/config.toml"
+```
+
+**Docker (example):** map host port to the **same** port as `listen_port` in your config.
 
 ```shell
 docker run -d \
   --name ${CONTAINER_NAME:-embystream} \
-  -p 50001:50001 \
+  -p 60001:60001 \
   -e TZ="Asia/Shanghai" \
-  -e PUID=1000 \
-  -e PGID=1000 \
-  -e UMASK=022 \
   -v ./config/config.toml:/config/embystream/config.toml \
-  --privileged \
   --log-driver json-file \
   --log-opt max-size=50m \
   --log-opt max-file=3 \
@@ -124,31 +103,16 @@ docker run -d \
   openpilipili/embystream:latest
 ```
 
-### With Docker Compose Run
+Compose: [`template/docker/docker-compose.yaml`](template/docker/docker-compose.yaml) (update published ports if you change `listen_port`).
 
-Reference: [docker-compose.yaml](https://raw.githubusercontent.com/Open-PiliPili/EmbyStream/main/template/docker/docker-compose.yaml)
-```shell
-docker-compose pull && docker-compose up -d
-```
+> **Note:** Examples that set `PUID` / `PGID` / `privileged` are optional host policies; the minimal image does not map PUID/PGID internally.
 
-## PART 5. CLI
+## CLI (summary)
 
-```shell
-Another Emby streaming application (frontend/backend separation) written in Rust.
+Use **`embystream run`** to start gateways. See **[CLI usage](docs/cli.md)** for `config show`, `config template`, and TLS overrides.
 
-Usage: embystream [COMMAND]
-
-Commands:
-  run   
-  help  Print this message or the help of the given subcommand(s)
-
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
-```
-
-## PART 6. License
+## License
 
 Copyright (c) 2025 open-pilipili.
 
-EmbyStream is licensed under the **[GPL-V3 License](https://www.gnu.org/licenses/gpl-3.0.html)**. 
+EmbyStream is licensed under the **[GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)**.
