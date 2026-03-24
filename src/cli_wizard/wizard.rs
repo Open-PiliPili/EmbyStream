@@ -69,7 +69,7 @@ fn confirm_yes_no(prompt: impl AsRef<str>, default_yes: bool) -> Result<bool> {
     print_field_intro_line(prompt, "", None, None);
     let i = Select::with_theme(&theme())
         .with_prompt("")
-        .items(&items)
+        .items(items)
         .default(default)
         .report(false)
         .interact()
@@ -116,7 +116,7 @@ fn wiz_input_string(
                 return Ok(d.clone());
             }
             if allow_empty {
-                print_field_value_line(&empty_display());
+                print_field_value_line(empty_display());
                 return Ok(String::new());
             }
             print_error(tr("wizard.error.value_required"));
@@ -369,7 +369,7 @@ fn run_template_flow(cwd: &Path) -> Result<()> {
     finish_raw_config(dest.clone(), raw.clone()).map_err(|e| anyhow!("{e}"))?;
     let toml = emit_wizard_config_toml(&raw)?;
     write_atomic(&dest, &toml).map_err(|e| anyhow!("{e}"))?;
-    print_ok(&format!(
+    print_ok(format!(
         "{}{}",
         tr("wizard.msg.prefix.wrote_template"),
         dest.display()
@@ -595,7 +595,7 @@ fn run_new_flow(cwd: &Path) -> Result<()> {
         return Ok(());
     }
     save_config_file(&dest, &mut raw)?;
-    print_ok(&format!(
+    print_ok(format!(
         "{}{}",
         tr("wizard.msg.prefix.wrote"),
         dest.display()
@@ -619,7 +619,7 @@ fn resolve_dual_listen_ports(raw: &mut RawConfig) -> Result<()> {
         if fe.listen_port != be.listen_port {
             return Ok(());
         }
-        print_error(&tr_fmt(
+        print_error(tr_fmt(
             "wizard.error.dual_port",
             &[("port", &fe.listen_port.to_string())],
         ));
@@ -634,7 +634,7 @@ fn resolve_dual_listen_ports(raw: &mut RawConfig) -> Result<()> {
         );
         let sel = Select::with_theme(&theme())
             .with_prompt("")
-            .items(&items)
+            .items(items)
             .default(0)
             .report(false)
             .interact()
@@ -730,7 +730,7 @@ fn build_new_raw_skeleton(mode: StreamMode) -> Result<RawConfig> {
             root_path: "./logs".into(),
         },
         emby: Emby {
-            url: tr("wizard.example.url.local_emby").into(),
+            url: tr("wizard.example.url.local_emby"),
             port: "8096".into(),
             token: String::new(),
         },

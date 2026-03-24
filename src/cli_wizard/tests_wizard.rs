@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::cli_wizard::{
     discover::discover_configs,
-    emit::{emit_raw_config_toml, emit_wizard_config_toml},
+    emit::{compact_emit_test::emit_raw_config_toml, emit_wizard_config_toml},
     mask::mask_toml_secrets,
     persist::{safe_join_cwd, write_atomic},
 };

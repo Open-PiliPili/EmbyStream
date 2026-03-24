@@ -49,7 +49,7 @@ pub fn prompt_regex_until_ok() -> Result<Option<String>> {
 pub fn regex_playground(re: &Regex) -> Result<()> {
     print_field_intro_line(
         "test_path",
-        &tr("wizard.msg.prefix.wrote_template"),
+        tr("wizard.msg.prefix.wrote_template"),
         None,
         None,
     );

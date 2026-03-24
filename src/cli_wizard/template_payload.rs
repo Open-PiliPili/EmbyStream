@@ -342,7 +342,7 @@ fn directlink_node_dual() -> BackendNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli_wizard::emit::emit_raw_config_toml;
+    use crate::cli_wizard::emit::compact_emit_test::emit_raw_config_toml;
     use crate::config::core::{
         finish_raw_config, parse_raw_config_str, validate_raw_regexes,
         validate_raw_structure,

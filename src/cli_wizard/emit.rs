@@ -379,7 +379,7 @@ pub fn emit_wizard_config_toml(
 }
 
 #[cfg(test)]
-mod compact_emit_test {
+pub(crate) mod compact_emit_test {
     use super::{
         EmitAntiRev, EmitBackendNode, EmitHttp2, EmitPathRewrite, Frontend,
         RawConfig, map_anti, map_http2, map_node, map_path_rewrite,
@@ -571,6 +571,3 @@ mod compact_emit_test {
         toml::to_string_pretty(&doc)
     }
 }
-
-#[cfg(test)]
-pub(crate) use compact_emit_test::emit_raw_config_toml;
