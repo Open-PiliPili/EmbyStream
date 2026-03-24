@@ -13,6 +13,7 @@ A highly customizable Emby streaming proxy (frontend / backend split), written i
 <a href="https://t.me/openpilipili_chat"><img src="https://img.shields.io/badge/-Telegram_Group-red?color=blue&logo=telegram&logoColor=white" alt="Telegram"></a>
 <a href="https://github.com/open-pilipili/EmbyStream/commit/main"><img src="https://img.shields.io/github/commit-activity/m/open-pilipili/EmbyStream/main" alt="Commit Activity"></a>
 <a href="https://github.com/open-pilipili/EmbyStream"><img src="https://img.shields.io/github/languages/top/open-pilipili/EmbyStream" alt="Top Language"></a>
+<a href="https://crates.io/crates/embystream"><img src="https://img.shields.io/crates/v/embystream.svg" alt="crates.io"></a>
 <a href="https://github.com/open-pilipili/EmbyStream/blob/main/LICENSE"><img src="https://img.shields.io/github/license/open-pilipili/EmbyStream" alt="Github License"></a>
 <a href="https://github.com/Open-PiliPili/EmbyStream/actions/workflows/ci.yaml"><img src="https://github.com/Open-PiliPili/EmbyStream/actions/workflows/ci.yaml/badge.svg" alt="Linux CI"></a> <a href="https://github.com/open-pilipili/EmbyStream/wiki"><img src="https://img.shields.io/badge/-Wiki-red?color=blue&logo=github&logoColor=white" alt="Wiki"></a>
 </p>
