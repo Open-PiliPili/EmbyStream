@@ -36,12 +36,11 @@ use super::{
     template_payload::build_template_raw,
     terminal::{
         WIZ_DIALOG_LINES_BELOW_QUESTION, print_error, print_field_input_tip,
-        print_field_intro_line, print_field_name_line,
-        print_field_result_separator, print_field_value_line,
-        print_field_value_line_compact, print_hint, print_ok,
-        print_select_file_list_tip, print_subsection_title, print_table_header,
-        print_title, print_welcome_banner, print_yes_no_result,
-        rewrite_default_prompt_as_checkmark,
+        print_field_intro_line, print_field_result_separator,
+        print_field_value_line, print_field_value_line_compact, print_hint,
+        print_ok, print_select_file_list_tip, print_subsection_title,
+        print_table_header, print_title, print_welcome_banner,
+        print_yes_no_result, rewrite_default_prompt_as_checkmark,
     },
     wizard_input_theme::{WIZ_INPUT_THEME, WizardInputTheme},
 };
@@ -687,7 +686,6 @@ fn select_stream_mode() -> Result<StreamMode> {
         2 => StreamMode::Dual,
         _ => StreamMode::Frontend,
     };
-    print_field_name_line("stream_mode");
     print_field_value_line(match mode {
         StreamMode::Frontend => "frontend",
         StreamMode::Backend => "backend",

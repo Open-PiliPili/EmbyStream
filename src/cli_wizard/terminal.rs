@@ -85,11 +85,6 @@ pub fn print_ok(s: &str) {
     );
 }
 
-/// Short label line: `===> stream_mode` (before `===> ✔ …` for clarity).
-pub fn print_field_name_line(name: &str) {
-    println!("{}{}", style_step(), Style::new().bold().apply_to(name));
-}
-
 /// One line before `Input`: `===> level (…, Default: info)` and/or `Example: …`.
 /// Section title gives context; `name` is the field only. Omit `? value` preview — defaults live here.
 pub fn print_field_intro_line(
