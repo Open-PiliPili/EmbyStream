@@ -536,14 +536,13 @@ impl AppStreamService {
         let Some(cfg) = node.webdav.as_ref() else {
             return Ok(None);
         };
-        let no_creds =
-            cfg.username.trim().is_empty() && cfg.password.trim().is_empty();
-        if no_creds {
+        if !webdav_auth::credentials_configured(cfg) {
             return Ok(None);
         }
 
         match webdav_auth::authorization_header_for_proxy(
             &self.state.webdav_auth_cache,
+            &self.state.webdav_auth_probe_locks,
             node,
             uri,
             cfg,

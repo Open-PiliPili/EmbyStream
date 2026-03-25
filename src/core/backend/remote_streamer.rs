@@ -169,6 +169,7 @@ impl RemoteStreamer {
 
         let auth_line = match webdav_auth::authorization_header_for_proxy(
             &state.webdav_auth_cache,
+            &state.webdav_auth_probe_locks,
             node,
             &url,
             cfg,

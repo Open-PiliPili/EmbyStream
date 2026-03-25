@@ -1,7 +1,7 @@
-use std::{collections::HashSet, ops::Deref as DerefTrait};
+use std::{collections::HashSet, ops::Deref as DerefTrait, sync::Arc};
 
 use dashmap::DashMap;
-use tokio::sync::{OnceCell, RwLock as TokioRwLock};
+use tokio::sync::{Mutex as TokioMutex, OnceCell, RwLock as TokioRwLock};
 
 use crate::{
     cache::{GeneralCache, MetadataCache, RateLimiterCache},
@@ -27,6 +27,7 @@ pub struct AppState {
     api_response_cache: OnceCell<GeneralCache>,
     rate_limiter_cache: OnceCell<DashMap<String, RateLimiterCache>>,
     pub(crate) webdav_auth_cache: DashMap<String, String>,
+    pub(crate) webdav_auth_probe_locks: DashMap<String, Arc<TokioMutex<()>>>,
 }
 
 impl AppState {
@@ -44,6 +45,7 @@ impl AppState {
             api_response_cache: OnceCell::new(),
             rate_limiter_cache: OnceCell::new(),
             webdav_auth_cache: DashMap::new(),
+            webdav_auth_probe_locks: DashMap::new(),
         }
     }
 
