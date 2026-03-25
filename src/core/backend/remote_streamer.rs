@@ -12,7 +12,7 @@ use super::{
 };
 use crate::{
     AppState, REMOTE_STREAMER_LOGGER_DOMAIN, config::backend::BackendNode,
-    error_log, gateway::error::Error as GatewayError,
+    error_log, gateway::error::Error as GatewayError, info_log,
 };
 
 /// Parameters for proxying a ranged GET to an upstream HTTP(S) origin.
@@ -25,6 +25,8 @@ pub struct RemoteStreamParams<'a> {
     pub client: Option<String>,
     pub client_ip: Option<String>,
     pub node: &'a BackendNode,
+    /// One UUID per proxied client request (probe + GET + optional 401 retry share this id).
+    pub stream_session_id: String,
 }
 
 fn is_webdav_node(node: &BackendNode) -> bool {
@@ -63,6 +65,7 @@ impl RemoteStreamer {
             client,
             client_ip,
             node,
+            stream_session_id,
         } = params;
 
         if !client_headers.contains_key(header::RANGE) {
@@ -83,6 +86,7 @@ impl RemoteStreamer {
             client_headers,
             &user_agent,
             extra_ref,
+            Some(stream_session_id.as_str()),
         )
         .await
         .map_err(|e| {
@@ -101,6 +105,7 @@ impl RemoteStreamer {
             url,
             client_headers,
             &user_agent,
+            stream_session_id.as_str(),
         )
         .await?;
 
@@ -144,6 +149,7 @@ impl RemoteStreamer {
         url: Uri,
         headers: &HeaderMap,
         user_agent: &str,
+        stream_session_id: &str,
     ) -> Result<HyperResponse<Incoming>, StatusCode> {
         let status = upstream_resp.status();
 
@@ -161,6 +167,14 @@ impl RemoteStreamer {
             StatusCode::BAD_GATEWAY
         })?;
 
+        info_log!(
+            REMOTE_STREAMER_LOGGER_DOMAIN,
+            "webdav_upstream_401_retry webdav_upstream_401_retry=1 node={} uri_hint={}{}",
+            node.name,
+            upstream_proxy::upstream_uri_hint(&url),
+            upstream_proxy::stream_session_log_suffix(Some(stream_session_id)),
+        );
+
         let Some(cfg) = node.webdav.as_ref() else {
             return Err(StatusCode::UNAUTHORIZED);
         };
@@ -174,6 +188,7 @@ impl RemoteStreamer {
             &url,
             cfg,
             Some(headers),
+            Some(stream_session_id),
         )
         .await
         {
@@ -190,15 +205,21 @@ impl RemoteStreamer {
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-        upstream_proxy::forward_get(url, headers, user_agent, Some(&refreshed))
-            .await
-            .map_err(|e| {
-                error_log!(
-                    REMOTE_STREAMER_LOGGER_DOMAIN,
-                    "Upstream retry failed: {}",
-                    e
-                );
-                StatusCode::BAD_GATEWAY
-            })
+        upstream_proxy::forward_get(
+            url,
+            headers,
+            user_agent,
+            Some(&refreshed),
+            Some(stream_session_id),
+        )
+        .await
+        .map_err(|e| {
+            error_log!(
+                REMOTE_STREAMER_LOGGER_DOMAIN,
+                "Upstream retry failed: {}",
+                e
+            );
+            StatusCode::BAD_GATEWAY
+        })
     }
 }

@@ -70,6 +70,7 @@ async fn probe_and_cache_basic_line(
     upstream_uri: &Uri,
     cfg: &WebDavConfig,
     client_headers: Option<&HeaderMap>,
+    stream_session_id: Option<&str>,
 ) -> Result<String, ()> {
     let auth_line = basic_authorization_header(&cfg.username, &cfg.password);
     let ua = probe_user_agent(client_headers, cfg);
@@ -84,6 +85,7 @@ async fn probe_and_cache_basic_line(
         upstream_uri.clone(),
         &auth_line,
         &ua,
+        stream_session_id,
     )
     .await
     .map_err(|_| ())?;
@@ -112,6 +114,7 @@ pub async fn authorization_header_for_proxy(
     upstream_uri: &Uri,
     cfg: &WebDavConfig,
     client_headers: Option<&HeaderMap>,
+    stream_session_id: Option<&str>,
 ) -> Result<Option<String>, ()> {
     if !credentials_configured(cfg) {
         return Ok(None);
@@ -153,6 +156,7 @@ pub async fn authorization_header_for_proxy(
         upstream_uri,
         cfg,
         client_headers,
+        stream_session_id,
     )
     .await?;
     Ok(Some(line))
@@ -353,6 +357,7 @@ mod tests {
                     &node,
                     &uri,
                     &cfg,
+                    None,
                     None,
                 )
                 .await

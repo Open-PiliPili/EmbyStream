@@ -28,6 +28,7 @@ use crate::{
     system::SystemInfo,
     util::{StringUtil, UriExt},
 };
+use uuid::Uuid;
 
 /// Trait for handling streaming requests
 ///
@@ -529,6 +530,7 @@ impl AppStreamService {
         node: &BackendNode,
         uri: &Uri,
         client_headers: &hyper::HeaderMap,
+        stream_session_id: Option<&str>,
     ) -> Result<Option<hyper::HeaderMap>, StatusCode> {
         if !node.backend_type.eq_ignore_ascii_case(webdav::BACKEND_TYPE) {
             return Ok(None);
@@ -547,6 +549,7 @@ impl AppStreamService {
             uri,
             cfg,
             Some(client_headers),
+            stream_session_id,
         )
         .await
         {
@@ -631,11 +634,13 @@ impl StreamService for AppStreamService {
                 ProxyMode::Proxy => {
                     let user_agent =
                         Self::resolve_upstream_user_agent(node, &request);
+                    let stream_session_id = Uuid::new_v4().to_string();
                     let extra_headers = self
                         .webdav_proxy_auth_headers(
                             node,
                             &uri,
                             &request.original_headers,
+                            Some(stream_session_id.as_str()),
                         )
                         .await?;
 
@@ -648,6 +653,7 @@ impl StreamService for AppStreamService {
                         client: request.client(),
                         client_ip: request.client_ip(),
                         node,
+                        stream_session_id,
                     })
                     .await
                 }
