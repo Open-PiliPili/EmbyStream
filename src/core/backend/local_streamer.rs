@@ -2,15 +2,16 @@ use std::{
     collections::HashMap,
     io::{Error as IoError, ErrorKind},
     path::{Path, PathBuf},
+    pin::Pin,
     sync::Arc,
 };
 
-use futures_util::TryStreamExt;
+use bytes::Bytes;
+use futures_util::{StreamExt, TryStreamExt};
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::{HeaderMap, StatusCode, header};
 use lazy_static::lazy_static;
-use tokio::sync::Semaphore;
 
 use super::{
     read_stream::ReaderStream,
@@ -18,7 +19,8 @@ use super::{
     result::Result as AppStreamResult,
     types::{ClientInfo, ContentRange, RangeParseError},
 };
-use crate::cache::FileMetadata;
+use crate::cache::{FileMetadata, RateLimiter};
+use crate::gateway::error::Error as GatewayError;
 use crate::{
     AppState, LOCAL_STREAMER_LOGGER_DOMAIN, debug_log, error_log, info_log,
     warn_log,
@@ -50,19 +52,17 @@ impl LocalStreamer {
             }
         };
 
-        let rate_limiter_cache = state
-            .get_rate_limiter_cache(node_uuid)
-            .await
-            .ok_or_else(|| {
-                error_log!(
+        let limiter = match state.get_rate_limiter_cache(node_uuid).await {
+            Some(cache) => cache.fetch_limiter(&client_id_value).await,
+            None => {
+                debug_log!(
                     LOCAL_STREAMER_LOGGER_DOMAIN,
-                    "Rate limiter cache not found for node uuid: {}",
+                    "No rate limiter for node uuid {} (non-Disk local path); streaming unlimited",
                     node_uuid
                 );
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-
-        let limiter = rate_limiter_cache.fetch_limiter(&client_id_value).await;
+                RateLimiter::unlimited()
+            }
+        };
 
         let problematic_clients = state.get_problematic_clients().await;
 
@@ -121,7 +121,7 @@ impl LocalStreamer {
             &file_metadata,
             content_range,
             StatusCode::PARTIAL_CONTENT,
-            limiter.semaphore.clone(),
+            limiter,
         )
         .await
     }
@@ -131,7 +131,7 @@ impl LocalStreamer {
         file_metadata: &FileMetadata,
         content_range: ContentRange,
         status_code: StatusCode,
-        semaphore: Arc<Semaphore>,
+        limiter: Arc<RateLimiter>,
     ) -> Result<AppStreamResult, StatusCode> {
         info_log!(
             LOCAL_STREAMER_LOGGER_DOMAIN,
@@ -140,26 +140,43 @@ impl LocalStreamer {
             content_range,
         );
 
-        let stream = ReaderStream::new(path, content_range)
-            .into_stream()
-            .and_then(move |chunk| {
-                let semaphore_clone = semaphore.clone();
-                async move {
-                    match semaphore_clone.acquire_many(chunk.len() as u32).await
-                    {
-                        Ok(permit) => {
-                            permit.forget();
-                            Ok(chunk)
+        type Framed = Pin<
+            Box<
+                dyn futures_util::Stream<
+                        Item = Result<Frame<Bytes>, GatewayError>,
+                    > + Send
+                    + Sync,
+            >,
+        >;
+
+        let stream: Framed = if limiter.skip_semaphore {
+            let s = ReaderStream::new(path.to_path_buf(), content_range)
+                .into_stream()
+                .map(|res| res.map(Frame::data).map_err(GatewayError::from));
+            Box::pin(s)
+        } else {
+            let sem = limiter.semaphore.clone();
+            let s = ReaderStream::new(path.to_path_buf(), content_range)
+                .into_stream()
+                .and_then(move |chunk| {
+                    let sem = sem.clone();
+                    async move {
+                        match sem.acquire_many(chunk.len() as u32).await {
+                            Ok(permit) => {
+                                permit.forget();
+                                Ok(chunk)
+                            }
+                            Err(_) => Err(IoError::new(
+                                ErrorKind::BrokenPipe,
+                                "Semaphore closed",
+                            )),
                         }
-                        Err(_) => Err(IoError::new(
-                            ErrorKind::BrokenPipe,
-                            "Semaphore closed",
-                        )),
                     }
-                }
-            })
-            .map_ok(Frame::data)
-            .map_err(Into::into);
+                })
+                .map_ok(Frame::data)
+                .map_err(GatewayError::from);
+            Box::pin(s)
+        };
 
         let mut headers = HeaderMap::new();
         headers.insert(

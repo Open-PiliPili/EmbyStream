@@ -6,6 +6,7 @@ use tokio::sync::{Mutex as TokioMutex, OnceCell, RwLock as TokioRwLock};
 use crate::{
     cache::{GeneralCache, MetadataCache, RateLimiterCache},
     config::core::Config,
+    core::backend::constants::DISK_BACKEND_TYPE,
     util::path_rewriter::PathRewriter,
 };
 
@@ -177,7 +178,15 @@ impl AppState {
                 let (capacity, ttl) = self.get_cache_settings().await;
                 let map = DashMap::new();
 
+                // Per-client byte limiting is only applied in `LocalStreamer` (Disk → local file).
+                // WebDAV / OpenList / DirectLink / StreamRelay proxy paths do not use this cache.
                 for node in &config.backend_nodes {
+                    if !node
+                        .backend_type
+                        .eq_ignore_ascii_case(DISK_BACKEND_TYPE)
+                    {
+                        continue;
+                    }
                     let cache = RateLimiterCache::new(
                         capacity * 2,
                         ttl,

@@ -46,6 +46,7 @@ impl RateLimiterCache {
         if self.rate_kbs == 0 {
             return Arc::new(RateLimiter {
                 semaphore: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
+                skip_semaphore: true,
             });
         }
 
@@ -60,6 +61,7 @@ impl RateLimiterCache {
 
                 let limiter = Arc::new(RateLimiter {
                     semaphore: Arc::new(Semaphore::new(bytes_per_sec)),
+                    skip_semaphore: false,
                 });
 
                 self.active_limiters

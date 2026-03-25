@@ -50,19 +50,28 @@ impl ReaderStream {
     fn read_file_to_channel(
         path: &PathBuf,
         content_range: ContentRange,
-        chunk_size: usize,
+        main_chunk: usize,
         tx: mpsc::Sender<Result<Bytes, IoError>>,
     ) -> Result<(), IoError> {
         let file = StdFile::open(path)?;
-        let mut reader = BufReader::new(file);
+        let mut reader = BufReader::with_capacity(main_chunk, file);
 
         reader.seek(SeekFrom::Start(content_range.start))?;
 
         let mut limited_reader = reader.take(content_range.length());
-        let mut buffer = vec![0; chunk_size];
+        let mut buffer = vec![0u8; main_chunk];
+        let mut is_first_read = true;
 
         loop {
-            let bytes_read = limited_reader.read(&mut buffer)?;
+            let read_cap = if is_first_read {
+                is_first_read = false;
+                const FIRST_READ_CAP: usize = 256 * 1024;
+                FIRST_READ_CAP.min(main_chunk).max(1)
+            } else {
+                main_chunk
+            };
+
+            let bytes_read = limited_reader.read(&mut buffer[..read_cap])?;
             if bytes_read == 0 {
                 break;
             }
@@ -82,13 +91,7 @@ impl ReaderStream {
 
     #[inline]
     fn get_chunk_size_for_streaming(&self) -> usize {
-        const KB: usize = 1024;
-        const MB: usize = 1024 * KB;
-        if self.content_range.start > 0 {
-            4 * MB
-        } else {
-            2 * MB
-        }
+        disk_main_read_chunk(self.content_range.start)
     }
 
     #[inline]
@@ -99,5 +102,30 @@ impl ReaderStream {
             .try_into()
             .unwrap_or(128)
             .clamp(4, 128)
+    }
+}
+
+/// Steady-state read size for Disk local streaming (PLAN-04): larger after first byte for throughput.
+#[inline]
+pub(crate) fn disk_main_read_chunk(range_start: u64) -> usize {
+    const KB: usize = 1024;
+    const MB: usize = 1024 * KB;
+    if range_start > 0 { 4 * MB } else { 2 * MB }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::disk_main_read_chunk;
+
+    #[test]
+    fn disk_main_read_chunk_from_zero_is_2mb() {
+        const MB: usize = 1024 * 1024;
+        assert_eq!(disk_main_read_chunk(0), 2 * MB);
+    }
+
+    #[test]
+    fn disk_main_read_chunk_after_seek_is_4mb() {
+        const MB: usize = 1024 * 1024;
+        assert_eq!(disk_main_read_chunk(1), 4 * MB);
     }
 }
