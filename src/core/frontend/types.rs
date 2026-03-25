@@ -156,15 +156,16 @@ mod tests {
         let header = r#"Token="335558c5e9194253a20ba0edd65dd4a6", Version="8.3.4", DeviceId="4FEDEC52-9195-4867-BD9F-D77C0ABFEBDD", Device="Apple TV", Client="Infuse-Direct""#;
         let auth = InfuseAuthorization::from_header_str(header);
         assert!(auth.is_some(), "Should parse Token header");
-        let auth = auth.unwrap();
-        assert_eq!(
-            auth.media_browser_token,
-            "335558c5e9194253a20ba0edd65dd4a6"
-        );
-        assert_eq!(auth.version, "8.3.4");
-        assert_eq!(auth.device_id, "4FEDEC52-9195-4867-BD9F-D77C0ABFEBDD");
-        assert_eq!(auth.device, "Apple TV");
-        assert_eq!(auth.client, "Infuse-Direct");
+        if let Some(auth) = auth {
+            assert_eq!(
+                auth.media_browser_token,
+                "335558c5e9194253a20ba0edd65dd4a6"
+            );
+            assert_eq!(auth.version, "8.3.4");
+            assert_eq!(auth.device_id, "4FEDEC52-9195-4867-BD9F-D77C0ABFEBDD");
+            assert_eq!(auth.device, "Apple TV");
+            assert_eq!(auth.client, "Infuse-Direct");
+        }
     }
 
     #[test]
@@ -172,23 +173,32 @@ mod tests {
         let header = r#"MediaBrowser Token="335558c5e9194253a20ba0edd65dd4a6", Version="8.3.4", DeviceId="4FEDEC52-9195-4867-BD9F-D77C0ABFEBDD", Device="Apple TV", Client="Infuse-Direct""#;
         let auth = InfuseAuthorization::from_header_str(header);
         assert!(auth.is_some(), "Should parse MediaBrowser Token header");
-        let auth = auth.unwrap();
-        assert_eq!(
-            auth.media_browser_token,
-            "335558c5e9194253a20ba0edd65dd4a6"
-        );
+        if let Some(auth) = auth {
+            assert_eq!(
+                auth.media_browser_token,
+                "335558c5e9194253a20ba0edd65dd4a6"
+            );
+        }
     }
 
     #[test]
     fn test_get_token_case_insensitive() {
         let header = r#"Token="test123", Version="8.3.4", DeviceId="test-id", Device="Test", Client="Test""#;
-        let auth = InfuseAuthorization::from_header_str(header).unwrap();
+        let auth = InfuseAuthorization::from_header_str(header);
+        assert!(auth.is_some());
 
-        // Test case-insensitive access
-        assert_eq!(auth.get("Token"), Some("test123".to_string()));
-        assert_eq!(auth.get("token"), Some("test123".to_string()));
-        assert_eq!(auth.get("TOKEN"), Some("test123".to_string()));
-        assert_eq!(auth.get("MediaBrowser Token"), Some("test123".to_string()));
-        assert_eq!(auth.get("mediabrowser token"), Some("test123".to_string()));
+        if let Some(auth) = auth {
+            assert_eq!(auth.get("Token"), Some("test123".to_string()));
+            assert_eq!(auth.get("token"), Some("test123".to_string()));
+            assert_eq!(auth.get("TOKEN"), Some("test123".to_string()));
+            assert_eq!(
+                auth.get("MediaBrowser Token"),
+                Some("test123".to_string())
+            );
+            assert_eq!(
+                auth.get("mediabrowser token"),
+                Some("test123".to_string())
+            );
+        }
     }
 }

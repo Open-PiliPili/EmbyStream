@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, path::PathBuf, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
 use hyper::{StatusCode, Uri, header};
@@ -19,7 +19,9 @@ use super::{
 use crate::backend::types::ClientInfo;
 use crate::config::backend::BackendNode;
 use crate::core::redirect_info::RedirectInfo;
-use crate::{AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log};
+use crate::{
+    AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log,
+};
 use crate::{
     client::{ClientBuilder, OpenListClient},
     core::{
@@ -74,6 +76,8 @@ impl AppStreamService {
         &self,
         request: &AppStreamRequest,
     ) -> Result<Source, AppStreamError> {
+        let timer = Instant::now();
+
         let sign = request
             .sign
             .as_ref()
@@ -108,7 +112,9 @@ impl AppStreamService {
             proxy_mode
         );
 
-        if node.backend_type.eq_ignore_ascii_case(webdav::BACKEND_TYPE)
+        let result = if node
+            .backend_type
+            .eq_ignore_ascii_case(webdav::BACKEND_TYPE)
             && Uri::is_local(&uri)
         {
             let path_str = Uri::to_path_or_url_string(&uri);
@@ -123,99 +129,128 @@ impl AppStreamService {
                 "WebDav upstream URI: {}",
                 upstream
             );
-            return Ok(Source::Remote {
+            Ok(Source::Remote {
                 uri: upstream,
                 mode: proxy_mode,
-            });
-        }
-
-        if !Uri::is_local(&uri) {
+            })
+        } else if !Uri::is_local(&uri) {
             debug_log!(STREAM_LOGGER_DOMAIN, "URI is already remote: {}", uri);
-            return Ok(Source::Remote {
+            Ok(Source::Remote {
                 uri,
                 mode: proxy_mode,
-            });
-        }
+            })
+        } else {
+            let disk =
+                node.backend_type.eq_ignore_ascii_case(DISK_BACKEND_TYPE);
+            let stream_relay = node
+                .backend_type
+                .eq_ignore_ascii_case(STREAM_RELAY_BACKEND_TYPE);
+            let remote_host = Self::node_has_remote_stream_base(node);
 
-        let disk = node.backend_type.eq_ignore_ascii_case(DISK_BACKEND_TYPE);
-        let stream_relay = node
-            .backend_type
-            .eq_ignore_ascii_case(STREAM_RELAY_BACKEND_TYPE);
-        let remote_host = Self::node_has_remote_stream_base(node);
-
-        if stream_relay || remote_host {
-            if stream_relay
-                && (backend_base_url_is_empty(&node.base_url)
-                    || backend_base_url_is_local_host(&node.base_url))
-            {
-                error_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "StreamRelay node '{}' has loopback/empty base_url; refused to avoid redirect loops",
-                    node.name
-                );
-                return Err(AppStreamError::StreamRelayForbiddenLocalTarget);
-            }
-            if disk && remote_host {
-                error_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "Disk node '{}' has non-local base_url; use type StreamRelay for remote relay",
-                    node.name
-                );
-                return Err(AppStreamError::DiskRemoteNotSupported);
-            }
-            let remote_uri =
-                Self::build_node_remote_uri(node, request.uri.query())?;
-            if stream_relay {
-                info_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "StreamRelay node '{}': forwarding signed request to {}",
-                    node.name,
-                    remote_uri
-                );
+            if stream_relay || remote_host {
+                if stream_relay
+                    && (backend_base_url_is_empty(&node.base_url)
+                        || backend_base_url_is_local_host(&node.base_url))
+                {
+                    error_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "StreamRelay node '{}' has loopback/empty base_url; \
+                        refused to avoid redirect loops",
+                        node.name
+                    );
+                    return Err(
+                        AppStreamError::StreamRelayForbiddenLocalTarget,
+                    );
+                }
+                if disk && remote_host {
+                    error_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "Disk node '{}' has non-local base_url; \
+                        use type StreamRelay for remote relay",
+                        node.name
+                    );
+                    return Err(AppStreamError::DiskRemoteNotSupported);
+                }
+                let remote_uri =
+                    Self::build_node_remote_uri(node, request.uri.query())?;
+                if stream_relay {
+                    info_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "StreamRelay node '{}': forwarding signed request to {}",
+                        node.name,
+                        remote_uri
+                    );
+                } else {
+                    info_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "Node '{}' points to remote server, forwarding to: {}",
+                        node.name,
+                        remote_uri
+                    );
+                }
+                Ok(Source::Remote {
+                    uri: remote_uri,
+                    mode: proxy_mode,
+                })
             } else {
-                info_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "Node '{}' points to remote server, forwarding to: {}",
-                    node.name,
-                    remote_uri
-                );
-            }
-            return Ok(Source::Remote {
-                uri: remote_uri,
-                mode: proxy_mode,
-            });
-        }
-
-        let path = PathBuf::from(Uri::to_path_or_url_string(&uri));
-        debug_log!(STREAM_LOGGER_DOMAIN, "Routing to local path {:?}", path);
-
-        if path.exists() {
-            return Ok(Source::Local { path, device_id });
-        }
-
-        debug_log!(
-            STREAM_LOGGER_DOMAIN,
-            "File not found at original path: {:?}, checking fallback",
-            path
-        );
-
-        let fallback_path = self.get_fallback_path().await;
-        match fallback_path {
-            Some(fallback_path) => {
+                let path = PathBuf::from(Uri::to_path_or_url_string(&uri));
                 debug_log!(
                     STREAM_LOGGER_DOMAIN,
-                    "Using fallback path: {:?}",
-                    fallback_path
+                    "Routing to local path {:?}",
+                    path
                 );
-                Ok(Source::Local {
-                    path: fallback_path,
-                    device_id,
-                })
+
+                if path.exists() {
+                    Ok(Source::Local { path, device_id })
+                } else {
+                    debug_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "File not found at original path: {:?}, checking fallback",
+                        path
+                    );
+
+                    let fallback_path = self.get_fallback_path().await;
+                    match fallback_path {
+                        Some(fallback_path) => {
+                            debug_log!(
+                                STREAM_LOGGER_DOMAIN,
+                                "Using fallback path: {:?}",
+                                fallback_path
+                            );
+                            Ok(Source::Local {
+                                path: fallback_path,
+                                device_id,
+                            })
+                        }
+                        None => Err(AppStreamError::FileNotFound(
+                            path.display().to_string(),
+                        )),
+                    }
+                }
             }
-            None => {
-                Err(AppStreamError::FileNotFound(path.display().to_string()))
-            }
+        };
+
+        let elapsed_ms = timer.elapsed().as_millis();
+        if elapsed_ms >= 100 {
+            warn_log!(
+                STREAM_LOGGER_DOMAIN,
+                "route_with_sign_slow elapsed_ms={} node={}",
+                elapsed_ms,
+                request
+                    .node
+                    .as_ref()
+                    .map(|n| n.name.as_str())
+                    .unwrap_or("-")
+            );
+        } else {
+            debug_log!(
+                STREAM_LOGGER_DOMAIN,
+                "route_with_sign_complete elapsed_ms={}",
+                elapsed_ms
+            );
         }
+
+        result
     }
 
     /// Non-empty `base_url` that is not a loopback placeholder — use node's stream URL for relay.
@@ -332,6 +367,8 @@ impl AppStreamService {
         uri: &Uri,
         request: &AppStreamRequest,
     ) -> Result<Uri, AppStreamError> {
+        let timer = Instant::now();
+
         if !Uri::is_local(uri) {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
@@ -350,9 +387,11 @@ impl AppStreamService {
         if let Some(cached_uri) =
             cache.get(&self.open_list_cache_key(uri, &openlist_ua.clone()))
         {
+            let elapsed_ms = timer.elapsed().as_millis();
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
-                "Open list cache hit: {:?}",
+                "openlist_cache_hit elapsed_ms={} uri={:?}",
+                elapsed_ms,
                 cached_uri
             );
             return Ok(cached_uri);
@@ -364,7 +403,15 @@ impl AppStreamService {
             .ok_or(AppStreamError::BackendNodeNotFound)?;
         let openlist_config = match &node.open_list {
             Some(cfg) => cfg,
-            None => return Ok(uri.clone()),
+            None => {
+                let elapsed_ms = timer.elapsed().as_millis();
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "openlist_skip_no_config elapsed_ms={}",
+                    elapsed_ms
+                );
+                return Ok(uri.clone());
+            }
         };
 
         debug_log!(
@@ -393,14 +440,27 @@ impl AppStreamService {
             )
             .await;
 
+        let elapsed_ms = timer.elapsed().as_millis();
+
         match result {
             Ok(new_url) => {
-                debug_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "✓ OpenList resolved: '{}' → '{}'",
-                    uri,
-                    new_url
-                );
+                if elapsed_ms >= 500 {
+                    warn_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "openlist_fetch_slow elapsed_ms={} node={} url={}",
+                        elapsed_ms,
+                        node.name,
+                        new_url
+                    );
+                } else {
+                    debug_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "openlist_fetch_complete elapsed_ms={} url={}",
+                        elapsed_ms,
+                        new_url
+                    );
+                }
+
                 let new_uri =
                     Uri::force_from_path_or_url(&new_url).map_err(|e| {
                         error_log!(
@@ -417,18 +477,13 @@ impl AppStreamService {
                     new_uri.clone(),
                 );
 
-                debug_log!(
-                    STREAM_LOGGER_DOMAIN,
-                    "Successfully fetched Openlist url: {:?}",
-                    new_uri
-                );
-
                 Ok(new_uri)
             }
             Err(e) => {
                 error_log!(
                     STREAM_LOGGER_DOMAIN,
-                    "Failed to fetch Openlist url: {:?}",
+                    "openlist_fetch_error elapsed_ms={} error={:?}",
+                    elapsed_ms,
                     e
                 );
 

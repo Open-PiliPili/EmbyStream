@@ -84,3 +84,7 @@ tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-subscriber = { version = "0.3.23", features = ["std", "fmt", "env-filter", "tracing-log", "json", "time", "local-time"] }
 uuid = { version = "1.22.0", features = ["v4"] }
+
+[dev-dependencies]
+filetime = "0.2.27"
+tempfile = "3.27.0"

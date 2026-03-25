@@ -25,6 +25,8 @@ fn should_use_debug(ctx: &Context) -> bool {
         && find_cacheable_route(&ctx.path, ctx.method.as_str()).is_none()
 }
 
+const SLOW_REQUEST_THRESHOLD_MS: u128 = 1000;
+
 #[derive(Clone)]
 pub struct LoggerMiddleware;
 
@@ -37,57 +39,71 @@ impl Middleware for LoggerMiddleware {
         next: Next,
     ) -> Response<BoxBodyType> {
         let use_debug = should_use_debug(&ctx);
+        let request_id = ctx.request_id.clone();
+        let start_time = ctx.start_time;
 
         cond_log!(
             use_debug,
             GATEWAY_LOGGER_DOMAIN,
-            "Incoming request details:"
-        );
-        cond_log!(
-            use_debug,
-            GATEWAY_LOGGER_DOMAIN,
-            "Request scheme and host: {:?}",
-            ctx.get_host()
-        );
-        cond_log!(
-            use_debug,
-            GATEWAY_LOGGER_DOMAIN,
-            "Request query: {:?}",
-            ctx.get_query_params()
-        );
-        cond_log!(
-            use_debug,
-            GATEWAY_LOGGER_DOMAIN,
-            "Request method: {} path: {}",
+            "request_start request_id={} method={} path={}",
+            request_id,
             ctx.method,
             ctx.path
         );
         cond_log!(
             use_debug,
             GATEWAY_LOGGER_DOMAIN,
-            "Request headers: {:?}",
+            "request_details request_id={} host={:?} query={:?}",
+            request_id,
+            ctx.get_host(),
+            ctx.get_query_params()
+        );
+        cond_log!(
+            use_debug,
+            GATEWAY_LOGGER_DOMAIN,
+            "request_headers request_id={} headers={:?}",
+            request_id,
             ctx.headers
         );
 
         if ctx.headers.contains_key(header::CONTENT_LENGTH) {
             debug_log!(
                 GATEWAY_LOGGER_DOMAIN,
-                "Request contains a body (content not logged to preserve stream)"
+                "request_body request_id={} has_body=true",
+                request_id
             );
         }
 
         let response = next(ctx, body).await;
 
+        let elapsed_ms = start_time.elapsed().as_millis();
+        let status = response.status();
+        let is_slow = elapsed_ms >= SLOW_REQUEST_THRESHOLD_MS;
+
+        if is_slow || !use_debug {
+            info_log!(
+                GATEWAY_LOGGER_DOMAIN,
+                "request_complete request_id={} status={} elapsed_ms={} slow={}",
+                request_id,
+                status.as_u16(),
+                elapsed_ms,
+                is_slow
+            );
+        } else {
+            debug_log!(
+                GATEWAY_LOGGER_DOMAIN,
+                "request_complete request_id={} status={} elapsed_ms={}",
+                request_id,
+                status.as_u16(),
+                elapsed_ms
+            );
+        }
+
         cond_log!(
             use_debug,
             GATEWAY_LOGGER_DOMAIN,
-            "Response status: {}",
-            response.status()
-        );
-        cond_log!(
-            use_debug,
-            GATEWAY_LOGGER_DOMAIN,
-            "Response headers: {:?}",
+            "response_headers request_id={} headers={:?}",
+            request_id,
             response.headers()
         );
 

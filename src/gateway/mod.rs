@@ -15,6 +15,9 @@ pub mod reverse_proxy;
 pub mod reverse_proxy_filter;
 pub mod svc;
 
+#[cfg(test)]
+mod logger_test;
+
 pub use chain::{Handler as MiddlewareHandler, Middleware, Next};
 pub use context::Context as MiddlewareContext;
 pub use core::Gateway as MiddlewareServer;

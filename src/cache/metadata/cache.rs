@@ -8,7 +8,7 @@ use moka::future::Cache;
 use tokio::fs::metadata as TokioMetadata;
 
 use crate::cache::metadata::{Error, Metadata};
-use crate::{METADATA_CACHE_LOGGER_DOMAIN, debug_log, info_log};
+use crate::{METADATA_CACHE_LOGGER_DOMAIN, debug_log, warn_log};
 
 /// FUSE and network filesystems often take 100-500ms for metadata queries.
 const SLOW_METADATA_FETCH_THRESHOLD_MS: u128 = 100;
@@ -45,10 +45,17 @@ impl MetadataCache {
 
                 let fetch_ms = fetch_start.elapsed().as_millis();
                 if fetch_ms > SLOW_METADATA_FETCH_THRESHOLD_MS {
-                    info_log!(
+                    warn_log!(
                         METADATA_CACHE_LOGGER_DOMAIN,
-                        "Slow metadata fetch: path={:?} fetch_ms={} \
+                        "metadata_fetch_slow path={:?} elapsed_ms={} \
                          hint=FUSE_or_network_filesystem",
+                        path,
+                        fetch_ms
+                    );
+                } else {
+                    debug_log!(
+                        METADATA_CACHE_LOGGER_DOMAIN,
+                        "metadata_fetch_complete path={:?} elapsed_ms={}",
                         path,
                         fetch_ms
                     );
@@ -83,7 +90,7 @@ impl MetadataCache {
         if total_ms > CONCURRENT_WAIT_THRESHOLD_MS {
             debug_log!(
                 METADATA_CACHE_LOGGER_DOMAIN,
-                "Metadata fetch completed: path={:?} total_ms={} \
+                "metadata_concurrent_wait path={:?} total_ms={} \
                  hint=may_include_concurrent_wait",
                 path_buf,
                 total_ms

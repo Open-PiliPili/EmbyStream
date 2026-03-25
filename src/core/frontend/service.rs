@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     path::{Path, PathBuf},
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use async_trait::async_trait;
@@ -18,7 +18,9 @@ use tokio::sync::OnceCell;
 use super::types::{
     ForwardConfig, ForwardInfo, InfuseAuthorization, PathParams,
 };
-use crate::{AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log};
+use crate::{
+    AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log,
+};
 use crate::{
     client::{ClientBuilder, EmbyClient},
     core::{
@@ -30,6 +32,7 @@ use crate::{
 };
 
 const MAX_STRM_FILE_SIZE: u64 = 1024 * 1024;
+const SLOW_FRONTEND_ROUTING_THRESHOLD_MS: u128 = 200;
 
 #[async_trait]
 pub trait ForwardService: Send + Sync {
@@ -532,6 +535,8 @@ impl ForwardService for AppForwardService {
         request: AppForwardRequest,
         path_params: PathParams,
     ) -> Result<RedirectInfo, StatusCode> {
+        let timer = Instant::now();
+
         let forward_info = self
             .get_forward_info(&path_params, &request)
             .await
@@ -550,27 +555,48 @@ impl ForwardService for AppForwardService {
             forward_info
         );
 
-        let remote_uri = self
-            .get_signed_uri(&forward_info)
-            .await
-            .map_err(|e| match e {
-                AppForwardError::FileNotFound(path) => {
-                    error_log!(
-                        FORWARD_LOGGER_DOMAIN,
-                        "Routing forward signed uri error because of file missing: {}",
-                        path
-                    );
-                    StatusCode::NOT_FOUND
-                }
-                _ => {
-                    error_log!(
-                        FORWARD_LOGGER_DOMAIN,
-                        "Routing forward signed uri error: {:?}",
-                        e
-                    );
-                    StatusCode::INTERNAL_SERVER_ERROR
-                }
-            })?;
+        let remote_uri =
+            self.get_signed_uri(&forward_info)
+                .await
+                .map_err(|e| match e {
+                    AppForwardError::FileNotFound(path) => {
+                        error_log!(
+                            FORWARD_LOGGER_DOMAIN,
+                            "Routing forward signed uri error because of \
+                        file missing: {}",
+                            path
+                        );
+                        StatusCode::NOT_FOUND
+                    }
+                    _ => {
+                        error_log!(
+                            FORWARD_LOGGER_DOMAIN,
+                            "Routing forward signed uri error: {:?}",
+                            e
+                        );
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    }
+                })?;
+
+        let elapsed_ms = timer.elapsed().as_millis();
+        if elapsed_ms >= SLOW_FRONTEND_ROUTING_THRESHOLD_MS {
+            warn_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "frontend_routing_slow elapsed_ms={} file_path={} \
+                item_id={} media_source_id={}",
+                elapsed_ms,
+                forward_info.path,
+                forward_info.item_id,
+                forward_info.media_source_id
+            );
+        } else {
+            info_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "frontend_routing_complete elapsed_ms={} file_path={}",
+                elapsed_ms,
+                forward_info.path
+            );
+        }
 
         Ok(self.build_redirect_info(remote_uri, &request.original_headers))
     }

@@ -6,7 +6,10 @@ use hyper::{
     body::{self, Incoming},
 };
 
-use crate::gateway::{context::Context, response::BoxBodyType};
+use crate::{
+    core::backend::session_id::generate_stream_session_id,
+    gateway::{context::Context, response::BoxBodyType},
+};
 
 pub type Handler = Arc<
     dyn Fn(Context, Option<Incoming>) -> Response<BoxBodyType> + Send + Sync,
@@ -61,11 +64,13 @@ impl Chain {
         req: Request<body::Incoming>,
     ) -> Response<BoxBodyType> {
         let (parts, body) = req.into_parts();
+        let request_id = generate_stream_session_id();
         let ctx = Context::new(
             parts.uri,
             parts.method,
             parts.headers,
             std::time::Instant::now(),
+            request_id,
         );
 
         let handler_action: Next = Box::new(move |ctx, body| {

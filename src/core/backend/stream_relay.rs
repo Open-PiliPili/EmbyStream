@@ -293,7 +293,13 @@ mod tests {
             .unwrap();
         let mut headers = hyper::HeaderMap::new();
         headers.insert(header::HOST, "127.0.0.1:60010".parse().unwrap());
-        let ctx = Context::new(uri, Method::GET, headers, Instant::now());
+        let ctx = Context::new(
+            uri,
+            Method::GET,
+            headers,
+            Instant::now(),
+            "test-req-1".to_string(),
+        );
 
         let next: Next = Box::new(|_ctx, _body| {
             Box::pin(async {
@@ -319,8 +325,13 @@ mod tests {
     async fn middleware_skips_when_no_sign() {
         let mw = StreamRelayMiddleware::new(vec![sample_relay_node()]);
         let uri: Uri = "http://127.0.0.1:60010/stream?foo=1".parse().unwrap();
-        let ctx =
-            Context::new(uri, Method::GET, HeaderMap::new(), Instant::now());
+        let ctx = Context::new(
+            uri,
+            Method::GET,
+            HeaderMap::new(),
+            Instant::now(),
+            "test-req-2".to_string(),
+        );
         let next: Next = Box::new(|_ctx, _body| {
             Box::pin(async {
                 ResponseBuilder::with_status_code(StatusCode::IM_A_TEAPOT)

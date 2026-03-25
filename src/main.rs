@@ -27,7 +27,7 @@ use embystream::{
         response::ResponseBuilder,
         reverse_proxy_filter::ReverseProxyFilterMiddleware,
     },
-    logger::{LogLevel, Logger},
+    logger::{LogLevel, Logger, start_cleanup_task},
     system::SystemInfo,
 };
 
@@ -178,6 +178,12 @@ fn setup_logger(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_directory(&config.log.root_path)
         .with_file_prefix(&config.log.prefix)
         .build();
+
+    start_cleanup_task(config.log.root_path.clone());
+    info_log!(
+        INIT_LOGGER_DOMAIN,
+        "Log cleanup task started (retention: 7 days)"
+    );
 
     Ok(())
 }

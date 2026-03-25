@@ -8,6 +8,7 @@ pub struct Context {
     pub method: Method,
     pub headers: HeaderMap,
     pub start_time: Instant,
+    pub request_id: String,
 }
 
 impl Context {
@@ -16,6 +17,7 @@ impl Context {
         method: Method,
         headers: HeaderMap,
         start_time: Instant,
+        request_id: String,
     ) -> Self {
         let path = uri.path().to_string();
         Self {
@@ -24,6 +26,7 @@ impl Context {
             method,
             headers,
             start_time,
+            request_id,
         }
     }
 
