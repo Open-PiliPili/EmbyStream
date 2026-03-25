@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use dashmap::DashMap;
@@ -138,13 +138,18 @@ pub async fn authorization_header_for_proxy(
         .or_insert_with(|| Arc::new(AsyncMutex::new(())))
         .clone();
 
+    let lock_start = Instant::now();
     let _probe_guard = probe_mutex.lock().await;
+    let lock_wait_ms = lock_start.elapsed().as_millis();
 
     if let Some(cached) = cache.get(&key) {
-        debug_log!(
+        info_log!(
             WEBDAV_AUTH_LOGGER_DOMAIN,
-            "Basic auth cache hit after probe wait node='{}'",
-            node.name
+            "webdav_auth_probe_wait_hit lock_wait_ms={} node='{}' \
+             key_prefix='{}' hint=concurrent_probe_completed",
+            lock_wait_ms,
+            node.name,
+            key
         );
         return Ok(Some(cached.clone()));
     }
@@ -162,8 +167,20 @@ pub async fn authorization_header_for_proxy(
     Ok(Some(line))
 }
 
-pub fn invalidate(cache: &DashMap<String, String>, node: &BackendNode) {
-    cache.remove(&cache_key(node));
+pub fn invalidate(
+    cache: &DashMap<String, String>,
+    probe_locks: &WebDavAuthProbeLocks,
+    node: &BackendNode,
+) {
+    let key = cache_key(node);
+    cache.remove(&key);
+    probe_locks.remove(&key);
+    debug_log!(
+        WEBDAV_AUTH_LOGGER_DOMAIN,
+        "Invalidated auth cache and probe lock for node='{}' key='{}'",
+        node.name,
+        key
+    );
 }
 
 /// Builds a single-entry header map for `Authorization` when `line` is present.

@@ -179,7 +179,11 @@ impl RemoteStreamer {
             return Err(StatusCode::UNAUTHORIZED);
         };
 
-        webdav_auth::invalidate(&state.webdav_auth_cache, node);
+        webdav_auth::invalidate(
+            &state.webdav_auth_cache,
+            &state.webdav_auth_probe_locks,
+            node,
+        );
 
         let auth_line = match webdav_auth::authorization_header_for_proxy(
             &state.webdav_auth_cache,

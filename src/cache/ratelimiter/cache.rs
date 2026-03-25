@@ -44,10 +44,7 @@ impl RateLimiterCache {
 
     pub async fn fetch_limiter(&self, device_id: &str) -> Arc<RateLimiter> {
         if self.rate_kbs == 0 {
-            return Arc::new(RateLimiter {
-                semaphore: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
-                skip_semaphore: true,
-            });
+            return RateLimiter::unlimited();
         }
 
         self.limiters

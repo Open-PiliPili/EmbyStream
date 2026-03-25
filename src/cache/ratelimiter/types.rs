@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::Semaphore;
 
 pub struct RateLimiter {
@@ -8,11 +8,16 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
-    /// No per-client byte cap (non-Disk local paths, or missing cache entry).
+    /// No per-client byte cap (non-Disk local paths, missing cache entry, or `client_speed_limit_kbs == 0`).
     pub fn unlimited() -> Arc<Self> {
-        Arc::new(Self {
-            semaphore: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
-            skip_semaphore: true,
-        })
+        static UNLIMITED: OnceLock<Arc<RateLimiter>> = OnceLock::new();
+        UNLIMITED
+            .get_or_init(|| {
+                Arc::new(Self {
+                    semaphore: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
+                    skip_semaphore: true,
+                })
+            })
+            .clone()
     }
 }

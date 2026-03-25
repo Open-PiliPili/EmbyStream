@@ -55,10 +55,11 @@ impl LocalStreamer {
         let limiter = match state.get_rate_limiter_cache(node_uuid).await {
             Some(cache) => cache.fetch_limiter(&client_id_value).await,
             None => {
-                debug_log!(
+                info_log!(
                     LOCAL_STREAMER_LOGGER_DOMAIN,
-                    "No rate limiter for node uuid {} (non-Disk local path); streaming unlimited",
-                    node_uuid
+                    "local_stream_unlimited_no_limiter_cache node_uuid={} path={:?} hint=non-Disk_or_unknown_node",
+                    node_uuid,
+                    path
                 );
                 RateLimiter::unlimited()
             }
