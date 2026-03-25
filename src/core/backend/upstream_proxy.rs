@@ -58,7 +58,41 @@ fn shared_client() -> Result<&'static UpstreamClient, &'static str> {
     cell.as_ref().map_err(String::as_str)
 }
 
-/// Short host + path for latency logs (path truncated; avoids huge query strings).
+/// Warms up connection pool by pre-establishing TCP/TLS connections.
+pub async fn warmup_connection(uri: Uri) -> Result<(), GatewayError> {
+    let client = shared_client()
+        .map_err(|msg| GatewayError::IoError(std::io::Error::other(msg)))?;
+
+    let req = Request::head(uri.clone())
+        .body(Full::default())
+        .map_err(GatewayError::from)?;
+
+    let start = Instant::now();
+    match client.request(req).await {
+        Ok(resp) => {
+            let warmup_ms = start.elapsed().as_millis();
+            info_log!(
+                UPSTREAM_PROXY_LOGGER_DOMAIN,
+                "Connection warmup completed: uri={} status={} warmup_ms={}",
+                upstream_uri_hint(&uri),
+                resp.status().as_u16(),
+                warmup_ms
+            );
+            Ok(())
+        }
+        Err(e) => {
+            debug_log!(
+                UPSTREAM_PROXY_LOGGER_DOMAIN,
+                "Connection warmup failed: uri={} error={}",
+                upstream_uri_hint(&uri),
+                e
+            );
+            Err(e.into())
+        }
+    }
+}
+
+/// Truncates path to avoid huge query strings in logs.
 pub(crate) fn upstream_uri_hint(uri: &Uri) -> String {
     const MAX_PATH_CHARS: usize = 48;
     let host = uri.host().unwrap_or("-");

@@ -6,6 +6,7 @@ pub mod remote_streamer;
 pub mod response;
 pub mod result;
 pub mod service;
+pub mod session_id;
 pub mod source;
 pub mod stream;
 pub mod stream_relay;

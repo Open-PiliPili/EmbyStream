@@ -96,6 +96,10 @@ impl LocalStreamer {
             return Err(StatusCode::NOT_FOUND);
         };
 
+        // Track file access for metadata prefetching
+        let prefetcher = state.get_metadata_prefetcher().await;
+        prefetcher.track_access(path.clone());
+
         let content_range = match Self::parse_content_range(
             range_value,
             file_metadata.file_size,
@@ -180,11 +184,14 @@ impl LocalStreamer {
         };
 
         let mut headers = HeaderMap::new();
-        headers.insert(
-            header::CONTENT_TYPE,
-            get_content_type(&file_metadata.format).parse().unwrap(),
-        );
-        headers.insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
+        if let Ok(content_type) =
+            get_content_type(&file_metadata.format).parse()
+        {
+            headers.insert(header::CONTENT_TYPE, content_type);
+        }
+        if let Ok(accept_ranges) = "bytes".parse() {
+            headers.insert(header::ACCEPT_RANGES, accept_ranges);
+        }
 
         if status_code == StatusCode::PARTIAL_CONTENT {
             headers
@@ -195,7 +202,9 @@ impl LocalStreamer {
                 content_range.end,
                 content_range.total_size
             );
-            headers.insert(header::CONTENT_RANGE, range_str.parse().unwrap());
+            if let Ok(range_value) = range_str.parse() {
+                headers.insert(header::CONTENT_RANGE, range_value);
+            }
         } else {
             headers.insert(
                 header::CONTENT_LENGTH,

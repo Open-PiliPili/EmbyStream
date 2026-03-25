@@ -4,9 +4,14 @@ use dashmap::DashMap;
 use tokio::sync::{Mutex as TokioMutex, OnceCell, RwLock as TokioRwLock};
 
 use crate::{
-    cache::{GeneralCache, MetadataCache, RateLimiterCache},
+    INIT_LOGGER_DOMAIN,
+    cache::{
+        GeneralCache, MetadataCache, RateLimiterCache,
+        metadata::MetadataPrefetcher,
+    },
     config::core::Config,
-    core::backend::constants::DISK_BACKEND_TYPE,
+    core::backend::{constants::DISK_BACKEND_TYPE, upstream_proxy, webdav},
+    info_log,
     util::path_rewriter::PathRewriter,
 };
 
@@ -20,6 +25,7 @@ pub struct AppState {
     frontend_path_rewrite_cache: OnceCell<Vec<PathRewriter>>,
     problematic_clients_cache: OnceCell<Vec<String>>,
     metadata_cache: OnceCell<MetadataCache>,
+    metadata_prefetcher: OnceCell<Arc<MetadataPrefetcher>>,
     encrypt_cache: OnceCell<GeneralCache>,
     decrypt_cache: OnceCell<GeneralCache>,
     strm_file_cache: OnceCell<GeneralCache>,
@@ -38,6 +44,7 @@ impl AppState {
             frontend_path_rewrite_cache: OnceCell::new(),
             problematic_clients_cache: OnceCell::new(),
             metadata_cache: OnceCell::new(),
+            metadata_prefetcher: OnceCell::new(),
             encrypt_cache: OnceCell::new(),
             decrypt_cache: OnceCell::new(),
             strm_file_cache: OnceCell::new(),
@@ -57,9 +64,9 @@ impl AppState {
     pub async fn get_cache_settings(&self) -> (u64, u64) {
         let config = self.get_config().await;
         match config.general.memory_mode.as_str() {
-            "low" => (256, 60 * 60 * 2),
-            "high" => (512, 60 * 60 * 6),
-            _ => (512, 60 * 60 * 4),
+            "low" => (256, 60 * 60 * 4),
+            "high" => (2048, 60 * 60 * 12),
+            _ => (512, 60 * 60 * 8),
         }
     }
 
@@ -114,6 +121,17 @@ impl AppState {
         let (capacity, ttl) = self.get_cache_settings().await;
         self.metadata_cache
             .get_or_init(|| async move { MetadataCache::new(capacity, ttl) })
+            .await
+    }
+
+    pub async fn get_metadata_prefetcher(&self) -> &Arc<MetadataPrefetcher> {
+        self.metadata_prefetcher
+            .get_or_init(|| async {
+                let cache = Arc::new(self.get_metadata_cache().await.clone());
+                let prefetcher = Arc::new(MetadataPrefetcher::new(cache));
+                prefetcher.clone().start_prefetch_task();
+                prefetcher
+            })
             .await
     }
 
@@ -203,7 +221,47 @@ impl AppState {
 
         cache_map.get(node_uuid).map(|r| r.value().clone())
     }
+
     pub async fn init_rate_limiters(&self) {
         self.get_rate_limiter_cache("").await;
+    }
+
+    /// Warms up WebDAV connections during startup to reduce first-request latency.
+    /// Pre-establishes TCP/TLS connections to all configured WebDAV nodes.
+    pub async fn warmup_webdav_connections(&self) {
+        let config = self.get_config().await;
+        let webdav_nodes: Vec<_> = config
+            .backend_nodes
+            .iter()
+            .filter(|node| {
+                node.backend_type.eq_ignore_ascii_case(webdav::BACKEND_TYPE)
+            })
+            .collect();
+
+        if webdav_nodes.is_empty() {
+            return;
+        }
+
+        info_log!(
+            INIT_LOGGER_DOMAIN,
+            "Warming up {} WebDAV connections...",
+            webdav_nodes.len()
+        );
+
+        let mut tasks = Vec::new();
+        for node in webdav_nodes {
+            if let Ok(uri) = node.base_url.parse() {
+                let task = tokio::spawn(async move {
+                    let _ = upstream_proxy::warmup_connection(uri).await;
+                });
+                tasks.push(task);
+            }
+        }
+
+        for task in tasks {
+            let _ = task.await;
+        }
+
+        info_log!(INIT_LOGGER_DOMAIN, "WebDAV connection warmup completed");
     }
 }

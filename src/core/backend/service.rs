@@ -12,6 +12,7 @@ use super::{
     proxy_mode::ProxyMode,
     remote_streamer::{RemoteStreamParams, RemoteStreamer},
     result::Result as AppStreamResult,
+    session_id::generate_stream_session_id,
     source::Source,
     webdav, webdav_auth,
 };
@@ -28,7 +29,6 @@ use crate::{
     system::SystemInfo,
     util::{StringUtil, UriExt},
 };
-use uuid::Uuid;
 
 /// Trait for handling streaming requests
 ///
@@ -634,7 +634,7 @@ impl StreamService for AppStreamService {
                 ProxyMode::Proxy => {
                     let user_agent =
                         Self::resolve_upstream_user_agent(node, &request);
-                    let stream_session_id = Uuid::new_v4().to_string();
+                    let stream_session_id = generate_stream_session_id();
                     let extra_headers = self
                         .webdav_proxy_auth_headers(
                             node,

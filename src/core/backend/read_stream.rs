@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 
 use super::types::ContentRange;
-use crate::{READ_STREAM_LOGGER_DOMAIN, error_log};
+use crate::{READ_STREAM_LOGGER_DOMAIN, debug_log, error_log};
 
 #[derive(Debug)]
 pub struct ReaderStream {
@@ -61,8 +61,21 @@ impl ReaderStream {
         let mut limited_reader = reader.take(content_range.length());
         let mut buffer = vec![0u8; main_chunk];
         let mut is_first_read = true;
+        let mut chunks_sent = 0u64;
 
         loop {
+            // Early exit on client disconnect to avoid wasting I/O
+            if tx.is_closed() {
+                debug_log!(
+                    READ_STREAM_LOGGER_DOMAIN,
+                    "Client disconnected, stopping read after {} chunks \
+                     for path={:?}",
+                    chunks_sent,
+                    path
+                );
+                break;
+            }
+
             let read_cap = if is_first_read {
                 is_first_read = false;
                 const FIRST_READ_CAP: usize = 256 * 1024;
@@ -82,8 +95,15 @@ impl ReaderStream {
                 )))
                 .is_err()
             {
+                debug_log!(
+                    READ_STREAM_LOGGER_DOMAIN,
+                    "Send failed after {} chunks, client likely disconnected",
+                    chunks_sent
+                );
                 break;
             }
+
+            chunks_sent += 1;
         }
 
         Ok(())
@@ -96,21 +116,32 @@ impl ReaderStream {
 
     #[inline]
     fn get_optimal_channel_size(&self) -> usize {
+        const MIN_CHANNEL_SIZE: usize = 4;
+        const MAX_CHANNEL_SIZE: usize = 128;
+        const DEFAULT_CHANNEL_SIZE: usize = 128;
+
         let length = self.content_range.length();
         let chunk_size = self.get_chunk_size_for_streaming() as u64;
         (length / chunk_size)
             .try_into()
-            .unwrap_or(128)
-            .clamp(4, 128)
+            .unwrap_or(DEFAULT_CHANNEL_SIZE)
+            .clamp(MIN_CHANNEL_SIZE, MAX_CHANNEL_SIZE)
     }
 }
 
-/// Steady-state read size for Disk local streaming (PLAN-04): larger after first byte for throughput.
+/// Larger chunks after initial seek for better throughput on sequential reads.
 #[inline]
 pub(crate) fn disk_main_read_chunk(range_start: u64) -> usize {
     const KB: usize = 1024;
     const MB: usize = 1024 * KB;
-    if range_start > 0 { 4 * MB } else { 2 * MB }
+    const CHUNK_SIZE_FROM_START: usize = 2 * MB;
+    const CHUNK_SIZE_AFTER_SEEK: usize = 4 * MB;
+
+    if range_start > 0 {
+        CHUNK_SIZE_AFTER_SEEK
+    } else {
+        CHUNK_SIZE_FROM_START
+    }
 }
 
 #[cfg(test)]
