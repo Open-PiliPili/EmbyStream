@@ -1,7 +1,5 @@
 use hyper::Uri;
-use percent_encoding::{
-    AsciiSet, CONTROLS, NON_ALPHANUMERIC, utf8_percent_encode,
-};
+use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use thiserror::Error;
 
 use crate::config::backend::{BackendNode, WebDavConfig};
@@ -29,25 +27,19 @@ fn trim_slash(s: &str) -> &str {
     s.trim_matches('/')
 }
 
-/// Characters encoded inside a single path segment (space, delimiters, percent).
-const PATH_SEGMENT: &AsciiSet = &CONTROLS
-    .add(b'%')
-    .add(b'/')
-    .add(b' ')
-    .add(b'?')
-    .add(b'#')
-    .add(b'[')
-    .add(b']');
-
 fn encode_query_value(value: &str) -> String {
     utf8_percent_encode(value, NON_ALPHANUMERIC).to_string()
 }
 
+/// Encodes each logical path segment with [`NON_ALPHANUMERIC`] (same rule as `encode_query_value`).
+///
+/// This keeps non-ASCII text, parentheses, `#`, `?`, etc. consistently percent-encoded so upstream
+/// WebDAV stacks (e.g. rclone) do not see a mix of raw ASCII sub-delims and encoded UTF-8.
 fn encode_path_segments(logical_path: &str) -> String {
     trim_slash(logical_path)
         .split('/')
         .filter(|p| !p.is_empty())
-        .map(|seg| utf8_percent_encode(seg, PATH_SEGMENT).to_string())
+        .map(|seg| utf8_percent_encode(seg, NON_ALPHANUMERIC).to_string())
         .collect::<Vec<_>>()
         .join("/")
 }
@@ -163,6 +155,13 @@ mod tests {
     use super::*;
     use crate::config::backend::BackendNode;
 
+    /// Expected path after origin `http://127.0.0.1:5005/webdav` (no leading slash on tail parts).
+    struct PathJoinExpect<'a> {
+        logical: &'a str,
+        /// Path + file part only, e.g. `media/foo%20bar%2Emkv`
+        encoded_tail: &'a str,
+    }
+
     fn sample_node() -> BackendNode {
         BackendNode {
             name: "t".into(),
@@ -190,12 +189,88 @@ mod tests {
     #[test]
     fn path_join_appends_encoded_segments() {
         let node = sample_node();
-        let uri =
-            build_upstream_uri(&node, "/media/foo bar.mkv", None).expect("uri");
+        let uri = match build_upstream_uri(&node, "/media/foo bar.mkv", None) {
+            Ok(u) => u,
+            Err(e) => panic!("build uri: {e}"),
+        };
         assert_eq!(
             uri.to_string(),
-            "http://127.0.0.1:5005/webdav/media/foo%20bar.mkv"
+            "http://127.0.0.1:5005/webdav/media/foo%20bar%2Emkv"
         );
+    }
+
+    /// Special characters in one segment at a time (path_join / default url_mode).
+    #[test]
+    fn path_join_table_encodes_special_characters() {
+        let cases = [
+            PathJoinExpect {
+                logical: "/x/a#b",
+                encoded_tail: "x/a%23b",
+            },
+            PathJoinExpect {
+                logical: "/x/a?b",
+                encoded_tail: "x/a%3Fb",
+            },
+            PathJoinExpect {
+                logical: "/x/100%25ok",
+                encoded_tail: "x/100%2525ok",
+            },
+            PathJoinExpect {
+                logical: "/x/bracket[a]z",
+                encoded_tail: "x/bracket%5Ba%5Dz",
+            },
+            PathJoinExpect {
+                logical: "/x/(1)",
+                encoded_tail: "x/%281%29",
+            },
+            PathJoinExpect {
+                logical: "/x/（全角）",
+                encoded_tail: "x/%EF%BC%88%E5%85%A8%E8%A7%92%EF%BC%89",
+            },
+        ];
+        let node = sample_node();
+        let origin = "http://127.0.0.1:5005/webdav";
+        for case in cases {
+            let uri = match build_upstream_uri(&node, case.logical, None) {
+                Ok(u) => u,
+                Err(e) => panic!("build uri for {:?}: {e}", case.logical),
+            };
+            let want = format!("{origin}/{}", case.encoded_tail);
+            assert_eq!(
+                uri.to_string(),
+                want,
+                "logical path {:?}",
+                case.logical
+            );
+        }
+    }
+
+    /// Regression: mixed raw `()` with percent-encoded CJK confused some WebDAV stacks (PLAN-02).
+    #[test]
+    fn path_join_encodes_anime_style_path_with_parens_and_cjk() {
+        let node = sample_node();
+        let logical =
+            "/万界独尊 (2021)(1)/Season 1/万界独尊 S0E01 1080p.AliPan.mp4";
+        let uri = match build_upstream_uri(&node, logical, None) {
+            Ok(u) => u,
+            Err(e) => panic!("build uri: {e}"),
+        };
+        let s = uri.to_string();
+        assert!(
+            !s.contains("(2021)"),
+            "ASCII parens must be percent-encoded, got {s}"
+        );
+        assert!(
+            s.contains("%28") && s.contains("%29"),
+            "expect encoded parens in {s}"
+        );
+        let want = concat!(
+            "http://127.0.0.1:5005/webdav/",
+            "%E4%B8%87%E7%95%8C%E7%8B%AC%E5%B0%8A%20%282021%29%281%29",
+            "/Season%201/",
+            "%E4%B8%87%E7%95%8C%E7%8B%AC%E5%B0%8A%20S0E01%201080p%2EAliPan%2Emp4"
+        );
+        assert_eq!(s, want);
     }
 
     #[test]
@@ -213,13 +288,42 @@ mod tests {
             query_param: "path".into(),
             ..Default::default()
         };
-        let uri =
-            build_upstream_uri(&node, "/media/a", Some(&cfg)).expect("uri");
+        let uri = match build_upstream_uri(&node, "/media/a", Some(&cfg)) {
+            Ok(u) => u,
+            Err(e) => panic!("build uri: {e}"),
+        };
+        let full = uri.to_string();
         assert!(
-            uri.to_string()
-                .starts_with("http://127.0.0.1:5005/webdav?path=")
+            full.starts_with("http://127.0.0.1:5005/webdav?path="),
+            "{full}"
+        );
+        assert!(
+            full.contains("%2Fmedia%2Fa") || full.contains("%2fmedia%2fa"),
+            "slashes in query value must encode: {full}"
         );
         assert!(uri.query().is_some());
+    }
+
+    /// query_path: full logical path is one query value; `#` and `?` in path must encode.
+    #[test]
+    fn query_path_encodes_hash_and_question_in_value() {
+        let node = sample_node();
+        let cfg = WebDavConfig {
+            url_mode: MODE_QUERY_PATH.into(),
+            query_param: "path".into(),
+            ..Default::default()
+        };
+        let logical = "/dir/file#q?x";
+        let uri = match build_upstream_uri(&node, logical, Some(&cfg)) {
+            Ok(u) => u,
+            Err(e) => panic!("build uri: {e}"),
+        };
+        let full = uri.to_string();
+        assert!(!full.contains("#"), "fragment must not appear raw: {full}");
+        assert!(
+            full.contains("%23") && full.contains("%3F"),
+            "expect encoded # and ?: {full}"
+        );
     }
 
     #[test]
@@ -231,11 +335,34 @@ mod tests {
                 "http://127.0.0.1:5005/item?path={file_path}&sort=desc".into(),
             ..Default::default()
         };
-        let uri =
-            build_upstream_uri(&node, "/media/x", Some(&cfg)).expect("uri");
+        let uri = match build_upstream_uri(&node, "/media/x", Some(&cfg)) {
+            Ok(u) => u,
+            Err(e) => panic!("build uri: {e}"),
+        };
         let s = uri.to_string();
         assert!(s.contains("sort=desc"));
         assert!(!s.contains("{file_path}"));
+        assert!(
+            s.contains("path=%2Fmedia%2Fx") || s.contains("path=%2fmedia%2fx"),
+            "{s}"
+        );
+    }
+
+    /// Placeholder before `?` uses path-segment encoding (same as path_join).
+    #[test]
+    fn template_placeholder_in_path_segment_encodes_parens() {
+        let node = sample_node();
+        let cfg = WebDavConfig {
+            url_mode: MODE_URL_TEMPLATE.into(),
+            url_template: "http://127.0.0.1:5005/dav/{file_path}/end".into(),
+            ..Default::default()
+        };
+        let uri = match build_upstream_uri(&node, "/a/(1)/b", Some(&cfg)) {
+            Ok(u) => u,
+            Err(e) => panic!("build uri: {e}"),
+        };
+        let s = uri.to_string();
+        assert_eq!(s, "http://127.0.0.1:5005/dav/a/%281%29/b/end");
     }
 
     #[test]
