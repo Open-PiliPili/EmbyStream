@@ -47,7 +47,7 @@ pub struct CacheableRoute {
 
 pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
     CacheableRoute {
-        pattern: r"(?i)^/(?:emby/)?Users/[^/]+/Items/[^/]+$",
+        pattern: r"(?i)^/(?:emby/)?Users/[a-z0-9]+/Items/[0-9]+$",
         methods: &["GET"],
         ttl_seconds: 7200, // 2 hours
         description: "User item details",
@@ -207,6 +207,12 @@ fn build_user_item_cache_key(
         return format!("{method}:{fallback_uri}");
     };
 
+    if !user_id.chars().all(|c| c.is_ascii_alphanumeric())
+        || !item_id.chars().all(|c| c.is_ascii_digit())
+    {
+        return format!("{method}:{fallback_uri}");
+    }
+
     format!(
         "{method}:user_item:user_id:{}:item_id:{}",
         user_id.to_ascii_lowercase(),
@@ -265,15 +271,12 @@ mod tests {
         let key = build_semantic_cache_key(
             &route,
             "GET",
-            "/emby/Users/User-ABC_01/Items/Item-XYZ_09",
+            "/emby/Users/UserABC01/Items/257023",
             None,
-            "/emby/Users/User-ABC_01/Items/Item-XYZ_09",
+            "/emby/Users/UserABC01/Items/257023",
         );
 
-        assert_eq!(
-            key,
-            "GET:user_item:user_id:user-abc_01:item_id:item-xyz_09"
-        );
+        assert_eq!(key, "GET:user_item:user_id:userabc01:item_id:257023");
     }
 
     #[test]
@@ -287,6 +290,22 @@ mod tests {
     #[test]
     fn user_item_route_does_not_match_missing_item_id() {
         let route = find_cacheable_route("/emby/Users/u1/Items", "GET");
+
+        assert!(route.is_none());
+    }
+
+    #[test]
+    fn user_item_route_does_not_match_non_alphanumeric_user_id() {
+        let route =
+            find_cacheable_route("/emby/Users/user-1/Items/257023", "GET");
+
+        assert!(route.is_none());
+    }
+
+    #[test]
+    fn user_item_route_does_not_match_non_numeric_item_id() {
+        let route =
+            find_cacheable_route("/emby/Users/user1/Items/item257023", "GET");
 
         assert!(route.is_none());
     }
