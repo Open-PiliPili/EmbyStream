@@ -109,24 +109,51 @@ pub fn build_semantic_cache_key(
     method: &str,
     path: &str,
     query: Option<&str>,
-    fallback_uri: &str,
 ) -> String {
     let method = method.to_ascii_lowercase();
+    let canonical_uri = canonical_uri_for_cache(path, query);
 
     match route.key_strategy {
         CacheKeyStrategy::FullUri => {
-            format!("api:full_uri:method:{method}:uri:{fallback_uri}")
+            format!("api:full_uri:method:{method}:uri:{canonical_uri}")
         }
         CacheKeyStrategy::NextUpSeriesId => {
-            build_next_up_cache_key(&method, query, fallback_uri)
+            build_next_up_cache_key(&method, query, &canonical_uri)
         }
         CacheKeyStrategy::EpisodesShowId => {
-            build_episodes_cache_key(&method, path, fallback_uri)
+            build_episodes_cache_key(&method, path, &canonical_uri)
         }
         CacheKeyStrategy::UserItem => {
-            build_user_item_cache_key(&method, path, fallback_uri)
+            build_user_item_cache_key(&method, path, &canonical_uri)
         }
     }
+}
+
+fn canonical_uri_for_cache(path: &str, query: Option<&str>) -> String {
+    let Some(query_str) = query.filter(|query| !query.is_empty()) else {
+        return path.to_string();
+    };
+
+    let mut query_pairs: Vec<(String, String)> =
+        form_urlencoded::parse(query_str.as_bytes())
+            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+            .collect();
+    query_pairs.sort_by(|(left_key, left_value), (right_key, right_value)| {
+        left_key
+            .to_ascii_lowercase()
+            .cmp(&right_key.to_ascii_lowercase())
+            .then_with(|| left_value.cmp(right_value))
+    });
+
+    let normalized_query = form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(
+            query_pairs
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_str())),
+        )
+        .finish();
+
+    format!("{path}?{normalized_query}")
 }
 
 fn build_next_up_cache_key(
@@ -249,7 +276,6 @@ mod tests {
             "GET",
             "/emby/Shows/NextUp",
             Some("Limit=1&SeriesId=Series-ABC_01&UserId=u1"),
-            "/emby/Shows/NextUp?Limit=1&SeriesId=Series-ABC_01&UserId=u1",
         );
 
         assert_eq!(key, "api:shows_nextup:method:get:series_id:series-abc_01");
@@ -284,7 +310,6 @@ mod tests {
             "GET",
             "/emby/Shows/Show-XYZ_09/Episodes",
             Some("SeasonId=s1&UserId=u1"),
-            "/emby/Shows/Show-XYZ_09/Episodes?SeasonId=s1&UserId=u1",
         );
 
         assert_eq!(key, "api:shows_episodes:method:get:show_id:show-xyz_09");
@@ -323,13 +348,32 @@ mod tests {
             "GET",
             "/emby/Users/UserABC01/Items/257023",
             None,
-            "/emby/Users/UserABC01/Items/257023",
         );
 
         assert_eq!(
             key,
             "api:user_item:method:get:user_id:userabc01:item_id:257023"
         );
+    }
+
+    #[test]
+    fn full_uri_strategy_normalizes_query_order() {
+        let route = compiled(CacheKeyStrategy::FullUri);
+        let key1 = build_semantic_cache_key(
+            &route,
+            "GET",
+            "/emby/Items",
+            Some("b=2&a=1"),
+        );
+        let key2 = build_semantic_cache_key(
+            &route,
+            "GET",
+            "/emby/Items",
+            Some("a=1&b=2"),
+        );
+
+        assert_eq!(key1, key2);
+        assert_eq!(key1, "api:full_uri:method:get:uri:/emby/Items?a=1&b=2");
     }
 
     #[test]

@@ -112,7 +112,6 @@ impl ReverseProxyMiddleware {
     fn build_cache_key(
         ctx: &Context,
         route: &super::cacheable_routes::CompiledCacheableRoute,
-        uri_string: &str,
         body_bytes: Option<&Bytes>,
     ) -> String {
         let semantic_key = build_semantic_cache_key(
@@ -120,7 +119,6 @@ impl ReverseProxyMiddleware {
             ctx.method.as_str(),
             &ctx.path,
             ctx.uri.query(),
-            uri_string,
         );
 
         match body_bytes {
@@ -445,13 +443,7 @@ impl Middleware for ReverseProxyMiddleware {
         let body_bytes = Self::read_body(body).await;
 
         let cache_key = cacheable_route.map(|route| {
-            let uri_string = ctx
-                .uri
-                .path_and_query()
-                .map(|pq| pq.to_string())
-                .unwrap_or_else(|| ctx.path.clone());
-
-            Self::build_cache_key(&ctx, route, &uri_string, body_bytes.as_ref())
+            Self::build_cache_key(&ctx, route, body_bytes.as_ref())
         });
 
         if let (Some(route), Some(key)) = (cacheable_route, cache_key) {
