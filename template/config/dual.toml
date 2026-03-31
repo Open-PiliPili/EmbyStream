@@ -80,11 +80,17 @@ port = "5244"
 path = "/openlist"
 priority = 0
 proxy_mode = "redirect"
+client_speed_limit_kbs = 0
+client_burst_speed_kbs = 0
 
 [[BackendNode.PathRewrite]]
 enable = false
 pattern = "^/openlist(/.*)$"
 replacement = "$1"
+
+[BackendNode.AntiReverseProxy]
+enable = false
+host = ""
 
 [BackendNode.OpenList]
 base_url = "http://alist.example.com"
@@ -99,11 +105,17 @@ port = "443"
 path = "/cloud"
 priority = 0
 proxy_mode = "redirect"
+client_speed_limit_kbs = 0
+client_burst_speed_kbs = 0
 
 [[BackendNode.PathRewrite]]
 enable = false
 pattern = "^/cloud(/.*)$"
 replacement = "https://cdn.example.com$1"
+
+[BackendNode.AntiReverseProxy]
+enable = false
+host = ""
 
 [BackendNode.DirectLink]
 user_agent = "Mozilla/5.0 (MockClient)"

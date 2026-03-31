@@ -6,7 +6,6 @@ root_path = "/var/logs/embystream"
 [General]
 memory_mode = "middle"
 stream_mode = "frontend"
-backend_type = "disk"
 encipher_key = "Q4eCbawEp3sCvDvx"
 encipher_iv = "a3cH2abhxnu9hGo5"
 

@@ -26,29 +26,6 @@ ssl_key_file = ""
 [Fallback]
 video_missing_path = "/mnt/anime/fallback/video_missing.mp4"
 
-[Frontend]
-listen_port = 60001
-check_file_existence = true
-
-[[Frontend.PathRewrite]]
-enable = false
-pattern = "^(/.*)$"
-replacement = "https://my-cdn.com$1"
-
-[[Frontend.PathRewrite]]
-enable = false
-pattern = "^/media(/.*)$"
-replacement = "$1"
-
-[[Frontend.PathRewrite]]
-enable = false
-pattern = "^/stream(/.*)$"
-replacement = "/proxy$1"
-
-[Frontend.AntiReverseProxy]
-enable = false
-host = ""
-
 [Backend]
 listen_port = 60001
 base_url = "https://backend.example.com"

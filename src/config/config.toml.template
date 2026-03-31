@@ -6,7 +6,6 @@ root_path = "/mnt/stream/logs"
 [General]
 memory_mode = "middle"
 stream_mode = "frontend"
-backend_type = "disk"
 encipher_key = "change_this_to_a_secure_key"
 encipher_iv = "change_this_to_a_secure_iv"
 
