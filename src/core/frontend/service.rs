@@ -239,10 +239,18 @@ impl AppForwardService {
         params: &ForwardInfo,
     ) -> Result<Sign, AppForwardError> {
         let encrypt_cache = self.state.get_encrypt_cache().await;
-        let cache_key = self.encrypt_key(params)?;
+        let cache_key = Self::encrypt_key(params)?;
 
         if let Some(sign) = encrypt_cache.get(&cache_key) {
-            debug_log!(FORWARD_LOGGER_DOMAIN, "Sign cache hit: {:?}", sign);
+            debug_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "sign_encrypt_cache_hit key={} item_id={} media_source_id={} \
+                 sign={:?}",
+                cache_key,
+                params.item_id,
+                params.media_source_id,
+                sign
+            );
             return Ok(sign);
         }
 
@@ -262,13 +270,24 @@ impl AppForwardService {
 
         debug_log!(
             FORWARD_LOGGER_DOMAIN,
-            "Successfully retrieved sign: {:?} by path: {:?}, expired_at: {:?}",
+            "sign_encrypt_ready key={} item_id={} media_source_id={} \
+             sign={:?} path={:?} expired_at={:?}",
+            cache_key,
+            params.item_id,
+            params.media_source_id,
             sign,
             uri.to_string(),
             expired_at
         );
 
-        encrypt_cache.insert(cache_key, sign.clone());
+        encrypt_cache.insert(cache_key.clone(), sign.clone());
+        info_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "sign_encrypt_cache_store key={} item_id={} media_source_id={}",
+            cache_key,
+            params.item_id,
+            params.media_source_id
+        );
 
         Ok(sign)
     }
@@ -481,23 +500,17 @@ impl AppForwardService {
         }
     }
 
-    fn encrypt_key(
-        &self,
-        params: &ForwardInfo,
-    ) -> Result<String, AppForwardError> {
-        self.md5_key(&params.item_id, &params.media_source_id)
-    }
-
-    fn md5_key(
-        &self,
-        item_id: &str,
-        media_source_id: &str,
-    ) -> Result<String, AppForwardError> {
-        if item_id.is_empty() || media_source_id.is_empty() {
+    fn encrypt_key(params: &ForwardInfo) -> Result<String, AppForwardError> {
+        if params.item_id.is_empty() || params.media_source_id.is_empty() {
             return Err(AppForwardError::InvalidMediaSource);
         }
-        let input = format!("{item_id}:{media_source_id}").to_lowercase();
-        Ok(StringUtil::md5(&input))
+
+        let item_id = params.item_id.to_ascii_lowercase();
+        let media_source_id = params.media_source_id.to_ascii_lowercase();
+
+        Ok(format!(
+            "forward:sign_encrypt:item_id:{item_id}:media_source_id:{media_source_id}"
+        ))
     }
 
     fn strm_cache_key(path: &str) -> Result<String, AppForwardError> {
@@ -606,6 +619,24 @@ mod tests {
         let lock2 = AppState::request_lock(&locks, "key2");
 
         assert!(!Arc::ptr_eq(&lock1, &lock2));
+    }
+
+    #[test]
+    fn encrypt_cache_key_is_structured() {
+        let params = crate::core::frontend::types::ForwardInfo {
+            item_id: "Item-ABC".into(),
+            media_source_id: "Media-XYZ".into(),
+            path: "/tmp/demo.mkv".into(),
+            device_id: "device-1".into(),
+        };
+
+        let key = AppForwardService::encrypt_key(&params);
+
+        assert!(key.is_ok());
+        assert_eq!(
+            key.unwrap_or_default(),
+            "forward:sign_encrypt:item_id:item-abc:media_source_id:media-xyz"
+        );
     }
 }
 
