@@ -303,33 +303,4 @@ mod tests {
 
         Ok(())
     }
-
-    #[test]
-    fn aes_decrypt_keeps_legacy_json_base64_compatibility() -> Result<(), Error>
-    {
-        let payload = SignPayload {
-            expired_at: "1743400000".into(),
-            uri: "https://example.com/legacy/original.mkv".into(),
-        };
-        let legacy_json = serde_json::to_vec(&payload.to_current_sign_map())
-            .map_err(Error::JsonError)?;
-        let legacy_sign = encrypt_bytes_to_base64(
-            &legacy_json,
-            "1234567890123456",
-            "1234567890123456",
-            false,
-        )?;
-
-        let restored = AesDecrypt::decrypt(
-            &legacy_sign,
-            "1234567890123456",
-            "1234567890123456",
-        )?;
-
-        let expected: std::collections::HashMap<String, String> =
-            payload.to_current_sign_map().into_iter().collect();
-        assert_eq!(restored, expected);
-
-        Ok(())
-    }
 }

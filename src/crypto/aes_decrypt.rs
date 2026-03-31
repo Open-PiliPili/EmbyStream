@@ -6,10 +6,7 @@ use aes::cipher::{
     generic_array::GenericArray,
 };
 use base64::{
-    Engine,
-    engine::general_purpose::{
-        STANDARD as BASE64, URL_SAFE_NO_PAD as BASE64_URL_SAFE_NO_PAD,
-    },
+    Engine, engine::general_purpose::URL_SAFE_NO_PAD as BASE64_URL_SAFE_NO_PAD,
 };
 use cbc::Decryptor;
 
@@ -48,19 +45,6 @@ impl AesDecrypt {
             "Starting AES decryption for Base64 string"
         );
 
-        Self::decrypt_msgpack_urlsafe(encrypted, key, iv).or_else(
-            |msgpack_err| {
-                warn_old_format_fallback(&msgpack_err);
-                Self::decrypt_json_standard(encrypted, key, iv)
-            },
-        )
-    }
-
-    fn decrypt_msgpack_urlsafe(
-        encrypted: &str,
-        key: &str,
-        iv: &str,
-    ) -> Result<HashMap<String, String>, Error> {
         let decoded = BASE64_URL_SAFE_NO_PAD
             .decode(encrypted)
             .map_err(Error::Base64DecodeError)?;
@@ -72,30 +56,6 @@ impl AesDecrypt {
         debug_log!(
             CRYPTO_LOGGER_DOMAIN,
             "Decryption successful, restored MessagePack dictionary"
-        );
-        Ok(dict)
-    }
-
-    fn decrypt_json_standard(
-        encrypted: &str,
-        key: &str,
-        iv: &str,
-    ) -> Result<HashMap<String, String>, Error> {
-        let decoded = BASE64.decode(encrypted).map_err(|e| {
-            error_log!(
-                CRYPTO_LOGGER_DOMAIN,
-                "Failed to decode legacy Base64 string: {}",
-                e
-            );
-            Error::Base64DecodeError(e)
-        })?;
-        let decrypted = Self::decrypt_bytes(&decoded, key, iv)?;
-        let dict: HashMap<String, String> =
-            serde_json::from_slice(&decrypted).map_err(Error::JsonError)?;
-
-        debug_log!(
-            CRYPTO_LOGGER_DOMAIN,
-            "Decryption successful, restored legacy JSON dictionary"
         );
         Ok(dict)
     }
@@ -121,12 +81,4 @@ impl AesDecrypt {
 
         Ok(decrypted.to_vec())
     }
-}
-
-fn warn_old_format_fallback(error: &Error) {
-    debug_log!(
-        CRYPTO_LOGGER_DOMAIN,
-        "MessagePack/base64url decrypt failed, trying legacy JSON/base64 fallback: {}",
-        error
-    );
 }
