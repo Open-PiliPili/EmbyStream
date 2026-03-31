@@ -24,7 +24,6 @@ use crate::{
     AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log,
 };
 use crate::{
-    client::{ClientBuilder, OpenListClient},
     core::{
         error::Error as AppStreamError, request::Request as AppStreamRequest,
     },
@@ -491,7 +490,7 @@ impl AppStreamService {
                 );
 
                 let openlist_client =
-                    ClientBuilder::<OpenListClient>::new().build();
+                    self.state.get_open_list_client().await.clone();
 
                 let result = openlist_client
                     .fetch_file_path(

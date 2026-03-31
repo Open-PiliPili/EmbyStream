@@ -34,13 +34,16 @@ struct CachedApiResponse {
     status: u16,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
-    cached_at: Instant,
-    ttl_seconds: u64,
+    // `GeneralCache` TTL is the upper retention bound for API entries.
+    // Route freshness is enforced separately here so different routes can
+    // still have their own shorter logical cache lifetime.
+    stored_at: Instant,
+    route_ttl_seconds: u64,
 }
 
 impl CachedApiResponse {
     fn is_expired(&self) -> bool {
-        self.cached_at.elapsed().as_secs() > self.ttl_seconds
+        self.stored_at.elapsed().as_secs() > self.route_ttl_seconds
     }
 
     fn to_response(&self) -> Response<BoxBodyType> {
@@ -174,8 +177,8 @@ impl ReverseProxyMiddleware {
             status: status.as_u16(),
             headers: header_pairs,
             body: body.to_vec(),
-            cached_at: Instant::now(),
-            ttl_seconds,
+            stored_at: Instant::now(),
+            route_ttl_seconds: ttl_seconds,
         };
 
         self.api_cache.insert(cache_key.clone(), cached);

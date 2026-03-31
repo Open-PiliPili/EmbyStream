@@ -1,11 +1,8 @@
 use std::{sync::Arc, time::Instant};
 
 use crate::{
-    AppState, PLAYBACK_INFO_LOGGER_DOMAIN,
-    api::PlaybackInfo,
-    client::{ClientBuilder, EmbyClient},
-    core::frontend::types::InfuseAuthorization,
-    debug_log, info_log, warn_log,
+    AppState, PLAYBACK_INFO_LOGGER_DOMAIN, api::PlaybackInfo,
+    core::frontend::types::InfuseAuthorization, debug_log, info_log, warn_log,
 };
 
 const SLOW_PLAYBACK_INFO_FETCH_THRESHOLD_MS: u128 = 500;
@@ -222,7 +219,7 @@ impl PlaybackInfoService {
     ) -> Result<PlaybackInfo, PlaybackInfoServiceError> {
         let config = self.state.get_config().await;
         let emby_server_url = config.emby.get_uri().to_string();
-        let emby_client = ClientBuilder::<EmbyClient>::new().build();
+        let emby_client = self.state.get_emby_client().await.clone();
 
         emby_client
             .playback_info(

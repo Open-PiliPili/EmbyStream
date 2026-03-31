@@ -9,6 +9,7 @@ use crate::{
         GeneralCache, MetadataCache, RateLimiterCache,
         metadata::MetadataPrefetcher,
     },
+    client::{ClientBuilder, EmbyClient, OpenListClient},
     config::core::Config,
     core::backend::{constants::DISK_BACKEND_TYPE, upstream_proxy, webdav},
     info_log,
@@ -32,6 +33,8 @@ pub struct AppState {
     strm_file_cache: OnceCell<GeneralCache>,
     open_list_cache: OnceCell<GeneralCache>,
     api_response_cache: OnceCell<GeneralCache>,
+    emby_client: OnceCell<Arc<EmbyClient>>,
+    open_list_client: OnceCell<Arc<OpenListClient>>,
     rate_limiter_cache: OnceCell<DashMap<String, RateLimiterCache>>,
     pub(crate) api_request_locks: DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) open_list_request_locks: DashMap<String, Arc<TokioMutex<()>>>,
@@ -56,6 +59,8 @@ impl AppState {
             strm_file_cache: OnceCell::new(),
             open_list_cache: OnceCell::new(),
             api_response_cache: OnceCell::new(),
+            emby_client: OnceCell::new(),
+            open_list_client: OnceCell::new(),
             rate_limiter_cache: OnceCell::new(),
             api_request_locks: DashMap::new(),
             open_list_request_locks: DashMap::new(),
@@ -76,6 +81,15 @@ impl AppState {
             "low" => (256, 60 * 60 * 4),
             "high" => (2048, 60 * 60 * 12),
             _ => (512, 60 * 60 * 8),
+        }
+    }
+
+    pub async fn get_api_cache_settings(&self) -> (u64, u64) {
+        let config = self.get_config().await;
+        match config.general.memory_mode.as_str() {
+            "low" => (2048, 60 * 60 * 2),
+            "high" => (8192, 60 * 60 * 4),
+            _ => (4096, 60 * 60 * 2),
         }
     }
 
@@ -182,14 +196,25 @@ impl AppState {
     pub async fn get_api_response_cache(&self) -> &GeneralCache {
         self.api_response_cache
             .get_or_init(|| async move {
-                let config = self.get_config().await;
                 let (max_capacity, default_ttl) =
-                    match config.general.memory_mode.as_str() {
-                        "low" => (2048, 60 * 60 * 2),
-                        "high" => (8192, 60 * 60 * 4),
-                        _ => (4096, 60 * 60 * 2),
-                    };
+                    self.get_api_cache_settings().await;
                 GeneralCache::new(max_capacity, default_ttl)
+            })
+            .await
+    }
+
+    pub async fn get_emby_client(&self) -> &Arc<EmbyClient> {
+        self.emby_client
+            .get_or_init(|| async move {
+                Arc::new(ClientBuilder::<EmbyClient>::new().build())
+            })
+            .await
+    }
+
+    pub async fn get_open_list_client(&self) -> &Arc<OpenListClient> {
+        self.open_list_client
+            .get_or_init(|| async move {
+                Arc::new(ClientBuilder::<OpenListClient>::new().build())
             })
             .await
     }
@@ -305,11 +330,53 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{path::PathBuf, sync::Arc};
 
     use super::AppState;
     use dashmap::DashMap;
     use tokio::sync::Mutex as TokioMutex;
+
+    use crate::config::core::{finish_raw_config, parse_raw_config_str};
+
+    const MIN_FRONTEND_CONFIG: &str = r#"
+[Log]
+level = "info"
+prefix = ""
+root_path = "./logs"
+
+[General]
+memory_mode = "middle"
+stream_mode = "frontend"
+encipher_key = "1234567890123456"
+encipher_iv = "1234567890123456"
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "tok"
+
+[UserAgent]
+mode = "allow"
+allow_ua = []
+deny_ua = []
+
+[Fallback]
+
+[Frontend]
+listen_port = 60001
+check_file_existence = true
+
+[Frontend.AntiReverseProxy]
+enable = false
+host = ""
+"#;
+
+    async fn test_state() -> AppState {
+        let raw = parse_raw_config_str(MIN_FRONTEND_CONFIG).expect("parse");
+        let config =
+            finish_raw_config(PathBuf::from("test.toml"), raw).expect("finish");
+        AppState::new(config).await
+    }
 
     #[tokio::test]
     async fn cleanup_request_lock_removes_unshared_lock() {
@@ -334,5 +401,25 @@ mod tests {
         AppState::cleanup_request_lock(&locks, "key", &lock);
 
         assert_eq!(locks.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_emby_client_reuses_single_instance() {
+        let state = test_state().await;
+
+        let client1 = state.get_emby_client().await.clone();
+        let client2 = state.get_emby_client().await.clone();
+
+        assert!(Arc::ptr_eq(&client1, &client2));
+    }
+
+    #[tokio::test]
+    async fn get_open_list_client_reuses_single_instance() {
+        let state = test_state().await;
+
+        let client1 = state.get_open_list_client().await.clone();
+        let client2 = state.get_open_list_client().await.clone();
+
+        assert!(Arc::ptr_eq(&client1, &client2));
     }
 }
