@@ -191,6 +191,22 @@ impl ReverseProxyMiddleware {
         );
     }
 
+    fn should_cache_response(
+        status: StatusCode,
+        headers: &reqwest::header::HeaderMap,
+    ) -> bool {
+        status.is_success() && Self::is_json_content_type(headers)
+    }
+
+    fn is_json_content_type(headers: &reqwest::header::HeaderMap) -> bool {
+        headers
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .map(|value| value.trim())
+            .is_some_and(|value| value.eq_ignore_ascii_case("application/json"))
+    }
+
     async fn proxy_to_emby(
         &self,
         ctx: &Context,
@@ -468,7 +484,7 @@ impl Middleware for ReverseProxyMiddleware {
                 );
             };
 
-            if status.is_success() {
+            if Self::should_cache_response(status, &resp_headers) {
                 self.store_cache(
                     key,
                     status,
@@ -496,5 +512,50 @@ impl Middleware for ReverseProxyMiddleware {
 
     fn clone_box(&self) -> Box<dyn Middleware> {
         Box::new(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hyper::StatusCode;
+    use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
+
+    use super::ReverseProxyMiddleware;
+
+    #[test]
+    fn should_cache_json_success_response() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        );
+
+        assert!(ReverseProxyMiddleware::should_cache_response(
+            StatusCode::OK,
+            &headers
+        ));
+    }
+
+    #[test]
+    fn should_not_cache_non_json_success_response() {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+
+        assert!(!ReverseProxyMiddleware::should_cache_response(
+            StatusCode::OK,
+            &headers
+        ));
+    }
+
+    #[test]
+    fn should_not_cache_json_error_response() {
+        let mut headers = HeaderMap::new();
+        headers
+            .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+        assert!(!ReverseProxyMiddleware::should_cache_response(
+            StatusCode::BAD_REQUEST,
+            &headers
+        ));
     }
 }
