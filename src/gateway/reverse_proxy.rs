@@ -32,6 +32,7 @@ use tokio::sync::Mutex as TokioMutex;
 
 const ROOT_PATH: &str = "/";
 const WEB_INDEX_REDIRECT: &str = "/web/index.html";
+const MAX_CACHEABLE_BODY_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug)]
 struct CachedApiResponse {
@@ -120,7 +121,7 @@ impl ReverseProxyMiddleware {
         ctx: &Context,
         route: &super::cacheable_routes::CompiledCacheableRoute,
         body_bytes: Option<&Bytes>,
-    ) -> String {
+    ) -> Option<String> {
         let semantic_key = build_semantic_cache_key(
             route,
             ctx.method.as_str(),
@@ -128,21 +129,28 @@ impl ReverseProxyMiddleware {
             ctx.uri.query(),
         );
 
-        let Some(body_hash) =
-            Self::body_hash(route.body_key_strategy, &ctx.headers, body_bytes)
-        else {
-            return semantic_key;
+        let Some(bytes) = body_bytes.filter(|bytes| !bytes.is_empty()) else {
+            return Some(semantic_key);
         };
 
-        format!("{semantic_key}:body_hash:{body_hash}")
+        if matches!(route.body_key_strategy, BodyKeyStrategy::Ignore) {
+            return Some(semantic_key);
+        }
+
+        let body_hash =
+            Self::body_hash(route.body_key_strategy, &ctx.headers, bytes)?;
+
+        Some(format!("{semantic_key}:body_hash:{body_hash}"))
     }
 
     fn body_hash(
         strategy: BodyKeyStrategy,
         headers: &hyper::HeaderMap,
-        body_bytes: Option<&Bytes>,
+        bytes: &Bytes,
     ) -> Option<String> {
-        let bytes = body_bytes.filter(|bytes| !bytes.is_empty())?;
+        if bytes.len() > MAX_CACHEABLE_BODY_BYTES {
+            return None;
+        }
 
         match strategy {
             BodyKeyStrategy::Ignore => None,
@@ -157,7 +165,7 @@ impl ReverseProxyMiddleware {
                     Some("application/x-www-form-urlencoded") => {
                         Self::form_body_hash(bytes)
                     }
-                    _ => Self::raw_body_hash(bytes),
+                    _ => return None,
                 };
                 Some(body_hash)
             }
@@ -557,7 +565,7 @@ impl Middleware for ReverseProxyMiddleware {
 
         let body_bytes = Self::read_body(body).await;
 
-        let cache_key = cacheable_route.map(|route| {
+        let cache_key = cacheable_route.and_then(|route| {
             Self::build_cache_key(&ctx, route, body_bytes.as_ref())
         });
 
@@ -639,7 +647,7 @@ mod tests {
     use regex::Regex;
     use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 
-    use super::ReverseProxyMiddleware;
+    use super::{MAX_CACHEABLE_BODY_BYTES, ReverseProxyMiddleware};
     use crate::gateway::{
         cacheable_routes::{
             BodyKeyStrategy, CacheKeyStrategy, CompiledCacheableRoute,
@@ -728,7 +736,8 @@ mod tests {
             ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body2));
 
         assert_eq!(key1, key2);
-        assert!(key1.contains(":body_hash:"));
+        assert!(key1.is_some());
+        assert!(key1.unwrap_or_default().contains(":body_hash:"));
     }
 
     #[test]
@@ -745,11 +754,12 @@ mod tests {
             ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body2));
 
         assert_eq!(key1, key2);
-        assert!(key1.contains(":body_hash:"));
+        assert!(key1.is_some());
+        assert!(key1.unwrap_or_default().contains(":body_hash:"));
     }
 
     #[test]
-    fn build_cache_key_uses_raw_hash_for_unknown_content_type() {
+    fn build_cache_key_skips_unknown_content_type() {
         let route = compiled_route(BodyKeyStrategy::AutoContentType);
         let ctx = context_with_content_type("application/octet-stream");
         let body = Bytes::from_static(b"binary-body");
@@ -757,6 +767,18 @@ mod tests {
         let key =
             ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body));
 
-        assert!(key.contains(":body_hash:"));
+        assert!(key.is_none());
+    }
+
+    #[test]
+    fn build_cache_key_skips_oversized_body() {
+        let route = compiled_route(BodyKeyStrategy::AutoContentType);
+        let ctx = context_with_content_type("application/json");
+        let body = Bytes::from(vec![b'a'; MAX_CACHEABLE_BODY_BYTES + 1]);
+
+        let key =
+            ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body));
+
+        assert!(key.is_none());
     }
 }
