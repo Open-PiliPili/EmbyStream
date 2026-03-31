@@ -6,6 +6,7 @@ pub enum CacheKeyStrategy {
     FullUri,
     NextUpSeriesId,
     EpisodesShowId,
+    UserItem,
 }
 
 /// Represents a single cacheable Emby API route.
@@ -45,6 +46,13 @@ pub struct CacheableRoute {
 }
 
 pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
+    CacheableRoute {
+        pattern: r"(?i)^/(?:emby/)?Users/[^/]+/Items/[^/]+$",
+        methods: &["GET"],
+        ttl_seconds: 7200, // 2 hours
+        description: "User item details",
+        key_strategy: CacheKeyStrategy::UserItem,
+    },
     CacheableRoute {
         pattern: r"(?i)^/(?:emby/)?Shows/NextUp",
         methods: &["GET"],
@@ -111,6 +119,9 @@ pub fn build_semantic_cache_key(
         CacheKeyStrategy::EpisodesShowId => {
             build_episodes_cache_key(method, path, fallback_uri)
         }
+        CacheKeyStrategy::UserItem => {
+            build_user_item_cache_key(method, path, fallback_uri)
+        }
     }
 }
 
@@ -167,10 +178,47 @@ fn build_episodes_cache_key(
     )
 }
 
+fn build_user_item_cache_key(
+    method: &str,
+    path: &str,
+    fallback_uri: &str,
+) -> String {
+    let segments: Vec<&str> = path
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+
+    let Some((user_id, item_id)) = segments
+        .windows(4)
+        .find(|window| {
+            window
+                .first()
+                .is_some_and(|segment| segment.eq_ignore_ascii_case("Users"))
+                && window.get(2).is_some_and(|segment| {
+                    segment.eq_ignore_ascii_case("Items")
+                })
+        })
+        .and_then(|window| {
+            let user_id = window.get(1)?;
+            let item_id = window.get(3)?;
+            Some((*user_id, *item_id))
+        })
+    else {
+        return format!("{method}:{fallback_uri}");
+    };
+
+    format!(
+        "{method}:user_item:user_id:{}:item_id:{}",
+        user_id.to_ascii_lowercase(),
+        item_id.to_ascii_lowercase()
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         CacheKeyStrategy, CompiledCacheableRoute, build_semantic_cache_key,
+        find_cacheable_route,
     };
     use regex::Regex;
 
@@ -209,5 +257,37 @@ mod tests {
         );
 
         assert_eq!(key, "GET:shows_episodes:show_id:show-xyz_09");
+    }
+
+    #[test]
+    fn user_item_semantic_key_uses_user_and_item_ids_only() {
+        let route = compiled(CacheKeyStrategy::UserItem);
+        let key = build_semantic_cache_key(
+            &route,
+            "GET",
+            "/emby/Users/User-ABC_01/Items/Item-XYZ_09",
+            None,
+            "/emby/Users/User-ABC_01/Items/Item-XYZ_09",
+        );
+
+        assert_eq!(
+            key,
+            "GET:user_item:user_id:user-abc_01:item_id:item-xyz_09"
+        );
+    }
+
+    #[test]
+    fn user_item_route_does_not_match_extra_segments() {
+        let route =
+            find_cacheable_route("/emby/Users/u1/Items/i1/resume", "GET");
+
+        assert!(route.is_none());
+    }
+
+    #[test]
+    fn user_item_route_does_not_match_missing_item_id() {
+        let route = find_cacheable_route("/emby/Users/u1/Items", "GET");
+
+        assert!(route.is_none());
     }
 }

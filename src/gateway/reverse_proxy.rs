@@ -314,6 +314,14 @@ impl ReverseProxyMiddleware {
             return format!(" route=shows_episodes show_id={show_id}");
         }
 
+        if let Some(rest) = cache_key.strip_prefix("GET:user_item:user_id:") {
+            if let Some((user_id, item_id)) = rest.split_once(":item_id:") {
+                return format!(
+                    " route=user_item user_id={user_id} item_id={item_id}"
+                );
+            }
+        }
+
         String::new()
     }
 
