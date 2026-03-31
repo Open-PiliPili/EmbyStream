@@ -141,17 +141,6 @@ impl AppForwardService {
         path_params: &PathParams,
         request: &AppForwardRequest,
     ) -> Result<ForwardInfo, AppForwardError> {
-        let forward_info_cache = self.state.get_forward_info_cache().await;
-        let cache_key = self.forward_info_key(path_params)?;
-        if let Some(cached_forward_info) = forward_info_cache.get(&cache_key) {
-            debug_log!(
-                FORWARD_LOGGER_DOMAIN,
-                "Forward info cache hit {:?}",
-                cached_forward_info
-            );
-            return Ok(cached_forward_info);
-        }
-
         let emby_token = self.get_emby_api_token(request, true).await;
         if emby_token.is_empty() {
             return Err(AppForwardError::EmptyEmbyToken);
@@ -203,7 +192,6 @@ impl AppForwardService {
                 AppForwardError::EmbyPathParserError
             })?;
 
-        forward_info_cache.insert(cache_key, forward_info.clone());
         Ok(forward_info)
     }
 
@@ -488,13 +476,6 @@ impl AppForwardService {
     fn encrypt_key(
         &self,
         params: &ForwardInfo,
-    ) -> Result<String, AppForwardError> {
-        self.md5_key(&params.item_id, &params.media_source_id)
-    }
-
-    fn forward_info_key(
-        &self,
-        params: &PathParams,
     ) -> Result<String, AppForwardError> {
         self.md5_key(&params.item_id, &params.media_source_id)
     }
