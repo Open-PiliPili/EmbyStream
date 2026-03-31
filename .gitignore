@@ -39,6 +39,7 @@ config/
 !src/config/
 !template/config/
 .cursor/
+.claude/
 doc/
 
 # === Web UI ===

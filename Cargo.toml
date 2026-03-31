@@ -1,6 +1,6 @@
 [package]
 name = "embystream"
-version = "0.0.22"
+version = "0.0.23"
 edition = "2024"
 rust-version = "1.85"
 readme = "README.md"
@@ -20,7 +20,7 @@ aes = "0.8.4"
 anyhow = "1.0.102"
 async-trait = "0.1.89"
 base64 = "0.22.1"
-blake3 = "1.8.2"
+blake3 = "1.8.4"
 bytes = "1.11.1"
 cbc = "0.1.2"
 chrono = { version = "0.4.44", features = ["serde"] }
@@ -84,7 +84,7 @@ toml = "0.9.12"
 tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-subscriber = { version = "0.3.23", features = ["std", "fmt", "env-filter", "tracing-log", "json", "time", "local-time"] }
-uuid = { version = "1.22.0", features = ["v4"] }
+uuid = { version = "1.23.0", features = ["v4"] }
 
 [dev-dependencies]
 filetime = "0.2.27"
