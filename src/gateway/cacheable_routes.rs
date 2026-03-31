@@ -9,6 +9,15 @@ pub enum CacheKeyStrategy {
     UserItem,
 }
 
+#[derive(Clone, Copy)]
+pub enum BodyKeyStrategy {
+    Ignore,
+    AutoContentType,
+    RawHash,
+    JsonCanonical,
+    FormUrlEncodedCanonical,
+}
+
 /// Represents a single cacheable Emby API route.
 ///
 /// ## How to add a new cacheable route
@@ -25,8 +34,9 @@ pub enum CacheKeyStrategy {
 ///   Example: `GET:/emby/Shows/NextUp?UserId=...&Limit=24&...`
 ///   Different query params each produce a separate cache entry.
 ///
-/// - **POST requests**: key = `POST:{full URI including path + all query params}:{MD5 of request body}`
-///   Example: `POST:/emby/Items/.../Action?...:a3f2b8c1...`
+/// - **POST requests**: body handling should be explicit.
+///   Prefer canonical body strategies for JSON or form-urlencoded payloads
+///   instead of hashing raw bytes directly, to avoid unnecessary cache miss.
 ///
 /// - **Special case: PlaybackInfo**
 ///   `PlaybackInfo` is normalized and shared by `PlaybackInfoService` using
@@ -43,6 +53,7 @@ pub struct CacheableRoute {
     pub ttl_seconds: u64,
     pub description: &'static str,
     pub key_strategy: CacheKeyStrategy,
+    pub body_key_strategy: BodyKeyStrategy,
 }
 
 pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
@@ -52,6 +63,7 @@ pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
         ttl_seconds: 7200, // 2 hours
         description: "User item details",
         key_strategy: CacheKeyStrategy::UserItem,
+        body_key_strategy: BodyKeyStrategy::Ignore,
     },
     CacheableRoute {
         pattern: r"(?i)^/(?:emby/)?Shows/NextUp$",
@@ -59,6 +71,7 @@ pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
         ttl_seconds: 7200, // 2 hours
         description: "Next-up episode for a series",
         key_strategy: CacheKeyStrategy::NextUpSeriesId,
+        body_key_strategy: BodyKeyStrategy::Ignore,
     },
     CacheableRoute {
         pattern: r"(?i)^/(?:emby/)?Shows/[^/]+/Episodes$",
@@ -66,6 +79,7 @@ pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
         ttl_seconds: 7200, // 2 hours
         description: "Episode list for a series season",
         key_strategy: CacheKeyStrategy::EpisodesShowId,
+        body_key_strategy: BodyKeyStrategy::Ignore,
     },
 ];
 
@@ -74,6 +88,7 @@ pub struct CompiledCacheableRoute {
     pub methods: &'static [&'static str],
     pub ttl_seconds: u64,
     pub key_strategy: CacheKeyStrategy,
+    pub body_key_strategy: BodyKeyStrategy,
 }
 
 pub static COMPILED_ROUTES: Lazy<Vec<CompiledCacheableRoute>> =
@@ -87,6 +102,7 @@ pub static COMPILED_ROUTES: Lazy<Vec<CompiledCacheableRoute>> =
                         methods: route.methods,
                         ttl_seconds: route.ttl_seconds,
                         key_strategy: route.key_strategy,
+                        body_key_strategy: route.body_key_strategy,
                     }
                 })
             })
@@ -254,8 +270,8 @@ fn build_user_item_cache_key(
 #[cfg(test)]
 mod tests {
     use super::{
-        CacheKeyStrategy, CompiledCacheableRoute, build_semantic_cache_key,
-        find_cacheable_route,
+        BodyKeyStrategy, CacheKeyStrategy, CompiledCacheableRoute,
+        build_semantic_cache_key, find_cacheable_route,
     };
     use regex::Regex;
 
@@ -265,6 +281,7 @@ mod tests {
             methods: &["GET"],
             ttl_seconds: 1,
             key_strategy: strategy,
+            body_key_strategy: BodyKeyStrategy::Ignore,
         }
     }
 

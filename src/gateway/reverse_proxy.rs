@@ -8,8 +8,10 @@ use hyper::{
     body::Incoming,
     header::{self, HeaderName, HeaderValue},
 };
+use serde_json::{Map as JsonMap, Value as JsonValue};
 
 use super::{
+    cacheable_routes::BodyKeyStrategy,
     cacheable_routes::build_semantic_cache_key,
     cacheable_routes::find_cacheable_route,
     chain::{Middleware, Next},
@@ -126,12 +128,120 @@ impl ReverseProxyMiddleware {
             ctx.uri.query(),
         );
 
-        match body_bytes {
-            Some(bytes) if !bytes.is_empty() => {
-                let body_hash = StringUtil::hash_bytes(bytes);
-                format!("{semantic_key}:{body_hash}")
+        let Some(body_hash) =
+            Self::body_hash(route.body_key_strategy, &ctx.headers, body_bytes)
+        else {
+            return semantic_key;
+        };
+
+        format!("{semantic_key}:body_hash:{body_hash}")
+    }
+
+    fn body_hash(
+        strategy: BodyKeyStrategy,
+        headers: &hyper::HeaderMap,
+        body_bytes: Option<&Bytes>,
+    ) -> Option<String> {
+        let bytes = body_bytes.filter(|bytes| !bytes.is_empty())?;
+
+        match strategy {
+            BodyKeyStrategy::Ignore => None,
+            BodyKeyStrategy::RawHash => Some(Self::raw_body_hash(bytes)),
+            BodyKeyStrategy::JsonCanonical => Some(Self::json_body_hash(bytes)),
+            BodyKeyStrategy::FormUrlEncodedCanonical => {
+                Some(Self::form_body_hash(bytes))
             }
-            _ => semantic_key,
+            BodyKeyStrategy::AutoContentType => {
+                let body_hash = match Self::request_content_type(headers) {
+                    Some("application/json") => Self::json_body_hash(bytes),
+                    Some("application/x-www-form-urlencoded") => {
+                        Self::form_body_hash(bytes)
+                    }
+                    _ => Self::raw_body_hash(bytes),
+                };
+                Some(body_hash)
+            }
+        }
+    }
+
+    fn raw_body_hash(bytes: &Bytes) -> String {
+        StringUtil::hash_bytes(bytes.as_ref())
+    }
+
+    fn json_body_hash(bytes: &Bytes) -> String {
+        let canonical_json = serde_json::from_slice::<JsonValue>(bytes)
+            .map(Self::canonicalize_json_value)
+            .and_then(|value| serde_json::to_vec(&value))
+            .unwrap_or_else(|_| bytes.to_vec());
+
+        StringUtil::hash_bytes(&canonical_json)
+    }
+
+    fn form_body_hash(bytes: &Bytes) -> String {
+        let body = std::str::from_utf8(bytes.as_ref())
+            .unwrap_or_default()
+            .trim();
+
+        if body.is_empty() {
+            return String::new();
+        }
+
+        let mut form_pairs: Vec<(String, String)> =
+            form_urlencoded::parse(body.as_bytes())
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect();
+        form_pairs.sort_by(
+            |(left_key, left_value), (right_key, right_value)| {
+                left_key
+                    .to_ascii_lowercase()
+                    .cmp(&right_key.to_ascii_lowercase())
+                    .then_with(|| left_value.cmp(right_value))
+            },
+        );
+
+        let normalized_form = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(
+                form_pairs
+                    .iter()
+                    .map(|(key, value)| (key.as_str(), value.as_str())),
+            )
+            .finish();
+
+        StringUtil::hash_hex(&normalized_form)
+    }
+
+    fn request_content_type(headers: &hyper::HeaderMap) -> Option<&str> {
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .map(str::trim)
+    }
+
+    fn canonicalize_json_value(value: JsonValue) -> JsonValue {
+        match value {
+            JsonValue::Array(values) => JsonValue::Array(
+                values
+                    .into_iter()
+                    .map(Self::canonicalize_json_value)
+                    .collect(),
+            ),
+            JsonValue::Object(map) => {
+                let mut entries: Vec<(String, JsonValue)> = map
+                    .into_iter()
+                    .map(|(key, value)| {
+                        (key, Self::canonicalize_json_value(value))
+                    })
+                    .collect();
+                entries.sort_by(|(left_key, _), (right_key, _)| {
+                    left_key.cmp(right_key)
+                });
+
+                let canonical_map: JsonMap<String, JsonValue> =
+                    entries.into_iter().collect();
+                JsonValue::Object(canonical_map)
+            }
+            other => other,
         }
     }
 
@@ -522,10 +632,51 @@ impl Middleware for ReverseProxyMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use hyper::StatusCode;
+    use std::time::Instant;
+
+    use bytes::Bytes;
+    use hyper::{Method, StatusCode, Uri};
+    use regex::Regex;
     use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 
     use super::ReverseProxyMiddleware;
+    use crate::gateway::{
+        cacheable_routes::{
+            BodyKeyStrategy, CacheKeyStrategy, CompiledCacheableRoute,
+        },
+        context::Context,
+    };
+
+    fn compiled_route(
+        body_key_strategy: BodyKeyStrategy,
+    ) -> CompiledCacheableRoute {
+        CompiledCacheableRoute {
+            regex: Regex::new(".*").unwrap_or_else(|_| unreachable!()),
+            methods: &["POST"],
+            ttl_seconds: 1,
+            key_strategy: CacheKeyStrategy::FullUri,
+            body_key_strategy,
+        }
+    }
+
+    fn context_with_content_type(content_type: &str) -> Context {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_str(content_type)
+                .unwrap_or_else(|_| unreachable!()),
+        );
+
+        Context::new(
+            "/emby/Items/1/Action"
+                .parse::<Uri>()
+                .unwrap_or_else(|_| unreachable!()),
+            Method::POST,
+            headers,
+            Instant::now(),
+            "request-1".into(),
+        )
+    }
 
     #[test]
     fn should_cache_json_success_response() {
@@ -562,5 +713,50 @@ mod tests {
             StatusCode::BAD_REQUEST,
             &headers
         ));
+    }
+
+    #[test]
+    fn build_cache_key_normalizes_json_body_order() {
+        let route = compiled_route(BodyKeyStrategy::AutoContentType);
+        let ctx = context_with_content_type("application/json");
+        let body1 = Bytes::from_static(br#"{"b":2,"a":1}"#);
+        let body2 = Bytes::from_static(br#"{"a":1,"b":2}"#);
+
+        let key1 =
+            ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body1));
+        let key2 =
+            ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body2));
+
+        assert_eq!(key1, key2);
+        assert!(key1.contains(":body_hash:"));
+    }
+
+    #[test]
+    fn build_cache_key_normalizes_form_body_order() {
+        let route = compiled_route(BodyKeyStrategy::AutoContentType);
+        let ctx =
+            context_with_content_type("application/x-www-form-urlencoded");
+        let body1 = Bytes::from_static(b"b=2&a=1");
+        let body2 = Bytes::from_static(b"a=1&b=2");
+
+        let key1 =
+            ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body1));
+        let key2 =
+            ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body2));
+
+        assert_eq!(key1, key2);
+        assert!(key1.contains(":body_hash:"));
+    }
+
+    #[test]
+    fn build_cache_key_uses_raw_hash_for_unknown_content_type() {
+        let route = compiled_route(BodyKeyStrategy::AutoContentType);
+        let ctx = context_with_content_type("application/octet-stream");
+        let body = Bytes::from_static(b"binary-body");
+
+        let key =
+            ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body));
+
+        assert!(key.contains(":body_hash:"));
     }
 }
