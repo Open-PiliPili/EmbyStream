@@ -6,6 +6,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use form_urlencoded;
 use hyper::{
     StatusCode, Uri,
@@ -339,12 +340,7 @@ impl AppForwardService {
             return Ok(cached_path);
         }
 
-        let strm_mutex = self
-            .state
-            .strm_request_locks
-            .entry(strm_cache_key.clone())
-            .or_insert_with(|| Arc::new(TokioMutex::new(())))
-            .clone();
+        let strm_mutex = self.strm_request_lock(&strm_cache_key);
         let wait_start = Instant::now();
         let _strm_guard = strm_mutex.lock().await;
         let lock_wait_ms = wait_start.elapsed().as_millis();
@@ -500,6 +496,20 @@ impl AppForwardService {
         Ok(format!("frontend:strm:path_md5:{path_hash}"))
     }
 
+    fn strm_request_lock(&self, cache_key: &str) -> Arc<TokioMutex<()>> {
+        Self::request_lock(&self.state.strm_request_locks, cache_key)
+    }
+
+    fn request_lock(
+        locks: &DashMap<String, Arc<TokioMutex<()>>>,
+        cache_key: &str,
+    ) -> Arc<TokioMutex<()>> {
+        locks
+            .entry(cache_key.to_string())
+            .or_insert_with(|| Arc::new(TokioMutex::new(())))
+            .clone()
+    }
+
     async fn get_forward_config(&self) -> Arc<ForwardConfig> {
         let config_arc =
             self.config
@@ -546,6 +556,11 @@ impl AppForwardService {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use dashmap::DashMap;
+    use tokio::sync::Mutex as TokioMutex;
+
     use super::AppForwardService;
 
     #[test]
@@ -564,6 +579,30 @@ mod tests {
         let key = AppForwardService::strm_cache_key("");
 
         assert!(key.is_err());
+    }
+
+    #[tokio::test]
+    async fn strm_request_lock_reuses_same_key_mutex() {
+        let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
+        let key = "frontend:strm:path_md5:abc";
+
+        let lock1 = AppForwardService::request_lock(&locks, key);
+        let lock2 = AppForwardService::request_lock(&locks, key);
+
+        assert!(Arc::ptr_eq(&lock1, &lock2));
+
+        let _guard = lock1.lock().await;
+        assert!(lock2.try_lock().is_err());
+    }
+
+    #[test]
+    fn strm_request_lock_separates_distinct_keys() {
+        let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
+
+        let lock1 = AppForwardService::request_lock(&locks, "key1");
+        let lock2 = AppForwardService::request_lock(&locks, "key2");
+
+        assert!(!Arc::ptr_eq(&lock1, &lock2));
     }
 }
 

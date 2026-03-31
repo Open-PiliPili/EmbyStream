@@ -1,6 +1,7 @@
 use std::{borrow::Cow, path::PathBuf, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use hyper::{StatusCode, Uri, header};
 use tokio::sync::Mutex as TokioMutex;
 
@@ -456,12 +457,7 @@ impl AppStreamService {
             }
         };
 
-        let probe_mutex = self
-            .state
-            .open_list_request_locks
-            .entry(open_list_cache_key.clone())
-            .or_insert_with(|| Arc::new(TokioMutex::new(())))
-            .clone();
+        let probe_mutex = self.open_list_request_lock(&open_list_cache_key);
         let wait_start = Instant::now();
         let _probe_guard = probe_mutex.lock().await;
         let lock_wait_ms = wait_start.elapsed().as_millis();
@@ -638,6 +634,20 @@ impl AppStreamService {
         )
     }
 
+    fn open_list_request_lock(&self, cache_key: &str) -> Arc<TokioMutex<()>> {
+        Self::request_lock(&self.state.open_list_request_locks, cache_key)
+    }
+
+    fn request_lock(
+        locks: &DashMap<String, Arc<TokioMutex<()>>>,
+        cache_key: &str,
+    ) -> Arc<TokioMutex<()>> {
+        locks
+            .entry(cache_key.to_string())
+            .or_insert_with(|| Arc::new(TokioMutex::new(())))
+            .clone()
+    }
+
     fn resolve_upstream_user_agent(
         node: &BackendNode,
         request: &AppStreamRequest,
@@ -712,8 +722,13 @@ impl AppStreamService {
 
 #[cfg(test)]
 mod tests {
-    use super::AppStreamService;
+    use std::sync::Arc;
+
+    use dashmap::DashMap;
     use hyper::Uri;
+    use tokio::sync::Mutex as TokioMutex;
+
+    use super::AppStreamService;
 
     #[test]
     fn open_list_cache_key_is_structured() {
@@ -741,6 +756,30 @@ mod tests {
         );
 
         assert_eq!(key1, key2);
+    }
+
+    #[tokio::test]
+    async fn open_list_request_lock_reuses_same_key_mutex() {
+        let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
+        let key = "backend:openlist:node:n1:path_md5:a:ua_md5:b";
+
+        let lock1 = AppStreamService::request_lock(&locks, key);
+        let lock2 = AppStreamService::request_lock(&locks, key);
+
+        assert!(Arc::ptr_eq(&lock1, &lock2));
+
+        let _guard = lock1.lock().await;
+        assert!(lock2.try_lock().is_err());
+    }
+
+    #[test]
+    fn open_list_request_lock_separates_distinct_keys() {
+        let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
+
+        let lock1 = AppStreamService::request_lock(&locks, "key1");
+        let lock2 = AppStreamService::request_lock(&locks, "key2");
+
+        assert!(!Arc::ptr_eq(&lock1, &lock2));
     }
 }
 
