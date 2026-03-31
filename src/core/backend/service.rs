@@ -2,6 +2,7 @@ use std::{borrow::Cow, path::PathBuf, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
 use hyper::{StatusCode, Uri, header};
+use tokio::sync::Mutex as TokioMutex;
 
 use super::{
     constants::{
@@ -421,25 +422,27 @@ impl AppStreamService {
         let user_agent = request.user_agent();
         let openlist_ua =
             user_agent.unwrap_or(SystemInfo::new().get_user_agent());
+        let node = request
+            .node
+            .as_ref()
+            .ok_or(AppStreamError::BackendNodeNotFound)?;
+        let open_list_cache_key =
+            Self::open_list_cache_key(&node.uuid, uri, &openlist_ua);
 
         let cache = self.state.get_open_list_cache().await;
-        if let Some(cached_uri) =
-            cache.get(&self.open_list_cache_key(uri, &openlist_ua.clone()))
-        {
+        if let Some(cached_uri) = cache.get(&open_list_cache_key) {
             let elapsed_ms = timer.elapsed().as_millis();
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
-                "openlist_cache_hit elapsed_ms={} uri={:?}",
+                "openlist_cache_hit elapsed_ms={} key={} node={} uri={:?}",
                 elapsed_ms,
+                open_list_cache_key,
+                node.name,
                 cached_uri
             );
             return Ok(cached_uri);
         }
 
-        let node = request
-            .node
-            .as_ref()
-            .ok_or(AppStreamError::BackendNodeNotFound)?;
         let openlist_config = match &node.open_list {
             Some(cfg) => cfg,
             None => {
@@ -453,9 +456,33 @@ impl AppStreamService {
             }
         };
 
+        let probe_mutex = self
+            .state
+            .open_list_request_locks
+            .entry(open_list_cache_key.clone())
+            .or_insert_with(|| Arc::new(TokioMutex::new(())))
+            .clone();
+        let wait_start = Instant::now();
+        let _probe_guard = probe_mutex.lock().await;
+        let lock_wait_ms = wait_start.elapsed().as_millis();
+
+        if let Some(cached_uri) = cache.get(&open_list_cache_key) {
+            info_log!(
+                STREAM_LOGGER_DOMAIN,
+                "openlist_inflight_wait_hit lock_wait_ms={} key={} node={} \
+                 uri={:?}",
+                lock_wait_ms,
+                open_list_cache_key,
+                node.name,
+                cached_uri
+            );
+            return Ok(cached_uri);
+        }
+
         debug_log!(
             STREAM_LOGGER_DOMAIN,
-            "Processing OpenList for node '{}': base_url='{}'",
+            "openlist_fetch_start key={} node='{}' base_url='{}'",
+            open_list_cache_key,
             node.name,
             openlist_config.base_url
         );
@@ -486,16 +513,21 @@ impl AppStreamService {
                 if elapsed_ms >= 500 {
                     warn_log!(
                         STREAM_LOGGER_DOMAIN,
-                        "openlist_fetch_slow elapsed_ms={} node={} url={}",
+                        "openlist_fetch_slow elapsed_ms={} key={} node={} \
+                         url={}",
                         elapsed_ms,
+                        open_list_cache_key,
                         node.name,
                         new_url
                     );
                 } else {
                     debug_log!(
                         STREAM_LOGGER_DOMAIN,
-                        "openlist_fetch_complete elapsed_ms={} url={}",
+                        "openlist_fetch_complete elapsed_ms={} key={} node={} \
+                         url={}",
                         elapsed_ms,
+                        open_list_cache_key,
+                        node.name,
                         new_url
                     );
                 }
@@ -511,9 +543,13 @@ impl AppStreamService {
                         AppStreamError::InvalidOpenListUri(new_url.clone())
                     })?;
 
-                cache.insert(
-                    self.open_list_cache_key(uri, &openlist_ua),
-                    new_uri.clone(),
+                cache.insert(open_list_cache_key.clone(), new_uri.clone());
+                info_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "openlist_cache_store key={} node={} uri={}",
+                    open_list_cache_key,
+                    node.name,
+                    new_uri
                 );
 
                 Ok(new_uri)
@@ -521,8 +557,11 @@ impl AppStreamService {
             Err(e) => {
                 error_log!(
                     STREAM_LOGGER_DOMAIN,
-                    "openlist_fetch_error elapsed_ms={} error={:?}",
+                    "openlist_fetch_error elapsed_ms={} key={} node={} \
+                     error={:?}",
                     elapsed_ms,
+                    open_list_cache_key,
+                    node.name,
                     e
                 );
 
@@ -582,12 +621,21 @@ impl AppStreamService {
         })
     }
 
-    fn open_list_cache_key(&self, uri: &Uri, user_agent: &str) -> String {
+    fn open_list_cache_key(
+        node_uuid: &str,
+        uri: &Uri,
+        user_agent: &str,
+    ) -> String {
         let url_string = Uri::to_path_or_url_string(uri);
         let trimmed_url = url_string.trim_end();
-        let input =
-            format!("{}&user_agent={}", trimmed_url.to_lowercase(), user_agent);
-        StringUtil::md5(&input)
+        let path_hash = StringUtil::md5(&trimmed_url.to_lowercase());
+        let ua_hash = StringUtil::md5(user_agent.trim());
+        format!(
+            "backend:openlist:node:{}:path_md5:{}:ua_md5:{}",
+            node_uuid.to_ascii_lowercase(),
+            path_hash,
+            ua_hash
+        )
     }
 
     fn resolve_upstream_user_agent(
@@ -659,6 +707,40 @@ impl AppStreamService {
             Ok(None) => Ok(None),
             Err(()) => Err(StatusCode::UNAUTHORIZED),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppStreamService;
+    use hyper::Uri;
+
+    #[test]
+    fn open_list_cache_key_is_structured() {
+        let key = AppStreamService::open_list_cache_key(
+            "Node-01",
+            &Uri::from_static("/mnt/media/Show/Episode01.mkv"),
+            "ExampleUA/1.0",
+        );
+
+        assert!(key.starts_with("backend:openlist:node:node-01:path_md5:"));
+        assert!(key.contains(":ua_md5:"));
+    }
+
+    #[test]
+    fn open_list_cache_key_trims_trailing_whitespace_only() {
+        let key1 = AppStreamService::open_list_cache_key(
+            "node",
+            &Uri::from_static("/mnt/media/file.mkv"),
+            "ExampleUA/1.0",
+        );
+        let key2 = AppStreamService::open_list_cache_key(
+            "node",
+            &Uri::from_static("/mnt/media/file.mkv"),
+            "ExampleUA/1.0 ",
+        );
+
+        assert_eq!(key1, key2);
     }
 }
 
