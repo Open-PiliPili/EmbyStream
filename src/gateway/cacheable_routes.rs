@@ -54,14 +54,14 @@ pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
         key_strategy: CacheKeyStrategy::UserItem,
     },
     CacheableRoute {
-        pattern: r"(?i)^/(?:emby/)?Shows/NextUp",
+        pattern: r"(?i)^/(?:emby/)?Shows/NextUp$",
         methods: &["GET"],
         ttl_seconds: 7200, // 2 hours
         description: "Next-up episode for a series",
         key_strategy: CacheKeyStrategy::NextUpSeriesId,
     },
     CacheableRoute {
-        pattern: r"(?i)^/(?:emby/)?Shows/[^/]+/Episodes",
+        pattern: r"(?i)^/(?:emby/)?Shows/[^/]+/Episodes$",
         methods: &["GET"],
         ttl_seconds: 7200, // 2 hours
         description: "Episode list for a series season",
@@ -252,6 +252,27 @@ mod tests {
     }
 
     #[test]
+    fn next_up_route_matches_exact_path_only() {
+        let route = find_cacheable_route("/emby/Shows/NextUp", "GET");
+
+        assert!(route.is_some());
+    }
+
+    #[test]
+    fn next_up_route_does_not_match_extra_segments() {
+        let route = find_cacheable_route("/emby/Shows/NextUp/resume", "GET");
+
+        assert!(route.is_none());
+    }
+
+    #[test]
+    fn next_up_route_does_not_match_missing_segment() {
+        let route = find_cacheable_route("/emby/Shows", "GET");
+
+        assert!(route.is_none());
+    }
+
+    #[test]
     fn episodes_semantic_key_uses_show_id_from_path_only() {
         let route = compiled(CacheKeyStrategy::EpisodesShowId);
         let key = build_semantic_cache_key(
@@ -263,6 +284,31 @@ mod tests {
         );
 
         assert_eq!(key, "GET:shows_episodes:show_id:show-xyz_09");
+    }
+
+    #[test]
+    fn episodes_route_matches_exact_path_only() {
+        let route =
+            find_cacheable_route("/emby/Shows/Show-XYZ_09/Episodes", "GET");
+
+        assert!(route.is_some());
+    }
+
+    #[test]
+    fn episodes_route_does_not_match_extra_segments() {
+        let route = find_cacheable_route(
+            "/emby/Shows/Show-XYZ_09/Episodes/resume",
+            "GET",
+        );
+
+        assert!(route.is_none());
+    }
+
+    #[test]
+    fn episodes_route_does_not_match_missing_show_id() {
+        let route = find_cacheable_route("/emby/Shows/Episodes", "GET");
+
+        assert!(route.is_none());
     }
 
     #[test]
