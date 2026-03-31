@@ -281,6 +281,7 @@ async fn setup_frontend_gateway(
         .add_middleware(Box::new(ReverseProxyMiddleware::new(
             emby_base_url,
             api_cache,
+            app_state.clone(),
         )));
 
     gateway.set_handler(default_handler());

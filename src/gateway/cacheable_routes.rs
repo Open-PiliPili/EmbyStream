@@ -11,7 +11,7 @@ use regex::Regex;
 /// 4. `ttl_seconds` — Cache lifetime in seconds. Recommended range: 7200–14400 (2–4 hours).
 /// 5. `description` — Brief explanation of why this route needs caching.
 ///
-/// ## Cache key strategy (precise matching — different params produce different entries)
+/// ## Cache key strategy
 ///
 /// - **GET requests**: key = `GET:{full URI including path + all query params}`
 ///   Example: `GET:/emby/Shows/NextUp?UserId=...&Limit=24&...`
@@ -21,6 +21,10 @@ use regex::Regex;
 ///   Example: `POST:/emby/Items/251044/PlaybackInfo?MediaSourceId=...&UserId=...:a3f2b8c1...`
 ///   The POST body (e.g. `DeviceProfile`) differs across device types (iPhone vs Android TV)
 ///   and directly affects Emby's transcoding compatibility response, so it must be part of the key.
+///
+/// - **Special case: PlaybackInfo**
+///   `PlaybackInfo` is normalized and shared by `PlaybackInfoService` using
+///   `item_id + media_source_id` as the semantic cache key across GET and POST.
 ///
 /// ## Important notes
 ///
@@ -37,7 +41,7 @@ pub struct CacheableRoute {
 pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
     CacheableRoute {
         pattern: r"(?i)^/(?:emby/)?Items/[^/]+/PlaybackInfo",
-        methods: &["POST"],
+        methods: &["GET", "POST"],
         ttl_seconds: 7200, // 2 hours
         description: "Playback info — Emby processing takes ~1400ms",
     },

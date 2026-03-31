@@ -16,7 +16,11 @@ use super::{
     response::{BoxBodyType, ResponseBuilder},
 };
 use crate::{
-    API_CACHE_LOGGER_DOMAIN, REVERSE_PROXY_LOGGER_DOMAIN, cache::GeneralCache,
+    API_CACHE_LOGGER_DOMAIN, AppState, REVERSE_PROXY_LOGGER_DOMAIN,
+    cache::GeneralCache,
+    client::{
+        PlaybackInfoRequest, PlaybackInfoService, PlaybackInfoServiceError,
+    },
     debug_log, error_log, info_log, warn_log,
 };
 
@@ -64,10 +68,15 @@ pub struct ReverseProxyMiddleware {
     emby_base_url: String,
     http_client: reqwest::Client,
     api_cache: GeneralCache,
+    playback_info_service: PlaybackInfoService,
 }
 
 impl ReverseProxyMiddleware {
-    pub fn new(emby_base_url: String, api_cache: GeneralCache) -> Self {
+    pub fn new(
+        emby_base_url: String,
+        api_cache: GeneralCache,
+        state: std::sync::Arc<AppState>,
+    ) -> Self {
         let http_client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -77,6 +86,7 @@ impl ReverseProxyMiddleware {
             emby_base_url,
             http_client,
             api_cache,
+            playback_info_service: PlaybackInfoService::new(state),
         }
     }
 
@@ -263,6 +273,76 @@ impl ReverseProxyMiddleware {
             }
         }
     }
+
+    fn playback_info_request(
+        &self,
+        ctx: &Context,
+    ) -> Option<PlaybackInfoRequest> {
+        if ctx.method != Method::GET && ctx.method != Method::POST {
+            return None;
+        }
+
+        PlaybackInfoRequest::from_http_parts(&ctx.path, ctx.uri.query()).ok()
+    }
+
+    async fn handle_playback_info_request(
+        &self,
+        ctx: &Context,
+        request: PlaybackInfoRequest,
+        body: Option<Incoming>,
+    ) -> Response<BoxBodyType> {
+        let _ = Self::read_body(body).await;
+        let api_token = PlaybackInfoService::api_token_from_headers_and_query(
+            &ctx.headers,
+            ctx.uri.query(),
+        );
+
+        let playback_info = match self
+            .playback_info_service
+            .get(&request, api_token.as_deref())
+            .await
+        {
+            Ok(playback_info) => playback_info,
+            Err(error) => {
+                let status = match error {
+                    PlaybackInfoServiceError::InvalidItemId
+                    | PlaybackInfoServiceError::InvalidMediaSourceId
+                    | PlaybackInfoServiceError::EmptyApiToken => {
+                        StatusCode::BAD_REQUEST
+                    }
+                    PlaybackInfoServiceError::Upstream(_) => {
+                        StatusCode::BAD_GATEWAY
+                    }
+                };
+                error_log!(
+                    REVERSE_PROXY_LOGGER_DOMAIN,
+                    "playback_info_request_failed method={} path={} status={} \
+                     error={}",
+                    ctx.method,
+                    ctx.path,
+                    status.as_u16(),
+                    error
+                );
+                return ResponseBuilder::with_status_code(status);
+            }
+        };
+
+        match serde_json::to_string(&playback_info) {
+            Ok(body_json) => {
+                ResponseBuilder::with_json(StatusCode::OK, &body_json)
+            }
+            Err(error) => {
+                error_log!(
+                    REVERSE_PROXY_LOGGER_DOMAIN,
+                    "Failed to serialize playback info response: {}",
+                    error
+                );
+                ResponseBuilder::with_status_code(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -286,6 +366,12 @@ impl Middleware for ReverseProxyMiddleware {
                 StatusCode::FOUND,
                 None,
             );
+        }
+
+        if let Some(request) = self.playback_info_request(&ctx) {
+            return self
+                .handle_playback_info_request(&ctx, request, body)
+                .await;
         }
 
         let cacheable_route =
