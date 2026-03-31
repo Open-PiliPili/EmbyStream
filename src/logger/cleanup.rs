@@ -105,7 +105,6 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
-    use std::path::PathBuf;
     use tempfile::TempDir;
 
     #[test]

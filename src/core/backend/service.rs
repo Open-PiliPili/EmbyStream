@@ -77,6 +77,7 @@ impl AppStreamService {
         request: &AppStreamRequest,
     ) -> Result<Source, AppStreamError> {
         let timer = Instant::now();
+        let mut local_path_check_ms = None;
 
         let sign = request
             .sign
@@ -94,8 +95,13 @@ impl AppStreamService {
         let mut uri = sign.uri.clone().ok_or(AppStreamError::InvalidUri)?;
         debug_log!(STREAM_LOGGER_DOMAIN, "Original URI from sign: {}", uri);
 
+        let rewrite_start = Instant::now();
         uri = self.rewrite_uri_if_needed(uri, request).await?;
+        let rewrite_ms = rewrite_start.elapsed().as_millis();
+
+        let openlist_start = Instant::now();
         uri = self.fetch_remote_uri_if_openlist(&uri, request).await?;
+        let openlist_ms = openlist_start.elapsed().as_millis();
 
         let device_id = params.device_id;
         let node = request
@@ -200,7 +206,12 @@ impl AppStreamService {
                     path
                 );
 
-                if path.exists() {
+                let path_check_start = Instant::now();
+                let path_exists = path.exists();
+                local_path_check_ms =
+                    Some(path_check_start.elapsed().as_millis());
+
+                if path_exists {
                     Ok(Source::Local { path, device_id })
                 } else {
                     debug_log!(
@@ -234,8 +245,12 @@ impl AppStreamService {
         if elapsed_ms >= 100 {
             warn_log!(
                 STREAM_LOGGER_DOMAIN,
-                "route_with_sign_slow elapsed_ms={} node={}",
+                "route_with_sign_slow elapsed_ms={} rewrite_ms={} \
+                 openlist_ms={} local_path_check_ms={} node={}",
                 elapsed_ms,
+                rewrite_ms,
+                openlist_ms,
+                local_path_check_ms.unwrap_or(0),
                 request
                     .node
                     .as_ref()
@@ -245,8 +260,12 @@ impl AppStreamService {
         } else {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
-                "route_with_sign_complete elapsed_ms={}",
-                elapsed_ms
+                "route_with_sign_complete elapsed_ms={} rewrite_ms={} \
+                 openlist_ms={} local_path_check_ms={}",
+                elapsed_ms,
+                rewrite_ms,
+                openlist_ms,
+                local_path_check_ms.unwrap_or(0)
             );
         }
 
