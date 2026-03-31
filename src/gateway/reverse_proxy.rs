@@ -145,7 +145,12 @@ impl ReverseProxyMiddleware {
             return None;
         }
 
-        info_log!(API_CACHE_LOGGER_DOMAIN, "[CACHE HIT] key={}", cache_key);
+        info_log!(
+            API_CACHE_LOGGER_DOMAIN,
+            "[CACHE HIT] key={}{}",
+            cache_key,
+            Self::cache_key_log_suffix(cache_key)
+        );
         Some(cached.to_response())
     }
 
@@ -178,10 +183,11 @@ impl ReverseProxyMiddleware {
         self.api_cache.insert(cache_key.clone(), cached);
         info_log!(
             API_CACHE_LOGGER_DOMAIN,
-            "[CACHE STORE] key={}, ttl={}s, body_size={}",
+            "[CACHE STORE] key={}, ttl={}s, body_size={}{}",
             cache_key,
             ttl_seconds,
-            body.len()
+            body.len(),
+            Self::cache_key_log_suffix(&cache_key)
         );
     }
 
@@ -293,6 +299,22 @@ impl ReverseProxyMiddleware {
             .entry(cache_key.to_string())
             .or_insert_with(|| Arc::new(TokioMutex::new(())))
             .clone()
+    }
+
+    fn cache_key_log_suffix(cache_key: &str) -> String {
+        if let Some(series_id) =
+            cache_key.strip_prefix("GET:shows_nextup:series_id:")
+        {
+            return format!(" route=shows_nextup series_id={series_id}");
+        }
+
+        if let Some(show_id) =
+            cache_key.strip_prefix("GET:shows_episodes:show_id:")
+        {
+            return format!(" route=shows_episodes show_id={show_id}");
+        }
+
+        String::new()
     }
 
     fn playback_info_request(
@@ -421,8 +443,9 @@ impl Middleware for ReverseProxyMiddleware {
             if let Some(cached_response) = self.try_cache_hit(&key) {
                 info_log!(
                     API_CACHE_LOGGER_DOMAIN,
-                    "[CACHE WAIT HIT] key={}",
-                    key
+                    "[CACHE WAIT HIT] key={}{}",
+                    key,
+                    Self::cache_key_log_suffix(&key)
                 );
                 return cached_response;
             }
