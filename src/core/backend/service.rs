@@ -1,7 +1,6 @@
 use std::{borrow::Cow, path::PathBuf, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
-use dashmap::DashMap;
 use hyper::{StatusCode, Uri, header};
 use tokio::sync::Mutex as TokioMutex;
 
@@ -458,112 +457,130 @@ impl AppStreamService {
         };
 
         let probe_mutex = self.open_list_request_lock(&open_list_cache_key);
-        let wait_start = Instant::now();
-        let _probe_guard = probe_mutex.lock().await;
-        let lock_wait_ms = wait_start.elapsed().as_millis();
+        let result = {
+            let wait_start = Instant::now();
+            let _probe_guard = probe_mutex.lock().await;
+            let lock_wait_ms = wait_start.elapsed().as_millis();
 
-        if let Some(cached_uri) = cache.get(&open_list_cache_key) {
-            info_log!(
-                STREAM_LOGGER_DOMAIN,
-                "openlist_inflight_wait_hit lock_wait_ms={} key={} node={} \
-                 uri={:?}",
-                lock_wait_ms,
-                open_list_cache_key,
-                node.name,
-                cached_uri
-            );
-            return Ok(cached_uri);
-        }
-
-        debug_log!(
-            STREAM_LOGGER_DOMAIN,
-            "openlist_fetch_start key={} node='{}' base_url='{}'",
-            open_list_cache_key,
-            node.name,
-            openlist_config.base_url
-        );
-
-        let path = Uri::to_path_or_url_string(uri);
-        debug_log!(
-            STREAM_LOGGER_DOMAIN,
-            "Open list processing path: {:?}, user-agent: {:?}",
-            path,
-            openlist_ua
-        );
-
-        let openlist_client = ClientBuilder::<OpenListClient>::new().build();
-
-        let result = openlist_client
-            .fetch_file_path(
-                &openlist_config.base_url,
-                &openlist_config.token,
-                path,
-                openlist_ua.clone(),
-            )
-            .await;
-
-        let elapsed_ms = timer.elapsed().as_millis();
-
-        match result {
-            Ok(new_url) => {
-                if elapsed_ms >= 500 {
-                    warn_log!(
-                        STREAM_LOGGER_DOMAIN,
-                        "openlist_fetch_slow elapsed_ms={} key={} node={} \
-                         url={}",
-                        elapsed_ms,
-                        open_list_cache_key,
-                        node.name,
-                        new_url
-                    );
-                } else {
-                    debug_log!(
-                        STREAM_LOGGER_DOMAIN,
-                        "openlist_fetch_complete elapsed_ms={} key={} node={} \
-                         url={}",
-                        elapsed_ms,
-                        open_list_cache_key,
-                        node.name,
-                        new_url
-                    );
-                }
-
-                let new_uri =
-                    Uri::force_from_path_or_url(&new_url).map_err(|e| {
-                        error_log!(
-                            STREAM_LOGGER_DOMAIN,
-                            "Failed to convert openlist url: {:?} to uri: {:?}",
-                            new_url,
-                            e
-                        );
-                        AppStreamError::InvalidOpenListUri(new_url.clone())
-                    })?;
-
-                cache.insert(open_list_cache_key.clone(), new_uri.clone());
+            if let Some(cached_uri) = cache.get(&open_list_cache_key) {
                 info_log!(
                     STREAM_LOGGER_DOMAIN,
-                    "openlist_cache_store key={} node={} uri={}",
+                    "openlist_inflight_wait_hit lock_wait_ms={} key={} node={} \
+                     uri={:?}",
+                    lock_wait_ms,
                     open_list_cache_key,
                     node.name,
-                    new_uri
+                    cached_uri
                 );
-
-                Ok(new_uri)
-            }
-            Err(e) => {
-                error_log!(
+                Ok(cached_uri)
+            } else {
+                debug_log!(
                     STREAM_LOGGER_DOMAIN,
-                    "openlist_fetch_error elapsed_ms={} key={} node={} \
-                     error={:?}",
-                    elapsed_ms,
+                    "openlist_fetch_start key={} node='{}' base_url='{}'",
                     open_list_cache_key,
                     node.name,
-                    e
+                    openlist_config.base_url
                 );
 
-                Err(AppStreamError::UnexpectedOpenListError(e.to_string()))
+                let path = Uri::to_path_or_url_string(uri);
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "Open list processing path: {:?}, user-agent: {:?}",
+                    path,
+                    openlist_ua
+                );
+
+                let openlist_client =
+                    ClientBuilder::<OpenListClient>::new().build();
+
+                let result = openlist_client
+                    .fetch_file_path(
+                        &openlist_config.base_url,
+                        &openlist_config.token,
+                        path,
+                        openlist_ua.clone(),
+                    )
+                    .await;
+
+                let elapsed_ms = timer.elapsed().as_millis();
+
+                match result {
+                    Ok(new_url) => {
+                        if elapsed_ms >= 500 {
+                            warn_log!(
+                                STREAM_LOGGER_DOMAIN,
+                                "openlist_fetch_slow elapsed_ms={} key={} node={} \
+                                 url={}",
+                                elapsed_ms,
+                                open_list_cache_key,
+                                node.name,
+                                new_url
+                            );
+                        } else {
+                            debug_log!(
+                                STREAM_LOGGER_DOMAIN,
+                                "openlist_fetch_complete elapsed_ms={} key={} node={} \
+                                 url={}",
+                                elapsed_ms,
+                                open_list_cache_key,
+                                node.name,
+                                new_url
+                            );
+                        }
+
+                        let new_uri =
+                            Uri::force_from_path_or_url(&new_url).map_err(|e| {
+                                error_log!(
+                                    STREAM_LOGGER_DOMAIN,
+                                    "Failed to convert openlist url: {:?} to uri: {:?}",
+                                    new_url,
+                                    e
+                                );
+                                AppStreamError::InvalidOpenListUri(
+                                    new_url.clone(),
+                                )
+                            })?;
+
+                        cache.insert(
+                            open_list_cache_key.clone(),
+                            new_uri.clone(),
+                        );
+                        info_log!(
+                            STREAM_LOGGER_DOMAIN,
+                            "openlist_cache_store key={} node={} uri={}",
+                            open_list_cache_key,
+                            node.name,
+                            new_uri
+                        );
+
+                        Ok(new_uri)
+                    }
+                    Err(e) => {
+                        error_log!(
+                            STREAM_LOGGER_DOMAIN,
+                            "openlist_fetch_error elapsed_ms={} key={} node={} \
+                             error={:?}",
+                            elapsed_ms,
+                            open_list_cache_key,
+                            node.name,
+                            e
+                        );
+
+                        Err(AppStreamError::UnexpectedOpenListError(
+                            e.to_string(),
+                        ))
+                    }
+                }
             }
-        }
+        };
+
+        AppState::cleanup_request_lock(
+            &self.state.open_list_request_locks,
+            &open_list_cache_key,
+            &probe_mutex,
+        );
+
+        result
     }
 
     async fn build_redirect_info(
@@ -635,17 +652,7 @@ impl AppStreamService {
     }
 
     fn open_list_request_lock(&self, cache_key: &str) -> Arc<TokioMutex<()>> {
-        Self::request_lock(&self.state.open_list_request_locks, cache_key)
-    }
-
-    fn request_lock(
-        locks: &DashMap<String, Arc<TokioMutex<()>>>,
-        cache_key: &str,
-    ) -> Arc<TokioMutex<()>> {
-        locks
-            .entry(cache_key.to_string())
-            .or_insert_with(|| Arc::new(TokioMutex::new(())))
-            .clone()
+        AppState::request_lock(&self.state.open_list_request_locks, cache_key)
     }
 
     fn resolve_upstream_user_agent(
@@ -729,6 +736,7 @@ mod tests {
     use tokio::sync::Mutex as TokioMutex;
 
     use super::AppStreamService;
+    use crate::AppState;
 
     #[test]
     fn open_list_cache_key_is_structured() {
@@ -763,8 +771,8 @@ mod tests {
         let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
         let key = "backend:openlist:node:n1:path_md5:a:ua_md5:b";
 
-        let lock1 = AppStreamService::request_lock(&locks, key);
-        let lock2 = AppStreamService::request_lock(&locks, key);
+        let lock1 = AppState::request_lock(&locks, key);
+        let lock2 = AppState::request_lock(&locks, key);
 
         assert!(Arc::ptr_eq(&lock1, &lock2));
 
@@ -776,8 +784,8 @@ mod tests {
     fn open_list_request_lock_separates_distinct_keys() {
         let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
 
-        let lock1 = AppStreamService::request_lock(&locks, "key1");
-        let lock2 = AppStreamService::request_lock(&locks, "key2");
+        let lock1 = AppState::request_lock(&locks, "key1");
+        let lock2 = AppState::request_lock(&locks, "key2");
 
         assert!(!Arc::ptr_eq(&lock1, &lock2));
     }

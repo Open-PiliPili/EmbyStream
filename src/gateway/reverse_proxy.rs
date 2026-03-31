@@ -310,11 +310,7 @@ impl ReverseProxyMiddleware {
     }
 
     async fn lock_api_request(&self, cache_key: &str) -> Arc<TokioMutex<()>> {
-        self.state
-            .api_request_locks
-            .entry(cache_key.to_string())
-            .or_insert_with(|| Arc::new(TokioMutex::new(())))
-            .clone()
+        AppState::request_lock(&self.state.api_request_locks, cache_key)
     }
 
     fn cache_key_log_suffix(cache_key: &str) -> String {
@@ -464,41 +460,53 @@ impl Middleware for ReverseProxyMiddleware {
             }
 
             let lock = self.lock_api_request(&key).await;
-            let _guard = lock.lock().await;
+            let response = {
+                let _guard = lock.lock().await;
 
-            if let Some(cached_response) = self.try_cache_hit(&key) {
-                info_log!(
-                    API_CACHE_LOGGER_DOMAIN,
-                    "[CACHE WAIT HIT] key={}{}",
-                    key,
-                    Self::cache_key_log_suffix(&key)
-                );
-                return cached_response;
-            }
+                if let Some(cached_response) = self.try_cache_hit(&key) {
+                    info_log!(
+                        API_CACHE_LOGGER_DOMAIN,
+                        "[CACHE WAIT HIT] key={}{}",
+                        key,
+                        Self::cache_key_log_suffix(&key)
+                    );
+                    cached_response
+                } else {
+                    match self.proxy_and_read(&ctx, body_bytes).await {
+                        Some((status, resp_headers, resp_body)) => {
+                            if Self::should_cache_response(
+                                status,
+                                &resp_headers,
+                            ) {
+                                self.store_cache(
+                                    key.clone(),
+                                    status,
+                                    &resp_headers,
+                                    &resp_body,
+                                    route.ttl_seconds,
+                                );
+                            }
 
-            let Some((status, resp_headers, resp_body)) =
-                self.proxy_and_read(&ctx, body_bytes).await
-            else {
-                return ResponseBuilder::with_status_code(
-                    StatusCode::BAD_GATEWAY,
-                );
+                            Self::build_proxy_response(
+                                status,
+                                &resp_headers,
+                                resp_body,
+                            )
+                        }
+                        None => ResponseBuilder::with_status_code(
+                            StatusCode::BAD_GATEWAY,
+                        ),
+                    }
+                }
             };
 
-            if Self::should_cache_response(status, &resp_headers) {
-                self.store_cache(
-                    key,
-                    status,
-                    &resp_headers,
-                    &resp_body,
-                    route.ttl_seconds,
-                );
-            }
-
-            return Self::build_proxy_response(
-                status,
-                &resp_headers,
-                resp_body,
+            AppState::cleanup_request_lock(
+                &self.state.api_request_locks,
+                &key,
+                &lock,
             );
+
+            return response;
         }
 
         let Some((status, resp_headers, resp_body)) =

@@ -235,6 +235,34 @@ impl AppState {
         self.get_rate_limiter_cache("").await;
     }
 
+    pub(crate) fn request_lock(
+        locks: &DashMap<String, Arc<TokioMutex<()>>>,
+        cache_key: &str,
+    ) -> Arc<TokioMutex<()>> {
+        locks
+            .entry(cache_key.to_string())
+            .or_insert_with(|| Arc::new(TokioMutex::new(())))
+            .clone()
+    }
+
+    pub(crate) fn cleanup_request_lock(
+        locks: &DashMap<String, Arc<TokioMutex<()>>>,
+        cache_key: &str,
+        lock: &Arc<TokioMutex<()>>,
+    ) {
+        let Some(entry) = locks.get(cache_key) else {
+            return;
+        };
+
+        let should_remove = Arc::ptr_eq(entry.value(), lock)
+            && Arc::strong_count(entry.value()) == 2;
+        drop(entry);
+
+        if should_remove {
+            let _ = locks.remove(cache_key);
+        }
+    }
+
     /// Warms up WebDAV connections during startup to reduce first-request latency.
     /// Pre-establishes TCP/TLS connections to all configured WebDAV nodes.
     pub async fn warmup_webdav_connections(&self) {
@@ -272,5 +300,39 @@ impl AppState {
         }
 
         info_log!(INIT_LOGGER_DOMAIN, "WebDAV connection warmup completed");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::AppState;
+    use dashmap::DashMap;
+    use tokio::sync::Mutex as TokioMutex;
+
+    #[tokio::test]
+    async fn cleanup_request_lock_removes_unshared_lock() {
+        let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
+        let lock = AppState::request_lock(&locks, "key");
+
+        {
+            let _guard = lock.lock().await;
+        }
+
+        AppState::cleanup_request_lock(&locks, "key", &lock);
+
+        assert!(locks.is_empty());
+    }
+
+    #[test]
+    fn cleanup_request_lock_keeps_shared_lock() {
+        let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
+        let lock = AppState::request_lock(&locks, "key");
+        let _other_ref = lock.clone();
+
+        AppState::cleanup_request_lock(&locks, "key", &lock);
+
+        assert_eq!(locks.len(), 1);
     }
 }

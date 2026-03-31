@@ -6,7 +6,6 @@ use std::{
 };
 
 use async_trait::async_trait;
-use dashmap::DashMap;
 use form_urlencoded;
 use hyper::{
     StatusCode, Uri,
@@ -341,80 +340,93 @@ impl AppForwardService {
         }
 
         let strm_mutex = self.strm_request_lock(&strm_cache_key);
-        let wait_start = Instant::now();
-        let _strm_guard = strm_mutex.lock().await;
-        let lock_wait_ms = wait_start.elapsed().as_millis();
+        let result = {
+            let wait_start = Instant::now();
+            let _strm_guard = strm_mutex.lock().await;
+            let lock_wait_ms = wait_start.elapsed().as_millis();
 
-        if let Some(cached_path) = strm_cache.get::<String>(&strm_cache_key) {
-            info_log!(
-                FORWARD_LOGGER_DOMAIN,
-                "strm_inflight_wait_hit key={} lock_wait_ms={} \
-                 resolved_path={:?} path={}",
-                strm_cache_key,
-                lock_wait_ms,
-                cached_path,
-                path
-            );
-            return Ok(cached_path);
-        }
-
-        let file_path = Path::new(path);
-        let metadata = TokioMetadata(file_path).await.map_err(|e| {
-            error_log!(
-                FORWARD_LOGGER_DOMAIN,
-                "Failed to get metadata for strm file: {} (error: {})",
-                path,
-                e
-            );
-            AppForwardError::StrmFileIoError(e.to_string())
-        })?;
-
-        if metadata.len() == 0 {
-            error_log!(FORWARD_LOGGER_DOMAIN, "Empty strm file: {}", path);
-            return Err(AppForwardError::EmptyStrmFile);
-        }
-
-        if metadata.len() > MAX_STRM_FILE_SIZE {
-            error_log!(
-                FORWARD_LOGGER_DOMAIN,
-                "Strm file too large ({} > {}): {}",
-                metadata.len(),
-                MAX_STRM_FILE_SIZE,
-                path
-            );
-            return Err(AppForwardError::StrmFileTooLarge);
-        }
-
-        let content = TokioFS::read_to_string(file_path)
-            .await
-            .map_err(|e| {
-                error_log!(
+            if let Some(cached_path) = strm_cache.get::<String>(&strm_cache_key)
+            {
+                info_log!(
                     FORWARD_LOGGER_DOMAIN,
-                    "Failed to read strm file: {} (error: {})",
-                    path,
-                    e
+                    "strm_inflight_wait_hit key={} lock_wait_ms={} \
+                     resolved_path={:?} path={}",
+                    strm_cache_key,
+                    lock_wait_ms,
+                    cached_path,
+                    path
                 );
-                AppForwardError::StrmFileIoError(e.to_string())
-            })?
-            .trim()
-            .to_string();
+                Ok(cached_path)
+            } else {
+                let file_path = Path::new(path);
+                let metadata = TokioMetadata(file_path).await.map_err(|e| {
+                    error_log!(
+                        FORWARD_LOGGER_DOMAIN,
+                        "Failed to get metadata for strm file: {} (error: {})",
+                        path,
+                        e
+                    );
+                    AppForwardError::StrmFileIoError(e.to_string())
+                })?;
 
-        debug_log!(
-            FORWARD_LOGGER_DOMAIN,
-            "strm_read_complete key={} path={} content={}",
-            strm_cache_key,
-            path,
-            content
+                if metadata.len() == 0 {
+                    error_log!(
+                        FORWARD_LOGGER_DOMAIN,
+                        "Empty strm file: {}",
+                        path
+                    );
+                    Err(AppForwardError::EmptyStrmFile)
+                } else if metadata.len() > MAX_STRM_FILE_SIZE {
+                    error_log!(
+                        FORWARD_LOGGER_DOMAIN,
+                        "Strm file too large ({} > {}): {}",
+                        metadata.len(),
+                        MAX_STRM_FILE_SIZE,
+                        path
+                    );
+                    Err(AppForwardError::StrmFileTooLarge)
+                } else {
+                    let content = TokioFS::read_to_string(file_path)
+                        .await
+                        .map_err(|e| {
+                            error_log!(
+                                FORWARD_LOGGER_DOMAIN,
+                                "Failed to read strm file: {} (error: {})",
+                                path,
+                                e
+                            );
+                            AppForwardError::StrmFileIoError(e.to_string())
+                        })?
+                        .trim()
+                        .to_string();
+
+                    debug_log!(
+                        FORWARD_LOGGER_DOMAIN,
+                        "strm_read_complete key={} path={} content={}",
+                        strm_cache_key,
+                        path,
+                        content
+                    );
+
+                    strm_cache.insert(strm_cache_key.clone(), content.clone());
+                    info_log!(
+                        FORWARD_LOGGER_DOMAIN,
+                        "strm_cache_store key={} path={}",
+                        strm_cache_key,
+                        path
+                    );
+                    Ok(content)
+                }
+            }
+        };
+
+        AppState::cleanup_request_lock(
+            &self.state.strm_request_locks,
+            &strm_cache_key,
+            &strm_mutex,
         );
 
-        strm_cache.insert(strm_cache_key.clone(), content.clone());
-        info_log!(
-            FORWARD_LOGGER_DOMAIN,
-            "strm_cache_store key={} path={}",
-            strm_cache_key,
-            path
-        );
-        Ok(content)
+        result
     }
 
     async fn rewrite_if_needed(&self, path: &str) -> String {
@@ -497,17 +509,7 @@ impl AppForwardService {
     }
 
     fn strm_request_lock(&self, cache_key: &str) -> Arc<TokioMutex<()>> {
-        Self::request_lock(&self.state.strm_request_locks, cache_key)
-    }
-
-    fn request_lock(
-        locks: &DashMap<String, Arc<TokioMutex<()>>>,
-        cache_key: &str,
-    ) -> Arc<TokioMutex<()>> {
-        locks
-            .entry(cache_key.to_string())
-            .or_insert_with(|| Arc::new(TokioMutex::new(())))
-            .clone()
+        AppState::request_lock(&self.state.strm_request_locks, cache_key)
     }
 
     async fn get_forward_config(&self) -> Arc<ForwardConfig> {
@@ -562,6 +564,7 @@ mod tests {
     use tokio::sync::Mutex as TokioMutex;
 
     use super::AppForwardService;
+    use crate::AppState;
 
     #[test]
     fn strm_cache_key_is_structured() {
@@ -586,8 +589,8 @@ mod tests {
         let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
         let key = "frontend:strm:path_md5:abc";
 
-        let lock1 = AppForwardService::request_lock(&locks, key);
-        let lock2 = AppForwardService::request_lock(&locks, key);
+        let lock1 = AppState::request_lock(&locks, key);
+        let lock2 = AppState::request_lock(&locks, key);
 
         assert!(Arc::ptr_eq(&lock1, &lock2));
 
@@ -599,8 +602,8 @@ mod tests {
     fn strm_request_lock_separates_distinct_keys() {
         let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
 
-        let lock1 = AppForwardService::request_lock(&locks, "key1");
-        let lock2 = AppForwardService::request_lock(&locks, "key2");
+        let lock1 = AppState::request_lock(&locks, "key1");
+        let lock2 = AppState::request_lock(&locks, "key2");
 
         assert!(!Arc::ptr_eq(&lock1, &lock2));
     }

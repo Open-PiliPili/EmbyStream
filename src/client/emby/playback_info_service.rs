@@ -1,7 +1,5 @@
 use std::{sync::Arc, time::Instant};
 
-use tokio::sync::Mutex as TokioMutex;
-
 use crate::{
     AppState, PLAYBACK_INFO_LOGGER_DOMAIN,
     api::PlaybackInfo,
@@ -138,65 +136,74 @@ impl PlaybackInfoService {
             return Ok(cached);
         }
 
-        let lock = self
-            .state
-            .playback_info_request_locks
-            .entry(cache_key.clone())
-            .or_insert_with(|| Arc::new(TokioMutex::new(())))
-            .clone();
-
-        let wait_start = Instant::now();
-        let _guard = lock.lock().await;
-        let wait_ms = wait_start.elapsed().as_millis();
-
-        if let Some(cached) = cache.get::<PlaybackInfo>(&cache_key) {
-            info_log!(
-                PLAYBACK_INFO_LOGGER_DOMAIN,
-                "playback_info_inflight_wait_hit key={} lock_wait_ms={}",
-                cache_key,
-                wait_ms
-            );
-            return Ok(cached);
-        }
-
-        let token = api_token
-            .map(str::trim)
-            .filter(|token| !token.is_empty())
-            .ok_or(PlaybackInfoServiceError::EmptyApiToken)?;
-
-        let fetch_start = Instant::now();
-        let playback_info = self.fetch_from_emby(request, token).await?;
-        let fetch_ms = fetch_start.elapsed().as_millis();
-
-        if fetch_ms >= SLOW_PLAYBACK_INFO_FETCH_THRESHOLD_MS {
-            warn_log!(
-                PLAYBACK_INFO_LOGGER_DOMAIN,
-                "playback_info_fetch_slow item_id={} media_source_id={} \
-                 elapsed_ms={}",
-                request.item_id,
-                request.media_source_id,
-                fetch_ms
-            );
-        } else {
-            debug_log!(
-                PLAYBACK_INFO_LOGGER_DOMAIN,
-                "playback_info_fetch_complete item_id={} media_source_id={} \
-                 elapsed_ms={}",
-                request.item_id,
-                request.media_source_id,
-                fetch_ms
-            );
-        }
-
-        cache.insert(cache_key.clone(), playback_info.clone());
-        info_log!(
-            PLAYBACK_INFO_LOGGER_DOMAIN,
-            "playback_info_cache_store key={} media_sources={}",
-            cache_key,
-            playback_info.media_sources.len()
+        let lock = AppState::request_lock(
+            &self.state.playback_info_request_locks,
+            &cache_key,
         );
 
-        Ok(playback_info)
+        let result = {
+            let wait_start = Instant::now();
+            let _guard = lock.lock().await;
+            let wait_ms = wait_start.elapsed().as_millis();
+
+            if let Some(cached) = cache.get::<PlaybackInfo>(&cache_key) {
+                info_log!(
+                    PLAYBACK_INFO_LOGGER_DOMAIN,
+                    "playback_info_inflight_wait_hit key={} lock_wait_ms={}",
+                    cache_key,
+                    wait_ms
+                );
+                Ok(cached)
+            } else {
+                let token = api_token
+                    .map(str::trim)
+                    .filter(|token| !token.is_empty())
+                    .ok_or(PlaybackInfoServiceError::EmptyApiToken)?;
+
+                let fetch_start = Instant::now();
+                let playback_info =
+                    self.fetch_from_emby(request, token).await?;
+                let fetch_ms = fetch_start.elapsed().as_millis();
+
+                if fetch_ms >= SLOW_PLAYBACK_INFO_FETCH_THRESHOLD_MS {
+                    warn_log!(
+                        PLAYBACK_INFO_LOGGER_DOMAIN,
+                        "playback_info_fetch_slow item_id={} media_source_id={} \
+                         elapsed_ms={}",
+                        request.item_id,
+                        request.media_source_id,
+                        fetch_ms
+                    );
+                } else {
+                    debug_log!(
+                        PLAYBACK_INFO_LOGGER_DOMAIN,
+                        "playback_info_fetch_complete item_id={} media_source_id={} \
+                         elapsed_ms={}",
+                        request.item_id,
+                        request.media_source_id,
+                        fetch_ms
+                    );
+                }
+
+                cache.insert(cache_key.clone(), playback_info.clone());
+                info_log!(
+                    PLAYBACK_INFO_LOGGER_DOMAIN,
+                    "playback_info_cache_store key={} media_sources={}",
+                    cache_key,
+                    playback_info.media_sources.len()
+                );
+
+                Ok(playback_info)
+            }
+        };
+
+        AppState::cleanup_request_lock(
+            &self.state.playback_info_request_locks,
+            &cache_key,
+            &lock,
+        );
+
+        result
     }
 
     pub fn api_token_from_headers_and_query(
