@@ -5,9 +5,13 @@ use aes::cipher::{
     BlockDecryptMut, KeyIvInit, block_padding::Pkcs7,
     generic_array::GenericArray,
 };
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use base64::{
+    Engine,
+    engine::general_purpose::{
+        STANDARD as BASE64, URL_SAFE_NO_PAD as BASE64_URL_SAFE_NO_PAD,
+    },
+};
 use cbc::Decryptor;
-use serde_json;
 
 use super::key_normalizer::KeyNormalizer;
 use crate::{CRYPTO_LOGGER_DOMAIN, Error, debug_log, error_log};
@@ -44,30 +48,69 @@ impl AesDecrypt {
             "Starting AES decryption for Base64 string"
         );
 
-        // Decode Base64
+        Self::decrypt_msgpack_urlsafe(encrypted, key, iv).or_else(
+            |msgpack_err| {
+                warn_old_format_fallback(&msgpack_err);
+                Self::decrypt_json_standard(encrypted, key, iv)
+            },
+        )
+    }
+
+    fn decrypt_msgpack_urlsafe(
+        encrypted: &str,
+        key: &str,
+        iv: &str,
+    ) -> Result<HashMap<String, String>, Error> {
+        let decoded = BASE64_URL_SAFE_NO_PAD
+            .decode(encrypted)
+            .map_err(Error::Base64DecodeError)?;
+        let decrypted = Self::decrypt_bytes(&decoded, key, iv)?;
+        let dict: HashMap<String, String> =
+            rmp_serde::from_slice(&decrypted)
+                .map_err(|e| Error::DecryptionError(e.to_string()))?;
+
+        debug_log!(
+            CRYPTO_LOGGER_DOMAIN,
+            "Decryption successful, restored MessagePack dictionary"
+        );
+        Ok(dict)
+    }
+
+    fn decrypt_json_standard(
+        encrypted: &str,
+        key: &str,
+        iv: &str,
+    ) -> Result<HashMap<String, String>, Error> {
         let decoded = BASE64.decode(encrypted).map_err(|e| {
             error_log!(
                 CRYPTO_LOGGER_DOMAIN,
-                "Failed to decode Base64 string: {}",
+                "Failed to decode legacy Base64 string: {}",
                 e
             );
             Error::Base64DecodeError(e)
         })?;
+        let decrypted = Self::decrypt_bytes(&decoded, key, iv)?;
+        let dict: HashMap<String, String> =
+            serde_json::from_slice(&decrypted).map_err(Error::JsonError)?;
 
-        // Validate key length
+        debug_log!(
+            CRYPTO_LOGGER_DOMAIN,
+            "Decryption successful, restored legacy JSON dictionary"
+        );
+        Ok(dict)
+    }
+
+    fn decrypt_bytes(
+        ciphertext: &[u8],
+        key: &str,
+        iv: &str,
+    ) -> Result<Vec<u8>, Error> {
         let key = KeyNormalizer::normalize_from_str(key)?;
-
-        // Validate iv length
         let iv_bytes = KeyNormalizer::normalize_from_str(iv)?;
         let iv = GenericArray::from_slice(&iv_bytes);
-
-        let ciphertext = &decoded;
-
-        // Initialize cipher
         let cipher =
             Aes128CbcDecryptor::new(GenericArray::from_slice(&key), iv);
 
-        // Copy ciphertext to mutable buffer for in-place decryption
         let mut buffer = ciphertext.to_vec();
         let decrypted = cipher
             .decrypt_padded_mut::<Pkcs7>(&mut buffer)
@@ -76,21 +119,14 @@ impl AesDecrypt {
                 Error::DecryptionError(e.to_string())
             })?;
 
-        // Deserialize JSON to dictionary
-        let dict: HashMap<String, String> = serde_json::from_slice(decrypted)
-            .map_err(|e| {
-            error_log!(
-                CRYPTO_LOGGER_DOMAIN,
-                "Failed to deserialize JSON to dictionary: {}",
-                e
-            );
-            Error::JsonError(e)
-        })?;
-
-        debug_log!(
-            CRYPTO_LOGGER_DOMAIN,
-            "Decryption successful, restored dictionary"
-        );
-        Ok(dict)
+        Ok(decrypted.to_vec())
     }
+}
+
+fn warn_old_format_fallback(error: &Error) {
+    debug_log!(
+        CRYPTO_LOGGER_DOMAIN,
+        "MessagePack/base64url decrypt failed, trying legacy JSON/base64 fallback: {}",
+        error
+    );
 }
