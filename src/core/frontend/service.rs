@@ -13,7 +13,7 @@ use hyper::{
 };
 use reqwest::Url;
 use tokio::fs::{self as TokioFS, metadata as TokioMetadata};
-use tokio::sync::OnceCell;
+use tokio::sync::{Mutex as TokioMutex, OnceCell};
 
 use super::types::{
     ForwardConfig, ForwardInfo, InfuseAuthorization, PathParams,
@@ -338,12 +338,36 @@ impl AppForwardService {
         debug_log!(FORWARD_LOGGER_DOMAIN, "Detected strm file: {}", path);
 
         let strm_cache = self.state.get_strm_file_cache().await;
-        let strm_cache_key = self.strm_key(path)?;
+        let strm_cache_key = Self::strm_cache_key(path)?;
 
         if let Some(cached_path) = strm_cache.get::<String>(&strm_cache_key) {
             debug_log!(
                 FORWARD_LOGGER_DOMAIN,
-                "Strm cache hit: {:?} by path {}",
+                "strm_cache_hit key={} resolved_path={:?} path={}",
+                strm_cache_key,
+                cached_path,
+                path
+            );
+            return Ok(cached_path);
+        }
+
+        let strm_mutex = self
+            .state
+            .strm_request_locks
+            .entry(strm_cache_key.clone())
+            .or_insert_with(|| Arc::new(TokioMutex::new(())))
+            .clone();
+        let wait_start = Instant::now();
+        let _strm_guard = strm_mutex.lock().await;
+        let lock_wait_ms = wait_start.elapsed().as_millis();
+
+        if let Some(cached_path) = strm_cache.get::<String>(&strm_cache_key) {
+            info_log!(
+                FORWARD_LOGGER_DOMAIN,
+                "strm_inflight_wait_hit key={} lock_wait_ms={} \
+                 resolved_path={:?} path={}",
+                strm_cache_key,
+                lock_wait_ms,
                 cached_path,
                 path
             );
@@ -393,12 +417,19 @@ impl AppForwardService {
 
         debug_log!(
             FORWARD_LOGGER_DOMAIN,
-            "Read strm file: {} (content: {})",
+            "strm_read_complete key={} path={} content={}",
+            strm_cache_key,
             path,
             content
         );
 
-        strm_cache.insert(strm_cache_key, content.clone());
+        strm_cache.insert(strm_cache_key.clone(), content.clone());
+        info_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "strm_cache_store key={} path={}",
+            strm_cache_key,
+            path
+        );
         Ok(content)
     }
 
@@ -480,12 +511,12 @@ impl AppForwardService {
         Ok(StringUtil::md5(&input))
     }
 
-    fn strm_key(&self, path: &str) -> Result<String, AppForwardError> {
+    fn strm_cache_key(path: &str) -> Result<String, AppForwardError> {
         if path.is_empty() {
             return Err(AppForwardError::InvalidStrmFile);
         }
-        let input = path.to_lowercase();
-        Ok(StringUtil::md5(&input))
+        let path_hash = StringUtil::md5(&path.to_lowercase());
+        Ok(format!("frontend:strm:path_md5:{path_hash}"))
     }
 
     async fn get_forward_config(&self) -> Arc<ForwardConfig> {
@@ -529,6 +560,29 @@ impl AppForwardService {
                 .await;
 
         config_arc.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppForwardService;
+
+    #[test]
+    fn strm_cache_key_is_structured() {
+        let key = AppForwardService::strm_cache_key("/mnt/media/episode.strm");
+
+        assert!(key.is_ok());
+        assert!(
+            key.unwrap_or_default()
+                .starts_with("frontend:strm:path_md5:")
+        );
+    }
+
+    #[test]
+    fn strm_cache_key_rejects_empty_path() {
+        let key = AppForwardService::strm_cache_key("");
+
+        assert!(key.is_err());
     }
 }
 

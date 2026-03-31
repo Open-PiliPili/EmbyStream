@@ -38,6 +38,7 @@ pub struct AppState {
     pub(crate) open_list_request_locks: DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) playback_info_request_locks:
         DashMap<String, Arc<TokioMutex<()>>>,
+    pub(crate) strm_request_locks: DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) webdav_auth_cache: DashMap<String, String>,
     pub(crate) webdav_auth_probe_locks: DashMap<String, Arc<TokioMutex<()>>>,
 }
@@ -61,6 +62,7 @@ impl AppState {
             api_request_locks: DashMap::new(),
             open_list_request_locks: DashMap::new(),
             playback_info_request_locks: DashMap::new(),
+            strm_request_locks: DashMap::new(),
             webdav_auth_cache: DashMap::new(),
             webdav_auth_probe_locks: DashMap::new(),
         }
