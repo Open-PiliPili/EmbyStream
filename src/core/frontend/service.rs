@@ -22,7 +22,9 @@ use crate::{
     AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log,
 };
 use crate::{
-    client::{ClientBuilder, EmbyClient},
+    client::{
+        PlaybackInfoRequest, PlaybackInfoService, PlaybackInfoServiceError,
+    },
     core::{
         error::Error as AppForwardError, redirect_info::RedirectInfo,
         request::Request as AppForwardRequest, sign::Sign,
@@ -150,8 +152,6 @@ impl AppForwardService {
             return Ok(cached_forward_info);
         }
 
-        let config = self.get_forward_config().await;
-
         let emby_token = self.get_emby_api_token(request, true).await;
         if emby_token.is_empty() {
             return Err(AppForwardError::EmptyEmbyToken);
@@ -162,21 +162,26 @@ impl AppForwardService {
             return Err(AppForwardError::EmptyEmbyDeviceId);
         }
 
-        let emby_client = ClientBuilder::<EmbyClient>::new().build();
-
-        let playback_info = emby_client
-            .playback_info(
-                &config.emby_server_url,
-                &emby_token,
-                &path_params.item_id,
-                &path_params.media_source_id,
+        let playback_info_service =
+            PlaybackInfoService::new(self.state.clone());
+        let playback_info = playback_info_service
+            .get(
+                &PlaybackInfoRequest::new(
+                    path_params.item_id.clone(),
+                    path_params.media_source_id.clone(),
+                ),
+                Some(emby_token.as_str()),
             )
             .await
             .map_err(|e| {
                 error_log!(
                     FORWARD_LOGGER_DOMAIN,
                     "Failed to fetch playback info: {:?}",
-                    e
+                    match e {
+                        PlaybackInfoServiceError::Upstream(upstream) =>
+                            upstream,
+                        other => anyhow::anyhow!(other.to_string()),
+                    }
                 );
                 AppForwardError::EmbyPathRequestError
             })?;
@@ -516,7 +521,6 @@ impl AppForwardService {
                         backend_url: backend.uri().to_string(),
                         crypto_key: config.general.encipher_key.clone(),
                         crypto_iv: config.general.encipher_iv.clone(),
-                        emby_server_url: config.emby.get_uri().to_string(),
                         emby_api_key: config.emby.token.to_string(),
                         check_file_existence: frontend.check_file_existence,
                         fallback_video_path,
