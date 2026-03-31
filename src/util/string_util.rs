@@ -1,5 +1,3 @@
-use md5;
-
 pub struct StringUtil;
 
 impl StringUtil {
@@ -7,11 +5,17 @@ impl StringUtil {
         input.trim_end_matches('/')
     }
 
-    pub fn md5(input: &str) -> String {
+    pub fn hash_hex(input: &str) -> String {
         if input.is_empty() {
             return "".to_string();
         }
-        let digest = md5::compute(input.as_bytes());
-        format!("{digest:x}")
+        Self::hash_bytes(input.as_bytes())
+    }
+
+    pub fn hash_bytes(input: &[u8]) -> String {
+        if input.is_empty() {
+            return "".to_string();
+        }
+        blake3::hash(input).to_hex().to_string()
     }
 }

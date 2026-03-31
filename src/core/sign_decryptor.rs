@@ -68,8 +68,8 @@ impl SignDecryptor {
             return Err(AppStreamError::InvalidEncryptedSignature);
         }
         let input = params.sign.to_lowercase();
-        let sign_md5 = StringUtil::md5(&input);
-        Ok(format!("stream:sign_decrypt:sign_md5:{sign_md5}"))
+        let sign_hash = StringUtil::hash_hex(&input);
+        Ok(format!("stream:sign_decrypt:sign_hash:{sign_hash}"))
     }
 }
 
@@ -90,7 +90,7 @@ mod tests {
         assert!(key.is_ok());
         assert!(
             key.unwrap_or_default()
-                .starts_with("stream:sign_decrypt:sign_md5:")
+                .starts_with("stream:sign_decrypt:sign_hash:")
         );
     }
 

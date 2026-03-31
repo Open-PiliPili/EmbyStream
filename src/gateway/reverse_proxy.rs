@@ -22,7 +22,9 @@ use crate::{
     client::{
         PlaybackInfoRequest, PlaybackInfoService, PlaybackInfoServiceError,
     },
-    debug_log, error_log, info_log, warn_log,
+    debug_log, error_log, info_log,
+    util::StringUtil,
+    warn_log,
 };
 use tokio::sync::Mutex as TokioMutex;
 
@@ -126,7 +128,7 @@ impl ReverseProxyMiddleware {
 
         match body_bytes {
             Some(bytes) if !bytes.is_empty() => {
-                let body_hash = format!("{:x}", md5::compute(bytes));
+                let body_hash = StringUtil::hash_bytes(bytes);
                 format!("{semantic_key}:{body_hash}")
             }
             _ => semantic_key,

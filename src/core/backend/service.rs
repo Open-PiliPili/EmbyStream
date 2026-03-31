@@ -640,10 +640,10 @@ impl AppStreamService {
     ) -> String {
         let url_string = Uri::to_path_or_url_string(uri);
         let trimmed_url = url_string.trim_end();
-        let path_hash = StringUtil::md5(&trimmed_url.to_lowercase());
-        let ua_hash = StringUtil::md5(user_agent.trim());
+        let path_hash = StringUtil::hash_hex(&trimmed_url.to_lowercase());
+        let ua_hash = StringUtil::hash_hex(user_agent.trim());
         format!(
-            "backend:openlist:node:{}:path_md5:{}:ua_md5:{}",
+            "backend:openlist:node:{}:path_hash:{}:ua_hash:{}",
             node_uuid.to_ascii_lowercase(),
             path_hash,
             ua_hash
@@ -745,8 +745,8 @@ mod tests {
             "ExampleUA/1.0",
         );
 
-        assert!(key.starts_with("backend:openlist:node:node-01:path_md5:"));
-        assert!(key.contains(":ua_md5:"));
+        assert!(key.starts_with("backend:openlist:node:node-01:path_hash:"));
+        assert!(key.contains(":ua_hash:"));
     }
 
     #[test]
@@ -768,7 +768,7 @@ mod tests {
     #[tokio::test]
     async fn open_list_request_lock_reuses_same_key_mutex() {
         let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
-        let key = "backend:openlist:node:n1:path_md5:a:ua_md5:b";
+        let key = "backend:openlist:node:n1:path_hash:a:ua_hash:b";
 
         let lock1 = AppState::request_lock(&locks, key);
         let lock2 = AppState::request_lock(&locks, key);

@@ -517,8 +517,8 @@ impl AppForwardService {
         if path.is_empty() {
             return Err(AppForwardError::InvalidStrmFile);
         }
-        let path_hash = StringUtil::md5(&path.to_lowercase());
-        Ok(format!("frontend:strm:path_md5:{path_hash}"))
+        let path_hash = StringUtil::hash_hex(&path.to_lowercase());
+        Ok(format!("frontend:strm:path_hash:{path_hash}"))
     }
 
     fn strm_request_lock(&self, cache_key: &str) -> Arc<TokioMutex<()>> {
@@ -586,7 +586,7 @@ mod tests {
         assert!(key.is_ok());
         assert!(
             key.unwrap_or_default()
-                .starts_with("frontend:strm:path_md5:")
+                .starts_with("frontend:strm:path_hash:")
         );
     }
 
@@ -600,7 +600,7 @@ mod tests {
     #[tokio::test]
     async fn strm_request_lock_reuses_same_key_mutex() {
         let locks = DashMap::<String, Arc<TokioMutex<()>>>::new();
-        let key = "frontend:strm:path_md5:abc";
+        let key = "frontend:strm:path_hash:abc";
 
         let lock1 = AppState::request_lock(&locks, key);
         let lock2 = AppState::request_lock(&locks, key);
