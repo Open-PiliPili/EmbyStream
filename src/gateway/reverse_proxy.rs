@@ -1,4 +1,4 @@
-use std::{fmt::Debug, time::Instant};
+use std::{fmt::Debug, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -10,6 +10,7 @@ use hyper::{
 };
 
 use super::{
+    cacheable_routes::build_semantic_cache_key,
     cacheable_routes::find_cacheable_route,
     chain::{Middleware, Next},
     context::Context,
@@ -23,6 +24,7 @@ use crate::{
     },
     debug_log, error_log, info_log, warn_log,
 };
+use tokio::sync::Mutex as TokioMutex;
 
 const ROOT_PATH: &str = "/";
 const WEB_INDEX_REDIRECT: &str = "/web/index.html";
@@ -68,6 +70,7 @@ pub struct ReverseProxyMiddleware {
     emby_base_url: String,
     http_client: reqwest::Client,
     api_cache: GeneralCache,
+    state: Arc<AppState>,
     playback_info_service: PlaybackInfoService,
 }
 
@@ -86,6 +89,7 @@ impl ReverseProxyMiddleware {
             emby_base_url,
             http_client,
             api_cache,
+            state: state.clone(),
             playback_info_service: PlaybackInfoService::new(state),
         }
     }
@@ -106,16 +110,25 @@ impl ReverseProxyMiddleware {
     }
 
     fn build_cache_key(
-        method: &Method,
+        ctx: &Context,
+        route: &super::cacheable_routes::CompiledCacheableRoute,
         uri_string: &str,
         body_bytes: Option<&Bytes>,
     ) -> String {
+        let semantic_key = build_semantic_cache_key(
+            route,
+            ctx.method.as_str(),
+            &ctx.path,
+            ctx.uri.query(),
+            uri_string,
+        );
+
         match body_bytes {
             Some(bytes) if !bytes.is_empty() => {
                 let body_hash = format!("{:x}", md5::compute(bytes));
-                format!("{}:{}:{}", method, uri_string, body_hash)
+                format!("{semantic_key}:{body_hash}")
             }
-            _ => format!("{}:{}", method, uri_string),
+            _ => semantic_key,
         }
     }
 
@@ -274,6 +287,14 @@ impl ReverseProxyMiddleware {
         }
     }
 
+    async fn lock_api_request(&self, cache_key: &str) -> Arc<TokioMutex<()>> {
+        self.state
+            .api_request_locks
+            .entry(cache_key.to_string())
+            .or_insert_with(|| Arc::new(TokioMutex::new(())))
+            .clone()
+    }
+
     fn playback_info_request(
         &self,
         ctx: &Context,
@@ -379,29 +400,41 @@ impl Middleware for ReverseProxyMiddleware {
 
         let body_bytes = Self::read_body(body).await;
 
-        let cache_key = cacheable_route.map(|_| {
+        let cache_key = cacheable_route.map(|route| {
             let uri_string = ctx
                 .uri
                 .path_and_query()
                 .map(|pq| pq.to_string())
                 .unwrap_or_else(|| ctx.path.clone());
 
-            Self::build_cache_key(&ctx.method, &uri_string, body_bytes.as_ref())
+            Self::build_cache_key(&ctx, route, &uri_string, body_bytes.as_ref())
         });
 
-        if let Some(ref key) = cache_key {
-            if let Some(cached_response) = self.try_cache_hit(key) {
+        if let (Some(route), Some(key)) = (cacheable_route, cache_key) {
+            if let Some(cached_response) = self.try_cache_hit(&key) {
                 return cached_response;
             }
-        }
 
-        let Some((status, resp_headers, resp_body)) =
-            self.proxy_and_read(&ctx, body_bytes).await
-        else {
-            return ResponseBuilder::with_status_code(StatusCode::BAD_GATEWAY);
-        };
+            let lock = self.lock_api_request(&key).await;
+            let _guard = lock.lock().await;
 
-        if let (Some(route), Some(key)) = (cacheable_route, cache_key) {
+            if let Some(cached_response) = self.try_cache_hit(&key) {
+                info_log!(
+                    API_CACHE_LOGGER_DOMAIN,
+                    "[CACHE WAIT HIT] key={}",
+                    key
+                );
+                return cached_response;
+            }
+
+            let Some((status, resp_headers, resp_body)) =
+                self.proxy_and_read(&ctx, body_bytes).await
+            else {
+                return ResponseBuilder::with_status_code(
+                    StatusCode::BAD_GATEWAY,
+                );
+            };
+
             if status.is_success() {
                 self.store_cache(
                     key,
@@ -411,7 +444,19 @@ impl Middleware for ReverseProxyMiddleware {
                     route.ttl_seconds,
                 );
             }
+
+            return Self::build_proxy_response(
+                status,
+                &resp_headers,
+                resp_body,
+            );
         }
+
+        let Some((status, resp_headers, resp_body)) =
+            self.proxy_and_read(&ctx, body_bytes).await
+        else {
+            return ResponseBuilder::with_status_code(StatusCode::BAD_GATEWAY);
+        };
 
         Self::build_proxy_response(status, &resp_headers, resp_body)
     }
