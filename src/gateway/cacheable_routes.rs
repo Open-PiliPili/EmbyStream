@@ -111,16 +111,20 @@ pub fn build_semantic_cache_key(
     query: Option<&str>,
     fallback_uri: &str,
 ) -> String {
+    let method = method.to_ascii_lowercase();
+
     match route.key_strategy {
-        CacheKeyStrategy::FullUri => format!("{method}:{fallback_uri}"),
+        CacheKeyStrategy::FullUri => {
+            format!("api:full_uri:method:{method}:uri:{fallback_uri}")
+        }
         CacheKeyStrategy::NextUpSeriesId => {
-            build_next_up_cache_key(method, query, fallback_uri)
+            build_next_up_cache_key(&method, query, fallback_uri)
         }
         CacheKeyStrategy::EpisodesShowId => {
-            build_episodes_cache_key(method, path, fallback_uri)
+            build_episodes_cache_key(&method, path, fallback_uri)
         }
         CacheKeyStrategy::UserItem => {
-            build_user_item_cache_key(method, path, fallback_uri)
+            build_user_item_cache_key(&method, path, fallback_uri)
         }
     }
 }
@@ -131,18 +135,18 @@ fn build_next_up_cache_key(
     fallback_uri: &str,
 ) -> String {
     let Some(query_str) = query else {
-        return format!("{method}:{fallback_uri}");
+        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
     };
 
     let Some(series_id) = form_urlencoded::parse(query_str.as_bytes())
         .find(|(key, _)| key.eq_ignore_ascii_case("SeriesId"))
         .map(|(_, value)| value.into_owned())
     else {
-        return format!("{method}:{fallback_uri}");
+        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
     };
 
     format!(
-        "{method}:shows_nextup:series_id:{}",
+        "api:shows_nextup:method:{method}:series_id:{}",
         series_id.to_ascii_lowercase()
     )
 }
@@ -169,11 +173,11 @@ fn build_episodes_cache_key(
         })
         .and_then(|window| window.get(1))
     else {
-        return format!("{method}:{fallback_uri}");
+        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
     };
 
     format!(
-        "{method}:shows_episodes:show_id:{}",
+        "api:shows_episodes:method:{method}:show_id:{}",
         show_id.to_ascii_lowercase()
     )
 }
@@ -204,17 +208,17 @@ fn build_user_item_cache_key(
             Some((*user_id, *item_id))
         })
     else {
-        return format!("{method}:{fallback_uri}");
+        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
     };
 
     if !user_id.chars().all(|c| c.is_ascii_alphanumeric())
         || !item_id.chars().all(|c| c.is_ascii_digit())
     {
-        return format!("{method}:{fallback_uri}");
+        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
     }
 
     format!(
-        "{method}:user_item:user_id:{}:item_id:{}",
+        "api:user_item:method:{method}:user_id:{}:item_id:{}",
         user_id.to_ascii_lowercase(),
         item_id.to_ascii_lowercase()
     )
@@ -248,7 +252,7 @@ mod tests {
             "/emby/Shows/NextUp?Limit=1&SeriesId=Series-ABC_01&UserId=u1",
         );
 
-        assert_eq!(key, "GET:shows_nextup:series_id:series-abc_01");
+        assert_eq!(key, "api:shows_nextup:method:get:series_id:series-abc_01");
     }
 
     #[test]
@@ -283,7 +287,7 @@ mod tests {
             "/emby/Shows/Show-XYZ_09/Episodes?SeasonId=s1&UserId=u1",
         );
 
-        assert_eq!(key, "GET:shows_episodes:show_id:show-xyz_09");
+        assert_eq!(key, "api:shows_episodes:method:get:show_id:show-xyz_09");
     }
 
     #[test]
@@ -322,7 +326,10 @@ mod tests {
             "/emby/Users/UserABC01/Items/257023",
         );
 
-        assert_eq!(key, "GET:user_item:user_id:userabc01:item_id:257023");
+        assert_eq!(
+            key,
+            "api:user_item:method:get:user_id:userabc01:item_id:257023"
+        );
     }
 
     #[test]

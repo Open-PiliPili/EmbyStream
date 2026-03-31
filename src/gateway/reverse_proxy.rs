@@ -303,18 +303,20 @@ impl ReverseProxyMiddleware {
 
     fn cache_key_log_suffix(cache_key: &str) -> String {
         if let Some(series_id) =
-            cache_key.strip_prefix("GET:shows_nextup:series_id:")
+            cache_key.strip_prefix("api:shows_nextup:method:get:series_id:")
         {
             return format!(" route=shows_nextup series_id={series_id}");
         }
 
         if let Some(show_id) =
-            cache_key.strip_prefix("GET:shows_episodes:show_id:")
+            cache_key.strip_prefix("api:shows_episodes:method:get:show_id:")
         {
             return format!(" route=shows_episodes show_id={show_id}");
         }
 
-        if let Some(rest) = cache_key.strip_prefix("GET:user_item:user_id:") {
+        if let Some(rest) =
+            cache_key.strip_prefix("api:user_item:method:get:user_id:")
+        {
             if let Some((user_id, item_id)) = rest.split_once(":item_id:") {
                 return format!(
                     " route=user_item user_id={user_id} item_id={item_id}"

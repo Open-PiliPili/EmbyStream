@@ -41,7 +41,7 @@ impl PlaybackInfoRequest {
         }
 
         Ok(format!(
-            "playback_info:{}:{}",
+            "playback:info:item_id:{}:media_source_id:{}",
             item_id.to_ascii_lowercase(),
             media_source_id.to_ascii_lowercase()
         ))
@@ -292,7 +292,7 @@ mod tests {
         assert!(cache_key.is_ok());
         assert_eq!(
             cache_key.unwrap_or_default(),
-            "playback_info:249971:abc123"
+            "playback:info:item_id:249971:media_source_id:abc123"
         );
     }
 }
