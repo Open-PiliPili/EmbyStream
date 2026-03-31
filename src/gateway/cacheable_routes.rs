@@ -18,9 +18,7 @@ use regex::Regex;
 ///   Different query params each produce a separate cache entry.
 ///
 /// - **POST requests**: key = `POST:{full URI including path + all query params}:{MD5 of request body}`
-///   Example: `POST:/emby/Items/251044/PlaybackInfo?MediaSourceId=...&UserId=...:a3f2b8c1...`
-///   The POST body (e.g. `DeviceProfile`) differs across device types (iPhone vs Android TV)
-///   and directly affects Emby's transcoding compatibility response, so it must be part of the key.
+///   Example: `POST:/emby/Items/.../Action?...:a3f2b8c1...`
 ///
 /// - **Special case: PlaybackInfo**
 ///   `PlaybackInfo` is normalized and shared by `PlaybackInfoService` using
@@ -39,12 +37,6 @@ pub struct CacheableRoute {
 }
 
 pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
-    CacheableRoute {
-        pattern: r"(?i)^/(?:emby/)?Items/[^/]+/PlaybackInfo",
-        methods: &["GET", "POST"],
-        ttl_seconds: 7200, // 2 hours
-        description: "Playback info — Emby processing takes ~1400ms",
-    },
     CacheableRoute {
         pattern: r"(?i)^/(?:emby/)?Shows/NextUp",
         methods: &["GET"],

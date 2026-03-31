@@ -223,6 +223,7 @@ Required when `stream_mode` is `backend` or `dual`.
 | `base_url`             | string         | Public base URL clients use (scheme + host). |
 | `port`                 | string         | Public port if not 80/443. |
 | `path`                 | string         | URL path segment for the stream service (no leading slash required). |
+| `check_file_existence` | bool           | When true, backend local-path routing probes file existence before streaming or applying fallback. Default `true`. |
 | `problematic_clients`  | string array   | Client identifiers (substrings) that skip certain optimizations (see logs / code for behavior). |
 
 **Example**
@@ -233,6 +234,7 @@ listen_port = 60002
 base_url = "https://stream.example.com"
 port = "443"
 path = "stream"
+check_file_existence = true
 problematic_clients = []
 ```
 

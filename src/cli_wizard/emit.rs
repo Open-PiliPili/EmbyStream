@@ -265,6 +265,7 @@ struct WizardEmitBackend {
     base_url: String,
     port: String,
     path: String,
+    check_file_existence: bool,
     problematic_clients: Vec<String>,
 }
 
@@ -329,6 +330,7 @@ fn map_backend_wizard(b: &Backend) -> WizardEmitBackend {
         base_url: b.base_url.clone(),
         port: b.port.clone(),
         path: b.path.clone(),
+        check_file_existence: b.check_file_existence,
         problematic_clients: b.problematic_clients.clone(),
     }
 }
@@ -455,6 +457,7 @@ pub(crate) mod compact_emit_test {
         port: String,
         #[serde(skip_serializing_if = "str::is_empty")]
         path: String,
+        check_file_existence: bool,
         #[serde(skip_serializing_if = "Vec::is_empty")]
         problematic_clients: Vec<String>,
     }
@@ -522,6 +525,7 @@ pub(crate) mod compact_emit_test {
             base_url: b.base_url.clone(),
             port: b.port.clone(),
             path: b.path.clone(),
+            check_file_existence: b.check_file_existence,
             problematic_clients: b.problematic_clients.clone(),
         }
     }

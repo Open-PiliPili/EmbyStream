@@ -187,6 +187,7 @@ fn invalid_regex_in_node_rejected() {
         base_url: "http://x".into(),
         port: "80".into(),
         path: "".into(),
+        check_file_existence: true,
         problematic_clients: vec![],
     });
     raw.general.stream_mode = StreamMode::Backend;

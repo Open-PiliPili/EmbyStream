@@ -55,6 +55,7 @@ listen_port = 60002
 base_url = "https://example.com"
 port = "443"
 path = "stream"
+check_file_existence = true
 problematic_clients = []
 
 [[BackendNode]]

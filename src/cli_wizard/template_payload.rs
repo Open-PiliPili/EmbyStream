@@ -141,6 +141,7 @@ pub(crate) fn build_template_raw(mode: StreamMode) -> RawConfig {
                 base_url: "https://backend.example.com".into(),
                 port: "443".into(),
                 path: "stream".into(),
+                check_file_existence: true,
                 problematic_clients: vec![
                     "yamby".into(),
                     "hills".into(),
@@ -161,6 +162,7 @@ pub(crate) fn build_template_raw(mode: StreamMode) -> RawConfig {
                 base_url: "http://127.0.0.1".into(),
                 port: "3000".into(),
                 path: String::new(),
+                check_file_existence: true,
                 problematic_clients: vec![
                     "yamby".into(),
                     "hills".into(),
