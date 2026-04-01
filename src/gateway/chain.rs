@@ -6,9 +6,8 @@ use hyper::{
     body::{self, Incoming},
 };
 
-use crate::{
-    core::backend::session_id::generate_stream_session_id,
-    gateway::{context::Context, response::BoxBodyType},
+use crate::gateway::{
+    context::Context, request_id::generate_request_id, response::BoxBodyType,
 };
 
 pub type Handler = Arc<
@@ -64,7 +63,7 @@ impl Chain {
         req: Request<body::Incoming>,
     ) -> Response<BoxBodyType> {
         let (parts, body) = req.into_parts();
-        let request_id = generate_stream_session_id();
+        let request_id = generate_request_id();
         let ctx = Context::new(
             parts.uri,
             parts.method,

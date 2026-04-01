@@ -10,6 +10,7 @@ pub mod filtered_routes;
 pub mod logger;
 pub mod options;
 pub mod playlist_mock;
+pub mod request_id;
 pub mod response;
 pub mod reverse_proxy;
 pub mod reverse_proxy_filter;
