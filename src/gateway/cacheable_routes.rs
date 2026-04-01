@@ -4,9 +4,6 @@ use regex::Regex;
 #[derive(Clone, Copy)]
 pub enum CacheKeyStrategy {
     FullUri,
-    NextUpSeriesId,
-    EpisodesShowId,
-    UserItem,
 }
 
 #[derive(Clone, Copy)]
@@ -17,6 +14,8 @@ pub enum BodyKeyStrategy {
     JsonCanonical,
     FormUrlEncodedCanonical,
 }
+
+const IGNORED_QUERY_KEYS: &[&str] = &["UserId"];
 
 /// Represents a single cacheable Emby API route.
 ///
@@ -30,9 +29,12 @@ pub enum BodyKeyStrategy {
 ///
 /// ## Cache key strategy
 ///
-/// - **GET requests**: key = `GET:{full URI including path + all query params}`
+/// - **GET requests**: key = normalized full URI including all query params.
 ///   Example: `GET:/emby/Shows/NextUp?UserId=...&Limit=24&...`
 ///   Different query params each produce a separate cache entry.
+/// - Query normalization rules apply to every cacheable route:
+///   ignore `UserId`, lowercase query keys for comparison and serialization,
+///   then sort by key and value so equivalent queries share the same cache key.
 ///
 /// - **POST requests**: body handling should be explicit.
 ///   Prefer canonical body strategies for JSON or form-urlencoded payloads
@@ -62,7 +64,7 @@ pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
         methods: &["GET"],
         ttl_seconds: 7200, // 2 hours
         description: "User item details",
-        key_strategy: CacheKeyStrategy::UserItem,
+        key_strategy: CacheKeyStrategy::FullUri,
         body_key_strategy: BodyKeyStrategy::Ignore,
     },
     CacheableRoute {
@@ -70,7 +72,7 @@ pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
         methods: &["GET"],
         ttl_seconds: 7200, // 2 hours
         description: "Next-up episode for a series",
-        key_strategy: CacheKeyStrategy::NextUpSeriesId,
+        key_strategy: CacheKeyStrategy::FullUri,
         body_key_strategy: BodyKeyStrategy::Ignore,
     },
     CacheableRoute {
@@ -78,7 +80,7 @@ pub const CACHEABLE_ROUTES: &[CacheableRoute] = &[
         methods: &["GET"],
         ttl_seconds: 7200, // 2 hours
         description: "Episode list for a series season",
-        key_strategy: CacheKeyStrategy::EpisodesShowId,
+        key_strategy: CacheKeyStrategy::FullUri,
         body_key_strategy: BodyKeyStrategy::Ignore,
     },
 ];
@@ -133,15 +135,6 @@ pub fn build_semantic_cache_key(
         CacheKeyStrategy::FullUri => {
             format!("api:full_uri:method:{method}:uri:{canonical_uri}")
         }
-        CacheKeyStrategy::NextUpSeriesId => {
-            build_next_up_cache_key(&method, query, &canonical_uri)
-        }
-        CacheKeyStrategy::EpisodesShowId => {
-            build_episodes_cache_key(&method, path, &canonical_uri)
-        }
-        CacheKeyStrategy::UserItem => {
-            build_user_item_cache_key(&method, path, &canonical_uri)
-        }
     }
 }
 
@@ -150,14 +143,28 @@ fn canonical_uri_for_cache(path: &str, query: Option<&str>) -> String {
         return path.to_string();
     };
 
+    // Normalize query params for every cacheable route:
+    // drop ignored keys, compare keys case-insensitively by lowering them,
+    // then sort pairs to avoid cache misses caused by query order.
     let mut query_pairs: Vec<(String, String)> =
         form_urlencoded::parse(query_str.as_bytes())
-            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+            .filter_map(|(key, value)| {
+                if IGNORED_QUERY_KEYS
+                    .iter()
+                    .any(|ignored| key.eq_ignore_ascii_case(ignored))
+                {
+                    return None;
+                }
+
+                Some((key.to_ascii_lowercase(), value.into_owned()))
+            })
             .collect();
+    if query_pairs.is_empty() {
+        return path.to_string();
+    }
     query_pairs.sort_by(|(left_key, left_value), (right_key, right_value)| {
         left_key
-            .to_ascii_lowercase()
-            .cmp(&right_key.to_ascii_lowercase())
+            .cmp(right_key)
             .then_with(|| left_value.cmp(right_value))
     });
 
@@ -170,101 +177,6 @@ fn canonical_uri_for_cache(path: &str, query: Option<&str>) -> String {
         .finish();
 
     format!("{path}?{normalized_query}")
-}
-
-fn build_next_up_cache_key(
-    method: &str,
-    query: Option<&str>,
-    fallback_uri: &str,
-) -> String {
-    let Some(query_str) = query else {
-        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
-    };
-
-    let Some(series_id) = form_urlencoded::parse(query_str.as_bytes())
-        .find(|(key, _)| key.eq_ignore_ascii_case("SeriesId"))
-        .map(|(_, value)| value.into_owned())
-    else {
-        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
-    };
-
-    format!(
-        "api:shows_nextup:method:{method}:series_id:{}",
-        series_id.to_ascii_lowercase()
-    )
-}
-
-fn build_episodes_cache_key(
-    method: &str,
-    path: &str,
-    fallback_uri: &str,
-) -> String {
-    let segments: Vec<&str> = path
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect();
-
-    let Some(show_id) = segments
-        .windows(3)
-        .find(|window| {
-            window
-                .first()
-                .is_some_and(|segment| segment.eq_ignore_ascii_case("Shows"))
-                && window.get(2).is_some_and(|segment| {
-                    segment.eq_ignore_ascii_case("Episodes")
-                })
-        })
-        .and_then(|window| window.get(1))
-    else {
-        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
-    };
-
-    format!(
-        "api:shows_episodes:method:{method}:show_id:{}",
-        show_id.to_ascii_lowercase()
-    )
-}
-
-fn build_user_item_cache_key(
-    method: &str,
-    path: &str,
-    fallback_uri: &str,
-) -> String {
-    let segments: Vec<&str> = path
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect();
-
-    let Some((user_id, item_id)) = segments
-        .windows(4)
-        .find(|window| {
-            window
-                .first()
-                .is_some_and(|segment| segment.eq_ignore_ascii_case("Users"))
-                && window.get(2).is_some_and(|segment| {
-                    segment.eq_ignore_ascii_case("Items")
-                })
-        })
-        .and_then(|window| {
-            let user_id = window.get(1)?;
-            let item_id = window.get(3)?;
-            Some((*user_id, *item_id))
-        })
-    else {
-        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
-    };
-
-    if !user_id.chars().all(|c| c.is_ascii_alphanumeric())
-        || !item_id.chars().all(|c| c.is_ascii_digit())
-    {
-        return format!("api:full_uri:method:{method}:uri:{fallback_uri}");
-    }
-
-    format!(
-        "api:user_item:method:{method}:user_id:{}:item_id:{}",
-        user_id.to_ascii_lowercase(),
-        item_id.to_ascii_lowercase()
-    )
 }
 
 #[cfg(test)]
@@ -286,8 +198,8 @@ mod tests {
     }
 
     #[test]
-    fn next_up_semantic_key_uses_series_id_only() {
-        let route = compiled(CacheKeyStrategy::NextUpSeriesId);
+    fn next_up_semantic_key_uses_full_uri() {
+        let route = compiled(CacheKeyStrategy::FullUri);
         let key = build_semantic_cache_key(
             &route,
             "GET",
@@ -295,7 +207,10 @@ mod tests {
             Some("Limit=1&SeriesId=Series-ABC_01&UserId=u1"),
         );
 
-        assert_eq!(key, "api:shows_nextup:method:get:series_id:series-abc_01");
+        assert_eq!(
+            key,
+            "api:full_uri:method:get:uri:/emby/Shows/NextUp?limit=1&seriesid=Series-ABC_01"
+        );
     }
 
     #[test]
@@ -320,16 +235,22 @@ mod tests {
     }
 
     #[test]
-    fn episodes_semantic_key_uses_show_id_from_path_only() {
-        let route = compiled(CacheKeyStrategy::EpisodesShowId);
-        let key = build_semantic_cache_key(
+    fn episodes_semantic_key_distinguishes_season_id() {
+        let route = compiled(CacheKeyStrategy::FullUri);
+        let key1 = build_semantic_cache_key(
             &route,
             "GET",
             "/emby/Shows/Show-XYZ_09/Episodes",
             Some("SeasonId=s1&UserId=u1"),
         );
+        let key = build_semantic_cache_key(
+            &route,
+            "GET",
+            "/emby/Shows/Show-XYZ_09/Episodes",
+            Some("SeasonId=s2&UserId=u1"),
+        );
 
-        assert_eq!(key, "api:shows_episodes:method:get:show_id:show-xyz_09");
+        assert_ne!(key1, key);
     }
 
     #[test]
@@ -358,18 +279,18 @@ mod tests {
     }
 
     #[test]
-    fn user_item_semantic_key_uses_user_and_item_ids_only() {
-        let route = compiled(CacheKeyStrategy::UserItem);
+    fn user_item_semantic_key_uses_full_uri() {
+        let route = compiled(CacheKeyStrategy::FullUri);
         let key = build_semantic_cache_key(
             &route,
             "GET",
             "/emby/Users/UserABC01/Items/257023",
-            None,
+            Some("Fields=Path%2COverview&UserId=u1"),
         );
 
         assert_eq!(
             key,
-            "api:user_item:method:get:user_id:userabc01:item_id:257023"
+            "api:full_uri:method:get:uri:/emby/Users/UserABC01/Items/257023?fields=Path%2COverview"
         );
     }
 
@@ -391,6 +312,48 @@ mod tests {
 
         assert_eq!(key1, key2);
         assert_eq!(key1, "api:full_uri:method:get:uri:/emby/Items?a=1&b=2");
+    }
+
+    #[test]
+    fn full_uri_strategy_ignores_user_id() {
+        let route = compiled(CacheKeyStrategy::FullUri);
+        let key1 = build_semantic_cache_key(
+            &route,
+            "GET",
+            "/emby/Shows/49619/Episodes",
+            Some("SeasonId=49708&UserId=u1"),
+        );
+        let key2 = build_semantic_cache_key(
+            &route,
+            "GET",
+            "/emby/Shows/49619/Episodes",
+            Some("UserId=u2&SeasonId=49708"),
+        );
+
+        assert_eq!(key1, key2);
+        assert_eq!(
+            key1,
+            "api:full_uri:method:get:uri:/emby/Shows/49619/Episodes?seasonid=49708"
+        );
+    }
+
+    #[test]
+    fn full_uri_strategy_treats_query_keys_case_insensitively() {
+        let route = compiled(CacheKeyStrategy::FullUri);
+        let key1 = build_semantic_cache_key(
+            &route,
+            "GET",
+            "/emby/Shows/49619/Episodes",
+            Some("SeasonId=49708&Fields=A"),
+        );
+        let key2 = build_semantic_cache_key(
+            &route,
+            "GET",
+            "/emby/Shows/49619/Episodes",
+            Some("seasonid=49708&fields=A"),
+        );
+
+        assert_eq!(key1, key2);
     }
 
     #[test]
