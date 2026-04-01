@@ -1,6 +1,4 @@
-use std::{
-    collections::HashSet, ops::Deref as DerefTrait, sync::Arc, time::Instant,
-};
+use std::{collections::HashSet, ops::Deref as DerefTrait, sync::Arc};
 
 use dashmap::DashMap;
 use tokio::sync::{Mutex as TokioMutex, OnceCell, RwLock as TokioRwLock};
@@ -19,11 +17,6 @@ use crate::{
 // a workaround for missing Range headers.
 const PROBLEMATIC_CLIENTS: &[&str] =
     &["yamby", "hills", "embytolocalplayer", "Emby/"];
-
-pub(crate) struct LocalPrepareRequestState {
-    pub(crate) started_at: Instant,
-    pub(crate) mutex: Arc<TokioMutex<()>>,
-}
 
 pub struct AppState {
     config: TokioRwLock<Config>,
@@ -44,8 +37,6 @@ pub struct AppState {
     pub(crate) playback_info_request_locks:
         DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) strm_request_locks: DashMap<String, Arc<TokioMutex<()>>>,
-    pub(crate) local_prepare_request_states:
-        DashMap<String, Arc<LocalPrepareRequestState>>,
     pub(crate) local_metadata_request_locks:
         DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) webdav_auth_cache: DashMap<String, String>,
@@ -72,7 +63,6 @@ impl AppState {
             open_list_request_locks: DashMap::new(),
             playback_info_request_locks: DashMap::new(),
             strm_request_locks: DashMap::new(),
-            local_prepare_request_states: DashMap::new(),
             local_metadata_request_locks: DashMap::new(),
             webdav_auth_cache: DashMap::new(),
             webdav_auth_probe_locks: DashMap::new(),

@@ -5,17 +5,15 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    time::{Instant, SystemTime},
 };
 
 use bytes::Bytes;
-use dashmap::mapref::entry::Entry;
 use futures_util::{StreamExt, TryStreamExt};
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::{HeaderMap, StatusCode, header};
 use lazy_static::lazy_static;
-use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::{
     read_stream::ReaderStream,
@@ -35,41 +33,13 @@ use crate::{
 
 pub(crate) struct LocalStreamer;
 
-const DUPLICATE_PREPARE_WINDOW_MS: u64 = 2_000;
-const DUPLICATE_PREPARE_WINDOW: Duration =
-    Duration::from_millis(DUPLICATE_PREPARE_WINDOW_MS);
 const LOCAL_METADATA_CACHE_KEY_PREFIX: &str = "backend:local_metadata";
-const LOCAL_PREPARE_CACHE_KEY_PREFIX: &str = "backend:local_prepare";
-const LOCAL_PREPARE_DEVICE_HASH_SEGMENT: &str = "device_hash";
 
 #[derive(Debug, Clone, Copy)]
 struct MetadataLoadStats {
     cache_hit: bool,
     lock_wait_ms: u128,
     metadata_ms: u128,
-}
-
-enum DuplicatePrepareMode {
-    Leader,
-    Waited { wait_ms: u128, age_ms: u128 },
-    BypassStale { age_ms: u128 },
-}
-
-struct DuplicatePreparePermit {
-    state: Option<Arc<AppState>>,
-    key: Option<String>,
-    mode: DuplicatePrepareMode,
-    guard: Option<OwnedMutexGuard<()>>,
-}
-
-impl Drop for DuplicatePreparePermit {
-    fn drop(&mut self) {
-        if let (Some(state), Some(key), Some(_)) =
-            (&self.state, &self.key, &self.guard)
-        {
-            let _ = state.local_prepare_request_states.remove(key);
-        }
-    }
 }
 
 impl LocalStreamer {
@@ -137,42 +107,17 @@ impl LocalStreamer {
             return Err(StatusCode::FORBIDDEN);
         };
 
-        let duplicate_prepare_permit = Self::acquire_duplicate_prepare_permit(
-            state.clone(),
-            &client_id_value,
-            &path,
-            range_value,
-        )
-        .await;
-        match &duplicate_prepare_permit.mode {
-            DuplicatePrepareMode::Leader => {}
-            DuplicatePrepareMode::Waited { wait_ms, age_ms } => {
-                debug_log!(
-                    LOCAL_STREAMER_LOGGER_DOMAIN,
-                    "local_duplicate_prepare_wait_complete device_id={} playback_session_id={} path={:?} age_ms={} wait_ms={}",
-                    client_id_value,
-                    playback_session_id,
-                    path,
-                    age_ms,
-                    wait_ms
-                );
-            }
-            DuplicatePrepareMode::BypassStale { age_ms } => {
-                debug_log!(
-                    LOCAL_STREAMER_LOGGER_DOMAIN,
-                    "local_duplicate_prepare_bypass_complete device_id={} playback_session_id={} path={:?} age_ms={} window_ms={}",
-                    client_id_value,
-                    playback_session_id,
-                    path,
-                    age_ms,
-                    DUPLICATE_PREPARE_WINDOW_MS
-                );
-            }
-        }
+        info_log!(
+            LOCAL_STREAMER_LOGGER_DOMAIN,
+            "local_stream_playback_session device_id={} playback_session_id={} path={:?} range={}",
+            client_id_value,
+            playback_session_id,
+            path,
+            range_value
+        );
 
         let prepared_target =
             Self::prepare_stream_target(state.clone(), path).await?;
-        drop(duplicate_prepare_permit);
 
         let content_range = match Self::parse_content_range(
             range_value,
@@ -202,87 +147,6 @@ impl LocalStreamer {
             limiter,
         )
         .await
-    }
-
-    async fn acquire_duplicate_prepare_permit(
-        state: Arc<AppState>,
-        device_id: &str,
-        path: &Path,
-        range_value: &str,
-    ) -> DuplicatePreparePermit {
-        let request_key =
-            Self::local_prepare_request_key(device_id, path, range_value);
-        let mutex = Arc::new(Mutex::new(()));
-        let leader_guard = match mutex.clone().try_lock_owned() {
-            Ok(guard) => guard,
-            Err(_) => unreachable!("new prepare mutex should be unlocked"),
-        };
-        let new_state = Arc::new(crate::app::LocalPrepareRequestState {
-            started_at: Instant::now(),
-            mutex,
-        });
-
-        let existing_state = match state
-            .local_prepare_request_states
-            .entry(request_key.clone())
-        {
-            Entry::Vacant(entry) => {
-                entry.insert(new_state);
-                debug_log!(
-                    LOCAL_STREAMER_LOGGER_DOMAIN,
-                    "local_duplicate_prepare_leader key={} device_id={}",
-                    request_key,
-                    device_id
-                );
-                return DuplicatePreparePermit {
-                    state: Some(state.clone()),
-                    key: Some(request_key),
-                    mode: DuplicatePrepareMode::Leader,
-                    guard: Some(leader_guard),
-                };
-            }
-            Entry::Occupied(entry) => entry.get().clone(),
-        };
-        drop(leader_guard);
-
-        let age = existing_state.started_at.elapsed();
-        let age_ms = age.as_millis();
-
-        if age <= DUPLICATE_PREPARE_WINDOW {
-            let wait_started = Instant::now();
-            let guard = existing_state.mutex.clone().lock_owned().await;
-            let wait_ms = wait_started.elapsed().as_millis();
-            debug_log!(
-                LOCAL_STREAMER_LOGGER_DOMAIN,
-                "local_duplicate_prepare_wait_hit key={} device_id={} age_ms={} wait_ms={}",
-                request_key,
-                device_id,
-                age_ms,
-                wait_ms
-            );
-            drop(guard);
-            DuplicatePreparePermit {
-                state: None,
-                key: None,
-                mode: DuplicatePrepareMode::Waited { wait_ms, age_ms },
-                guard: None,
-            }
-        } else {
-            debug_log!(
-                LOCAL_STREAMER_LOGGER_DOMAIN,
-                "local_duplicate_prepare_bypass_stale key={} device_id={} age_ms={} window_ms={}",
-                request_key,
-                device_id,
-                age_ms,
-                DUPLICATE_PREPARE_WINDOW_MS
-            );
-            DuplicatePreparePermit {
-                state: None,
-                key: None,
-                mode: DuplicatePrepareMode::BypassStale { age_ms },
-                guard: None,
-            }
-        }
     }
 
     async fn prepare_stream_target(
@@ -511,19 +375,6 @@ impl LocalStreamer {
         let raw_path = path.to_string_lossy();
         let path_hash = StringUtil::hash_hex(raw_path.trim_end());
         format!("{LOCAL_METADATA_CACHE_KEY_PREFIX}:path_hash:{path_hash}")
-    }
-
-    fn local_prepare_request_key(
-        device_id: &str,
-        path: &Path,
-        range_value: &str,
-    ) -> String {
-        let device_hash = StringUtil::hash_hex(device_id.trim());
-        let path_hash = StringUtil::hash_hex(path.to_string_lossy().trim_end());
-        let range_hash = StringUtil::hash_hex(range_value.trim());
-        format!(
-            "{LOCAL_PREPARE_CACHE_KEY_PREFIX}:{LOCAL_PREPARE_DEVICE_HASH_SEGMENT}:{device_hash}:path_hash:{path_hash}:range_hash:{range_hash}"
-        )
     }
 
     async fn fallback_path(state: Arc<AppState>) -> Option<PathBuf> {
@@ -761,18 +612,13 @@ pub fn get_content_type(extension: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf, sync::Arc, time::Instant};
+    use std::{fs, path::PathBuf};
 
     use tempfile::TempDir;
-    use tokio::{
-        sync::Mutex,
-        time::{Duration, timeout},
-    };
 
     use super::LocalStreamer;
     use crate::{
         AppState,
-        app::LocalPrepareRequestState,
         config::core::{finish_raw_config, parse_raw_config_str},
         core::backend::{result::Result as AppStreamResult, types::ClientInfo},
         util::string_util::StringUtil,
@@ -865,109 +711,6 @@ listen_port = 60001
             key,
             format!("backend:local_metadata:path_hash:{expected_hash}")
         );
-    }
-
-    #[test]
-    fn local_prepare_request_key_is_structured() {
-        let path = PathBuf::from("/tmp/media/Foo Bar.mp4");
-        let key = LocalStreamer::local_prepare_request_key(
-            "device-1", &path, "bytes=0-",
-        );
-        let expected_device_hash = StringUtil::hash_hex("device-1");
-        let expected_path_hash =
-            StringUtil::hash_hex(path.to_string_lossy().trim_end());
-        let expected_range_hash = StringUtil::hash_hex("bytes=0-");
-
-        assert_eq!(
-            key,
-            format!(
-                "backend:local_prepare:device_hash:{expected_device_hash}:path_hash:{expected_path_hash}:range_hash:{expected_range_hash}"
-            )
-        );
-    }
-
-    #[tokio::test]
-    async fn duplicate_prepare_waits_within_window() {
-        let state = Arc::new(test_state_with_fallback(None).await);
-        let path = PathBuf::from("/tmp/media/repeat.mp4");
-
-        let leader = LocalStreamer::acquire_duplicate_prepare_permit(
-            state.clone(),
-            "device-1",
-            &path,
-            "bytes=0-",
-        )
-        .await;
-
-        let follower = tokio::spawn({
-            let state = state.clone();
-            let path = path.clone();
-            async move {
-                LocalStreamer::acquire_duplicate_prepare_permit(
-                    state, "device-1", &path, "bytes=0-",
-                )
-                .await
-            }
-        });
-        tokio::pin!(follower);
-
-        let blocked = timeout(Duration::from_millis(50), &mut follower).await;
-        assert!(
-            blocked.is_err(),
-            "follower should wait while leader holds permit"
-        );
-
-        drop(leader);
-
-        let follower = timeout(Duration::from_secs(1), &mut follower)
-            .await
-            .expect("follower should finish after leader releases")
-            .expect("join follower");
-
-        match follower.mode {
-            super::DuplicatePrepareMode::Waited { .. } => {}
-            _ => unreachable!("expected waited mode for duplicate request"),
-        }
-    }
-
-    #[tokio::test]
-    async fn duplicate_prepare_bypasses_stale_inflight_request() {
-        let state = Arc::new(test_state_with_fallback(None).await);
-        let path = PathBuf::from("/tmp/media/repeat.mp4");
-        let key = LocalStreamer::local_prepare_request_key(
-            "device-1", &path, "bytes=0-",
-        );
-        let mutex = Arc::new(Mutex::new(()));
-        let held_guard = mutex.clone().lock_owned().await;
-        state.local_prepare_request_states.insert(
-            key,
-            Arc::new(LocalPrepareRequestState {
-                started_at: Instant::now()
-                    - super::DUPLICATE_PREPARE_WINDOW
-                    - Duration::from_millis(1),
-                mutex,
-            }),
-        );
-
-        let permit = timeout(
-            Duration::from_millis(50),
-            LocalStreamer::acquire_duplicate_prepare_permit(
-                state.clone(),
-                "device-1",
-                &path,
-                "bytes=0-",
-            ),
-        )
-        .await
-        .unwrap_or_else(|_| panic!("stale inflight request should not block"));
-
-        match permit.mode {
-            super::DuplicatePrepareMode::BypassStale { .. } => {}
-            _ => unreachable!("expected stale inflight request to bypass"),
-        }
-
-        drop(held_guard);
-        state.local_prepare_request_states.clear();
     }
 
     #[tokio::test]
