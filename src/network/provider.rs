@@ -116,6 +116,9 @@ impl NetworkProvider {
             NetworkTask::RequestParameters(params) => {
                 request = request.query(&params);
             }
+            NetworkTask::RequestBytesWithParameters(body, params) => {
+                request = request.query(&params).body(body);
+            }
             NetworkTask::RequestMultipart(params) => {
                 request = request.with_multipart(params).await;
             }

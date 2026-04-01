@@ -1,3 +1,4 @@
+use super::PlaybackInfoRequest;
 use crate::{
     api::emby::{API, PlaybackInfo, User},
     client::BuildableClient,
@@ -70,11 +71,17 @@ impl Client {
         &self,
         base_url: impl Into<String>,
         api_key: impl Into<String>,
-        item_id: impl Into<String>,
-        media_source_id: impl Into<String>,
+        request: &PlaybackInfoRequest,
     ) -> Result<PlaybackInfo, anyhow::Error> {
-        let request =
-            API::playback_info(base_url, api_key, item_id, media_source_id);
+        let request = API::playback_info(
+            base_url,
+            api_key,
+            request.item_id.clone(),
+            request.media_source_id.clone(),
+            request.method,
+            request.body.clone(),
+            request.content_type.clone(),
+        );
         let response = self.provider.send_request(&request).await?;
         let result: PlaybackInfo = response.json().await?;
         Ok(result)

@@ -6,7 +6,7 @@
 use std::fmt::{self, Display};
 
 /// Represents the HTTP method to be used in a network request.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum HttpMethod {
     /// HTTP GET method
     Get,

@@ -22,6 +22,7 @@ use crate::{
     AppState, FORWARD_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log,
 };
 use crate::{
+    HttpMethod,
     client::{
         PlaybackInfoRequest, PlaybackInfoService, PlaybackInfoServiceError,
     },
@@ -159,6 +160,9 @@ impl AppForwardService {
                 &PlaybackInfoRequest::new(
                     path_params.item_id.clone(),
                     path_params.media_source_id.clone(),
+                    HttpMethod::Get,
+                    None,
+                    None,
                 ),
                 Some(emby_token.as_str()),
             )

@@ -39,8 +39,8 @@ pub enum BodyKeyStrategy {
 ///   instead of hashing raw bytes directly, to avoid unnecessary cache miss.
 ///
 /// - **Special case: PlaybackInfo**
-///   `PlaybackInfo` is normalized and shared by `PlaybackInfoService` using
-///   `item_id + media_source_id` as the semantic cache key across GET and POST.
+///   `PlaybackInfo` is handled separately by `PlaybackInfoService`, which keeps
+///   GET and POST responses isolated and preserves POST body semantics.
 ///
 /// ## Important notes
 ///

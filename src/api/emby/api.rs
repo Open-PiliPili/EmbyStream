@@ -40,6 +40,9 @@ impl API {
         api_key: impl Into<String>,
         item_id: impl Into<String>,
         media_source_id: impl Into<String>,
+        method: HttpMethod,
+        body: Option<Vec<u8>>,
+        content_type: Option<String>,
     ) -> Self {
         API {
             base_url: base_url.into(),
@@ -47,6 +50,9 @@ impl API {
             operation: Operation::PlaybackInfo {
                 item_id: item_id.into(),
                 media_source_id: media_source_id.into(),
+                method,
+                body,
+                content_type,
             },
         }
     }
@@ -67,7 +73,10 @@ impl NetworkTarget for API {
     }
 
     fn method(&self) -> HttpMethod {
-        HttpMethod::Get
+        match &self.operation {
+            Operation::GetUser { .. } => HttpMethod::Get,
+            Operation::PlaybackInfo { method, .. } => *method,
+        }
     }
 
     fn task(&self) -> NetworkTask {
@@ -76,13 +85,25 @@ impl NetworkTarget for API {
         match &self.operation {
             Operation::GetUser { .. } => NetworkTask::RequestParameters(params),
             Operation::PlaybackInfo {
-                media_source_id, ..
+                media_source_id,
+                method,
+                body,
+                ..
             } => {
                 params.insert(
                     "MediaSourceId".to_string(),
                     media_source_id.clone(),
                 );
-                NetworkTask::RequestParameters(params)
+                match method {
+                    HttpMethod::Get => NetworkTask::RequestParameters(params),
+                    HttpMethod::Post => {
+                        NetworkTask::RequestBytesWithParameters(
+                            body.clone().unwrap_or_default(),
+                            params,
+                        )
+                    }
+                    _ => NetworkTask::RequestParameters(params),
+                }
             }
         }
     }
@@ -91,11 +112,24 @@ impl NetworkTarget for API {
         let sys_info = SystemInfo::new();
         let base_url =
             StringUtil::trim_trailing_slashes(&self.base_url).to_string();
-        vec![
+        let mut headers = vec![
             ("accept".into(), "application/json".into()),
             ("origin".into(), base_url.clone()),
             ("referer".into(), format!("{base_url}/")),
             ("user-agent".into(), sys_info.get_user_agent()),
-        ]
+        ];
+
+        if let Operation::PlaybackInfo {
+            content_type: Some(content_type),
+            ..
+        } = &self.operation
+        {
+            let trimmed = content_type.trim();
+            if !trimmed.is_empty() {
+                headers.push(("content-type".into(), trimmed.to_string()));
+            }
+        }
+
+        headers
     }
 }

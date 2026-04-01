@@ -14,6 +14,9 @@ pub enum NetworkTask {
     /// A request with key-value parameters
     RequestParameters(HashMap<String, String>),
 
+    /// A request with query parameters and a raw request body
+    RequestBytesWithParameters(Vec<u8>, HashMap<String, String>),
+
     /// A request with form data (multipart or URL-encoded)
     RequestMultipart(HashMap<String, String>),
 

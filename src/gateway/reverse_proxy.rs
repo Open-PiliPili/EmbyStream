@@ -463,21 +463,37 @@ impl ReverseProxyMiddleware {
     fn playback_info_request(
         &self,
         ctx: &Context,
+        body_bytes: Option<&[u8]>,
     ) -> Option<PlaybackInfoRequest> {
         if ctx.method != Method::GET && ctx.method != Method::POST {
             return None;
         }
 
-        PlaybackInfoRequest::from_http_parts(&ctx.path, ctx.uri.query()).ok()
+        let content_type = ctx
+            .headers
+            .get(hyper::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok());
+        PlaybackInfoRequest::from_http_parts(
+            &ctx.path,
+            ctx.uri.query(),
+            &ctx.method,
+            body_bytes,
+            content_type,
+        )
+        .ok()
     }
 
     async fn handle_playback_info_request(
         &self,
         ctx: &Context,
-        request: PlaybackInfoRequest,
         body: Option<Incoming>,
     ) -> Response<BoxBodyType> {
-        let _ = Self::read_body(body).await;
+        let body_bytes = Self::read_body(body).await;
+        let Some(request) =
+            self.playback_info_request(ctx, body_bytes.as_deref())
+        else {
+            return ResponseBuilder::with_status_code(StatusCode::BAD_REQUEST);
+        };
         let api_token = PlaybackInfoService::api_token_from_headers_and_query(
             &ctx.headers,
             ctx.uri.query(),
@@ -493,6 +509,7 @@ impl ReverseProxyMiddleware {
                 let status = match error {
                     PlaybackInfoServiceError::InvalidItemId
                     | PlaybackInfoServiceError::InvalidMediaSourceId
+                    | PlaybackInfoServiceError::UnsupportedMethod
                     | PlaybackInfoServiceError::EmptyApiToken => {
                         StatusCode::BAD_REQUEST
                     }
@@ -554,10 +571,10 @@ impl Middleware for ReverseProxyMiddleware {
             );
         }
 
-        if let Some(request) = self.playback_info_request(&ctx) {
-            return self
-                .handle_playback_info_request(&ctx, request, body)
-                .await;
+        if (ctx.method == Method::GET || ctx.method == Method::POST)
+            && ctx.path.contains("PlaybackInfo")
+        {
+            return self.handle_playback_info_request(&ctx, body).await;
         }
 
         let cacheable_route =

@@ -1,8 +1,11 @@
 use std::{sync::Arc, time::Instant};
 
+use hyper::Method;
+
 use crate::{
     AppState, PLAYBACK_INFO_LOGGER_DOMAIN, api::PlaybackInfo,
-    core::frontend::types::InfuseAuthorization, debug_log, info_log, warn_log,
+    core::frontend::types::InfuseAuthorization, debug_log, info_log,
+    network::HttpMethod, util::StringUtil, warn_log,
 };
 
 const SLOW_PLAYBACK_INFO_FETCH_THRESHOLD_MS: u128 = 500;
@@ -11,16 +14,25 @@ const SLOW_PLAYBACK_INFO_FETCH_THRESHOLD_MS: u128 = 500;
 pub struct PlaybackInfoRequest {
     pub item_id: String,
     pub media_source_id: String,
+    pub method: HttpMethod,
+    pub body: Option<Vec<u8>>,
+    pub content_type: Option<String>,
 }
 
 impl PlaybackInfoRequest {
     pub fn new(
         item_id: impl Into<String>,
         media_source_id: impl Into<String>,
+        method: HttpMethod,
+        body: Option<Vec<u8>>,
+        content_type: Option<String>,
     ) -> Self {
         Self {
             item_id: item_id.into(),
             media_source_id: media_source_id.into(),
+            method,
+            body,
+            content_type,
         }
     }
 
@@ -35,22 +47,57 @@ impl PlaybackInfoRequest {
             return Err(PlaybackInfoServiceError::InvalidMediaSourceId);
         }
 
-        Ok(format!(
-            "playback:info:item_id:{}:media_source_id:{}",
+        let method = self.method.to_string().to_ascii_lowercase();
+        let mut key = format!(
+            "playback:info:method:{method}:item_id:{}:media_source_id:{}",
             item_id.to_ascii_lowercase(),
             media_source_id.to_ascii_lowercase()
-        ))
+        );
+
+        if matches!(self.method, HttpMethod::Post) {
+            let body_hash = self
+                .body
+                .as_deref()
+                .map(StringUtil::hash_bytes)
+                .unwrap_or_default();
+            let content_type_hash = self
+                .content_type
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| StringUtil::hash_hex(&value.to_ascii_lowercase()))
+                .unwrap_or_default();
+            key.push_str(&format!(
+                ":content_type_hash:{content_type_hash}:body_hash:{body_hash}"
+            ));
+        }
+
+        Ok(key)
     }
 
     pub fn from_http_parts(
         path: &str,
         query: Option<&str>,
+        method: &Method,
+        body: Option<&[u8]>,
+        content_type: Option<&str>,
     ) -> Result<Self, PlaybackInfoServiceError> {
         let item_id = Self::item_id_from_path(path)
             .ok_or(PlaybackInfoServiceError::InvalidItemId)?;
         let media_source_id = Self::media_source_id_from_query(query)
             .ok_or(PlaybackInfoServiceError::InvalidMediaSourceId)?;
-        Ok(Self::new(item_id, media_source_id))
+        let method = match *method {
+            Method::GET => HttpMethod::Get,
+            Method::POST => HttpMethod::Post,
+            _ => return Err(PlaybackInfoServiceError::UnsupportedMethod),
+        };
+        Ok(Self::new(
+            item_id,
+            media_source_id,
+            method,
+            body.map(|bytes| bytes.to_vec()),
+            content_type.map(str::to_string),
+        ))
     }
 
     fn item_id_from_path(path: &str) -> Option<String> {
@@ -85,6 +132,7 @@ impl PlaybackInfoRequest {
 pub enum PlaybackInfoServiceError {
     InvalidItemId,
     InvalidMediaSourceId,
+    UnsupportedMethod,
     EmptyApiToken,
     Upstream(anyhow::Error),
 }
@@ -95,6 +143,9 @@ impl std::fmt::Display for PlaybackInfoServiceError {
             Self::InvalidItemId => write!(f, "invalid playback info item id"),
             Self::InvalidMediaSourceId => {
                 write!(f, "invalid playback info media source id")
+            }
+            Self::UnsupportedMethod => {
+                write!(f, "unsupported playback info method")
             }
             Self::EmptyApiToken => write!(f, "empty playback info api token"),
             Self::Upstream(error) => {
@@ -222,12 +273,7 @@ impl PlaybackInfoService {
         let emby_client = self.state.get_emby_client().await.clone();
 
         emby_client
-            .playback_info(
-                emby_server_url,
-                api_token.to_string(),
-                request.item_id.clone(),
-                request.media_source_id.clone(),
-            )
+            .playback_info(emby_server_url, api_token.to_string(), request)
             .await
             .map_err(PlaybackInfoServiceError::Upstream)
     }
@@ -258,13 +304,19 @@ impl PlaybackInfoService {
 
 #[cfg(test)]
 mod tests {
+    use hyper::Method;
+
     use super::PlaybackInfoRequest;
+    use crate::network::HttpMethod;
 
     #[test]
     fn playback_info_request_parses_get_path() {
         let request = PlaybackInfoRequest::from_http_parts(
             "/emby/Items/249971/PlaybackInfo",
             Some("MediaSourceId=abc123&UserId=u1"),
+            &Method::GET,
+            None,
+            None,
         );
 
         assert!(request.is_ok());
@@ -279,6 +331,9 @@ mod tests {
         let request = PlaybackInfoRequest::from_http_parts(
             "/Items/249971/PlaybackInfo",
             Some("MediaSourceId=abc123"),
+            &Method::GET,
+            None,
+            None,
         );
 
         assert!(request.is_ok());
@@ -289,14 +344,41 @@ mod tests {
     }
 
     #[test]
-    fn playback_info_cache_key_ignores_transport_details() {
-        let request = PlaybackInfoRequest::new("249971", "ABC123");
+    fn playback_info_cache_key_includes_method() {
+        let request = PlaybackInfoRequest::new(
+            "249971",
+            "ABC123",
+            HttpMethod::Get,
+            None,
+            None,
+        );
         let cache_key = request.cache_key();
 
         assert!(cache_key.is_ok());
         assert_eq!(
             cache_key.unwrap_or_default(),
-            "playback:info:item_id:249971:media_source_id:abc123"
+            "playback:info:method:get:item_id:249971:media_source_id:abc123"
         );
+    }
+
+    #[test]
+    fn playback_info_cache_key_for_post_includes_body_hash() {
+        let request = PlaybackInfoRequest::new(
+            "249971",
+            "ABC123",
+            HttpMethod::Post,
+            Some(br#"{"AutoOpenLiveStream":true}"#.to_vec()),
+            Some("application/json".to_string()),
+        );
+
+        let cache_key = request.cache_key();
+
+        assert!(cache_key.is_ok());
+        let cache_key = cache_key.unwrap_or_default();
+        assert!(cache_key.starts_with(
+            "playback:info:method:post:item_id:249971:media_source_id:abc123"
+        ));
+        assert!(cache_key.contains(":content_type_hash:"));
+        assert!(cache_key.contains(":body_hash:"));
     }
 }
