@@ -1,7 +1,7 @@
 use std::time::SystemTime;
 
 #[derive(Debug, Clone)]
-pub struct Metadata {
+pub struct FileMetadata {
     pub file_size: u64,
     pub file_name: String,
     pub format: String,
@@ -9,7 +9,7 @@ pub struct Metadata {
     pub updated_at: SystemTime,
 }
 
-impl Metadata {
+impl FileMetadata {
     pub fn is_valid(&self) -> bool {
         self.file_size > 0
     }

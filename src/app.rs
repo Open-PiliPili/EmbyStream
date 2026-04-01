@@ -5,10 +5,7 @@ use tokio::sync::{Mutex as TokioMutex, OnceCell, RwLock as TokioRwLock};
 
 use crate::{
     INIT_LOGGER_DOMAIN,
-    cache::{
-        GeneralCache, MetadataCache, RateLimiterCache,
-        metadata::MetadataPrefetcher,
-    },
+    cache::{GeneralCache, RateLimiterCache},
     client::{ClientBuilder, EmbyClient, OpenListClient},
     config::core::Config,
     core::backend::{constants::DISK_BACKEND_TYPE, upstream_proxy, webdav},
@@ -25,8 +22,6 @@ pub struct AppState {
     config: TokioRwLock<Config>,
     frontend_path_rewrite_cache: OnceCell<Vec<PathRewriter>>,
     problematic_clients_cache: OnceCell<Vec<String>>,
-    metadata_cache: OnceCell<MetadataCache>,
-    metadata_prefetcher: OnceCell<Arc<MetadataPrefetcher>>,
     encrypt_cache: OnceCell<GeneralCache>,
     decrypt_cache: OnceCell<GeneralCache>,
     playback_info_cache: OnceCell<GeneralCache>,
@@ -51,8 +46,6 @@ impl AppState {
             config: TokioRwLock::new(config),
             frontend_path_rewrite_cache: OnceCell::new(),
             problematic_clients_cache: OnceCell::new(),
-            metadata_cache: OnceCell::new(),
-            metadata_prefetcher: OnceCell::new(),
             encrypt_cache: OnceCell::new(),
             decrypt_cache: OnceCell::new(),
             playback_info_cache: OnceCell::new(),
@@ -136,24 +129,6 @@ impl AppState {
                 }
 
                 clients.into_iter().filter(|s| !s.is_empty()).collect()
-            })
-            .await
-    }
-
-    pub async fn get_metadata_cache(&self) -> &MetadataCache {
-        let (capacity, ttl) = self.get_cache_settings().await;
-        self.metadata_cache
-            .get_or_init(|| async move { MetadataCache::new(capacity, ttl) })
-            .await
-    }
-
-    pub async fn get_metadata_prefetcher(&self) -> &Arc<MetadataPrefetcher> {
-        self.metadata_prefetcher
-            .get_or_init(|| async {
-                let cache = Arc::new(self.get_metadata_cache().await.clone());
-                let prefetcher = Arc::new(MetadataPrefetcher::new(cache));
-                prefetcher.clone().start_prefetch_task();
-                prefetcher
             })
             .await
     }
