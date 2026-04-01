@@ -33,6 +33,7 @@ use tokio::sync::Mutex as TokioMutex;
 const ROOT_PATH: &str = "/";
 const WEB_INDEX_REDIRECT: &str = "/web/index.html";
 const MAX_CACHEABLE_BODY_BYTES: usize = 64 * 1024;
+const PLAYBACK_INFO_PATH_SEGMENT: &str = "PlaybackInfo";
 
 #[derive(Clone, Debug)]
 struct CachedApiResponse {
@@ -88,10 +89,20 @@ impl ReverseProxyMiddleware {
         api_cache: GeneralCache,
         state: std::sync::Arc<AppState>,
     ) -> Self {
-        let http_client = reqwest::Client::builder()
+        let http_client = match reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .expect("Failed to build reqwest client for reverse proxy");
+        {
+            Ok(client) => client,
+            Err(error) => {
+                warn_log!(
+                    REVERSE_PROXY_LOGGER_DOMAIN,
+                    "reverse_proxy_client_build_failed_using_fallback error={}",
+                    error
+                );
+                reqwest::Client::new()
+            }
+        };
 
         Self {
             emby_base_url,
@@ -572,7 +583,7 @@ impl Middleware for ReverseProxyMiddleware {
         }
 
         if (ctx.method == Method::GET || ctx.method == Method::POST)
-            && ctx.path.contains("PlaybackInfo")
+            && ctx.path.contains(PLAYBACK_INFO_PATH_SEGMENT)
         {
             return self.handle_playback_info_request(&ctx, body).await;
         }

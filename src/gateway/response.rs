@@ -11,6 +11,9 @@ pub type BoxBodyType = BoxBody<Bytes, Error>;
 
 pub struct ResponseBuilder;
 
+const DEFAULT_REDIRECT_STATUS: StatusCode = StatusCode::MOVED_PERMANENTLY;
+const FALLBACK_STATUS_CODE: StatusCode = StatusCode::INTERNAL_SERVER_ERROR;
+
 impl ResponseBuilder {
     pub fn with_redirect(
         location: impl AsRef<str>,
@@ -18,7 +21,7 @@ impl ResponseBuilder {
         headers: Option<HeaderMap>,
     ) -> Response<BoxBodyType> {
         if !status.is_redirection() {
-            status = StatusCode::MOVED_PERMANENTLY;
+            status = DEFAULT_REDIRECT_STATUS;
         }
 
         let mut response = Response::new(
@@ -29,10 +32,11 @@ impl ResponseBuilder {
 
         *response.status_mut() = status;
 
-        response.headers_mut().insert(
-            header::LOCATION,
-            location.as_ref().parse().expect("Invalid location URI"),
-        );
+        if let Ok(location_value) = location.as_ref().parse() {
+            response
+                .headers_mut()
+                .insert(header::LOCATION, location_value);
+        }
 
         if let Some(headers) = headers {
             response.headers_mut().extend(headers);
@@ -45,7 +49,11 @@ impl ResponseBuilder {
         Response::builder()
             .status(status_code)
             .body(Self::empty())
-            .expect("Failed to build empty status code response")
+            .unwrap_or_else(|_| {
+                let mut response = Response::new(Self::empty());
+                *response.status_mut() = FALLBACK_STATUS_CODE;
+                response
+            })
     }
 
     pub fn with_json(

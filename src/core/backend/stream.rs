@@ -22,6 +22,8 @@ use crate::{
     util::UriExt,
 };
 
+const PLAYBACK_SESSION_ID_QUERY_KEY: &str = "playback_session_id";
+
 #[derive(Clone)]
 pub struct StreamMiddleware {
     backend_nodes: Vec<BackendNode>,
@@ -124,6 +126,16 @@ impl Middleware for StreamMiddleware {
                 "No sign parameter found, passing to next middleware"
             );
             return next(ctx, body).await;
+        }
+
+        if params.playback_session_id.trim().is_empty() {
+            warn_log!(
+                GATEWAY_LOGGER_DOMAIN,
+                "signed_stream_missing_required_query key={} path={}",
+                PLAYBACK_SESSION_ID_QUERY_KEY,
+                ctx.path
+            );
+            return ResponseBuilder::with_status_code(StatusCode::BAD_REQUEST);
         }
 
         if ctx.method != Method::GET {

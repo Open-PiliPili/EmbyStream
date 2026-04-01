@@ -15,7 +15,10 @@ use crate::{
         plugin::NetworkPlugin, target::NetworkTarget, task::NetworkTask,
     },
     system_info::SystemInfo,
+    warn_log,
 };
+
+const NETWORK_LOGGER_DOMAIN: &str = "network";
 
 /// A static HTTP client instance configured with default settings.
 ///
@@ -26,13 +29,23 @@ use crate::{
 /// - Use a standard browser user agent
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     let sys_info = SystemInfo::new();
-    Client::builder()
+    match Client::builder()
         .use_rustls_tls()
         .danger_accept_invalid_certs(true)
         .danger_accept_invalid_hostnames(true)
         .user_agent(sys_info.get_user_agent())
         .build()
-        .expect("Failed to build HTTP client")
+    {
+        Ok(client) => client,
+        Err(error) => {
+            warn_log!(
+                NETWORK_LOGGER_DOMAIN,
+                "network_client_build_failed_using_fallback error={}",
+                error
+            );
+            Client::new()
+        }
+    }
 });
 
 /// The main network request provider.

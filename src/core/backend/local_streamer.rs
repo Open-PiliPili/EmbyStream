@@ -38,6 +38,8 @@ pub(crate) struct LocalStreamer;
 const DUPLICATE_PREPARE_WINDOW_MS: u64 = 2_000;
 const DUPLICATE_PREPARE_WINDOW: Duration =
     Duration::from_millis(DUPLICATE_PREPARE_WINDOW_MS);
+const LOCAL_METADATA_CACHE_KEY_PREFIX: &str = "backend:local_metadata";
+const LOCAL_PREPARE_CACHE_KEY_PREFIX: &str = "backend:local_prepare";
 
 #[derive(Debug, Clone, Copy)]
 struct MetadataLoadStats {
@@ -510,7 +512,7 @@ impl LocalStreamer {
     fn local_metadata_cache_key(path: &Path) -> String {
         let raw_path = path.to_string_lossy();
         let path_hash = StringUtil::hash_hex(raw_path.trim_end());
-        format!("backend:local_metadata:path_hash:{path_hash}")
+        format!("{LOCAL_METADATA_CACHE_KEY_PREFIX}:path_hash:{path_hash}")
     }
 
     fn local_prepare_request_key(
@@ -523,7 +525,7 @@ impl LocalStreamer {
         let path_hash = StringUtil::hash_hex(path.to_string_lossy().trim_end());
         let range_hash = StringUtil::hash_hex(range_value.trim());
         format!(
-            "backend:local_prepare:playback_session_hash:{playback_session_hash}:path_hash:{path_hash}:range_hash:{range_hash}"
+            "{LOCAL_PREPARE_CACHE_KEY_PREFIX}:playback_session_hash:{playback_session_hash}:path_hash:{path_hash}:range_hash:{range_hash}"
         )
     }
 

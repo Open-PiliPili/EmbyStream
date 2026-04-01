@@ -9,6 +9,8 @@ use crate::{
 
 pub struct SignDecryptor;
 
+const SIGN_DECRYPT_CACHE_KEY_PREFIX: &str = "stream:sign_decrypt";
+
 impl SignDecryptor {
     pub async fn decrypt(
         sign_str: &str,
@@ -69,7 +71,9 @@ impl SignDecryptor {
         }
         let input = params.sign.to_lowercase();
         let sign_hash = StringUtil::hash_hex(&input);
-        Ok(format!("stream:sign_decrypt:sign_hash:{sign_hash}"))
+        Ok(format!(
+            "{SIGN_DECRYPT_CACHE_KEY_PREFIX}:sign_hash:{sign_hash}"
+        ))
     }
 }
 

@@ -12,6 +12,10 @@ static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
 static PLAYBACK_SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 const TIMESTAMP_MODULO: u128 = 1_000_000_000;
+const TIMESTAMP_HEX_WIDTH: usize = 12;
+const COUNTER_HEX_WIDTH: usize = 8;
+const STREAM_SESSION_ID_PREFIX: &str = "stream:session";
+const PLAYBACK_SESSION_ID_PREFIX: &str = "playback:session";
 
 fn generate_prefixed_session_id(prefix: &str, counter: &AtomicU64) -> String {
     let counter = counter.fetch_add(1, Ordering::Relaxed);
@@ -19,17 +23,22 @@ fn generate_prefixed_session_id(prefix: &str, counter: &AtomicU64) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() % TIMESTAMP_MODULO)
         .unwrap_or(0);
-    format!("{prefix}{start_ms}-{counter}")
+    format!(
+        "{prefix}:{start_ms:0TIMESTAMP_HEX_WIDTH$x}:{counter:0COUNTER_HEX_WIDTH$x}"
+    )
 }
 
 /// Generates a unique session ID for stream correlation.
 /// Format: "s{process_start_ms}-{counter}" for easy grep and uniqueness.
 pub fn generate_stream_session_id() -> String {
-    generate_prefixed_session_id("s", &SESSION_COUNTER)
+    generate_prefixed_session_id(STREAM_SESSION_ID_PREFIX, &SESSION_COUNTER)
 }
 
 pub fn generate_playback_session_id() -> String {
-    generate_prefixed_session_id("play-", &PLAYBACK_SESSION_COUNTER)
+    generate_prefixed_session_id(
+        PLAYBACK_SESSION_ID_PREFIX,
+        &PLAYBACK_SESSION_COUNTER,
+    )
 }
 
 #[cfg(test)]
@@ -37,13 +46,13 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
 
-    const MAX_SESSION_ID_LENGTH: usize = 30;
+    const MAX_SESSION_ID_LENGTH: usize = 48;
 
     #[test]
     fn session_id_format_is_valid() {
         let id = generate_stream_session_id();
-        assert!(id.starts_with('s'));
-        assert!(id.contains('-'));
+        assert!(id.starts_with("stream:session:"));
+        assert_eq!(id.matches(':').count(), 3);
     }
 
     #[test]
@@ -68,8 +77,8 @@ mod tests {
     #[test]
     fn playback_session_id_format_is_valid() {
         let id = generate_playback_session_id();
-        assert!(id.starts_with("play-"));
-        assert_eq!(id.matches('-').count(), 2);
+        assert!(id.starts_with("playback:session:"));
+        assert_eq!(id.matches(':').count(), 3);
     }
 
     #[test]

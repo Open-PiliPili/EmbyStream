@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use hyper::{Response, body::Incoming};
+use hyper::{Response, body::Incoming, header::HeaderValue};
 
 use super::{
     chain::{Middleware, Next},
@@ -10,6 +10,12 @@ use crate::{GATEWAY_LOGGER_DOMAIN, debug_log};
 
 #[derive(Clone)]
 pub struct CorsMiddleware;
+
+const CORS_ALLOW_ORIGIN: HeaderValue = HeaderValue::from_static("*");
+const CORS_ALLOW_METHODS: HeaderValue =
+    HeaderValue::from_static("GET,POST,PUT,DELETE,OPTIONS");
+const CORS_ALLOW_HEADERS: HeaderValue =
+    HeaderValue::from_static("Content-Type,Authorization");
 
 #[async_trait]
 impl Middleware for CorsMiddleware {
@@ -23,25 +29,17 @@ impl Middleware for CorsMiddleware {
 
         let mut response = next(ctx, body).await;
 
-        response.headers_mut().insert(
-            "Access-Control-Allow-Origin",
-            "*".parse()
-                .expect("Failed to parse CORS Allow-Origin header"),
-        );
+        response
+            .headers_mut()
+            .insert("Access-Control-Allow-Origin", CORS_ALLOW_ORIGIN);
 
-        response.headers_mut().insert(
-            "Access-Control-Allow-Methods",
-            "GET,POST,PUT,DELETE,OPTIONS"
-                .parse()
-                .expect("Failed to parse CORS Allow-Methods header"),
-        );
+        response
+            .headers_mut()
+            .insert("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
 
-        response.headers_mut().insert(
-            "Access-Control-Allow-Headers",
-            "Content-Type,Authorization"
-                .parse()
-                .expect("Failed to parse CORS Allow-Headers header"),
-        );
+        response
+            .headers_mut()
+            .insert("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
 
         response
     }

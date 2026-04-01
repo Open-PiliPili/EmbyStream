@@ -7,6 +7,14 @@ use crate::{
     util::StringUtil,
 };
 
+const EMBY_PATH_PREFIX: &str = "emby";
+const EMBY_USERS_SEGMENT: &str = "Users";
+const EMBY_ITEMS_SEGMENT: &str = "Items";
+const EMBY_PLAYBACK_INFO_SEGMENT: &str = "PlaybackInfo";
+const PLAYBACK_INFO_MEDIA_SOURCE_ID_QUERY_KEY: &str = "MediaSourceId";
+const ACCEPT_HEADER_VALUE: &str = "application/json";
+const CONTENT_TYPE_HEADER_KEY: &str = "content-type";
+
 /// Represents Emby API endpoints with their respective parameters.
 #[derive(Debug, Clone)]
 pub struct API {
@@ -65,9 +73,13 @@ impl NetworkTarget for API {
 
     fn path(&self) -> String {
         match &self.operation {
-            Operation::GetUser { user_id } => format!("emby/Users/{user_id}"),
+            Operation::GetUser { user_id } => {
+                format!("{EMBY_PATH_PREFIX}/{EMBY_USERS_SEGMENT}/{user_id}")
+            }
             Operation::PlaybackInfo { item_id, .. } => {
-                format!("emby/Items/{item_id}/PlaybackInfo")
+                format!(
+                    "{EMBY_PATH_PREFIX}/{EMBY_ITEMS_SEGMENT}/{item_id}/{EMBY_PLAYBACK_INFO_SEGMENT}"
+                )
             }
         }
     }
@@ -91,7 +103,7 @@ impl NetworkTarget for API {
                 ..
             } => {
                 params.insert(
-                    "MediaSourceId".to_string(),
+                    PLAYBACK_INFO_MEDIA_SOURCE_ID_QUERY_KEY.to_string(),
                     media_source_id.clone(),
                 );
                 match method {
@@ -113,7 +125,7 @@ impl NetworkTarget for API {
         let base_url =
             StringUtil::trim_trailing_slashes(&self.base_url).to_string();
         let mut headers = vec![
-            ("accept".into(), "application/json".into()),
+            ("accept".into(), ACCEPT_HEADER_VALUE.into()),
             ("origin".into(), base_url.clone()),
             ("referer".into(), format!("{base_url}/")),
             ("user-agent".into(), sys_info.get_user_agent()),
@@ -126,7 +138,10 @@ impl NetworkTarget for API {
         {
             let trimmed = content_type.trim();
             if !trimmed.is_empty() {
-                headers.push(("content-type".into(), trimmed.to_string()));
+                headers.push((
+                    CONTENT_TYPE_HEADER_KEY.into(),
+                    trimmed.to_string(),
+                ));
             }
         }
 

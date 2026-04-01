@@ -9,6 +9,15 @@ use crate::{
 };
 
 const SLOW_PLAYBACK_INFO_FETCH_THRESHOLD_MS: u128 = 500;
+const PLAYBACK_INFO_CACHE_KEY_PREFIX: &str = "playback:info";
+const PLAYBACK_INFO_METHOD_SEGMENT: &str = "method";
+const PLAYBACK_INFO_ITEM_ID_SEGMENT: &str = "item_id";
+const PLAYBACK_INFO_MEDIA_SOURCE_ID_SEGMENT: &str = "media_source_id";
+const PLAYBACK_INFO_CONTENT_TYPE_HASH_SEGMENT: &str = "content_type_hash";
+const PLAYBACK_INFO_BODY_HASH_SEGMENT: &str = "body_hash";
+const PLAYBACK_INFO_ITEMS_SEGMENT: &str = "Items";
+const PLAYBACK_INFO_PATH_SEGMENT: &str = "PlaybackInfo";
+const PLAYBACK_INFO_MEDIA_SOURCE_ID_QUERY_KEY: &str = "MediaSourceId";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackInfoRequest {
@@ -49,7 +58,7 @@ impl PlaybackInfoRequest {
 
         let method = self.method.to_string().to_ascii_lowercase();
         let mut key = format!(
-            "playback:info:method:{method}:item_id:{}:media_source_id:{}",
+            "{PLAYBACK_INFO_CACHE_KEY_PREFIX}:{PLAYBACK_INFO_METHOD_SEGMENT}:{method}:{PLAYBACK_INFO_ITEM_ID_SEGMENT}:{}:{PLAYBACK_INFO_MEDIA_SOURCE_ID_SEGMENT}:{}",
             item_id.to_ascii_lowercase(),
             media_source_id.to_ascii_lowercase()
         );
@@ -68,7 +77,7 @@ impl PlaybackInfoRequest {
                 .map(|value| StringUtil::hash_hex(&value.to_ascii_lowercase()))
                 .unwrap_or_default();
             key.push_str(&format!(
-                ":content_type_hash:{content_type_hash}:body_hash:{body_hash}"
+                ":{PLAYBACK_INFO_CONTENT_TYPE_HASH_SEGMENT}:{content_type_hash}:{PLAYBACK_INFO_BODY_HASH_SEGMENT}:{body_hash}"
             ));
         }
 
@@ -110,9 +119,9 @@ impl PlaybackInfoRequest {
             .windows(3)
             .find(|window| {
                 window.first().is_some_and(|segment| {
-                    segment.eq_ignore_ascii_case("Items")
+                    segment.eq_ignore_ascii_case(PLAYBACK_INFO_ITEMS_SEGMENT)
                 }) && window.get(2).is_some_and(|segment| {
-                    segment.eq_ignore_ascii_case("PlaybackInfo")
+                    segment.eq_ignore_ascii_case(PLAYBACK_INFO_PATH_SEGMENT)
                 })
             })
             .and_then(|window| window.get(1))
@@ -122,7 +131,11 @@ impl PlaybackInfoRequest {
     fn media_source_id_from_query(query: Option<&str>) -> Option<String> {
         query.and_then(|query_str| {
             form_urlencoded::parse(query_str.as_bytes())
-                .find(|(key, _)| key.eq_ignore_ascii_case("MediaSourceId"))
+                .find(|(key, _)| {
+                    key.eq_ignore_ascii_case(
+                        PLAYBACK_INFO_MEDIA_SOURCE_ID_QUERY_KEY,
+                    )
+                })
                 .map(|(_, value)| value.into_owned())
         })
     }

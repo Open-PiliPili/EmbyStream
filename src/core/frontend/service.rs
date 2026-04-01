@@ -37,6 +37,11 @@ use crate::{
 
 const MAX_STRM_FILE_SIZE: u64 = 1024 * 1024;
 const SLOW_FRONTEND_ROUTING_THRESHOLD_MS: u128 = 200;
+const SIGN_QUERY_KEY: &str = "sign";
+const DEVICE_ID_QUERY_KEY: &str = "device_id";
+const PLAYBACK_SESSION_ID_QUERY_KEY: &str = "playback_session_id";
+const SIGN_ENCRYPT_CACHE_KEY_PREFIX: &str = "forward:sign_encrypt";
+const STRM_CACHE_KEY_PREFIX: &str = "frontend:strm";
 
 #[async_trait]
 pub trait ForwardService: Send + Sync {
@@ -99,7 +104,17 @@ impl AppForwardService {
         }
 
         if use_fallback_key {
-            self.get_forward_config().await.emby_api_key.clone()
+            match self.get_forward_config().await {
+                Ok(config) => config.emby_api_key.clone(),
+                Err(error) => {
+                    error_log!(
+                        FORWARD_LOGGER_DOMAIN,
+                        "forward_config_unavailable_for_fallback_token error={}",
+                        error
+                    );
+                    String::new()
+                }
+            }
         } else {
             String::new()
         }
@@ -215,7 +230,7 @@ impl AppForwardService {
         forward_info: &ForwardInfo,
     ) -> Result<Uri, AppForwardError> {
         let sign_value = self.get_encrypt_sign(forward_info).await?;
-        let config = self.get_forward_config().await;
+        let config = self.get_forward_config().await?;
 
         debug_log!(
             FORWARD_LOGGER_DOMAIN,
@@ -226,10 +241,10 @@ impl AppForwardService {
             .map_err(|_| AppForwardError::InvalidUri)?;
 
         url.query_pairs_mut()
-            .append_pair("sign", &sign_value)
-            .append_pair("device_id", &forward_info.device_id)
+            .append_pair(SIGN_QUERY_KEY, &sign_value)
+            .append_pair(DEVICE_ID_QUERY_KEY, &forward_info.device_id)
             .append_pair(
-                "playback_session_id",
+                PLAYBACK_SESSION_ID_QUERY_KEY,
                 &forward_info.playback_session_id,
             );
 
@@ -277,11 +292,11 @@ impl AppForwardService {
         path = self.rewrite_if_needed(path.as_str()).await;
         debug_log!(FORWARD_LOGGER_DOMAIN, "Sign path: {:?}", path);
 
-        let config = self.get_forward_config().await;
+        let config = self.get_forward_config().await?;
         let uri = self.create_uri(&mut path, config)?;
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-        let expired_at = now + self.get_forward_config().await.expired_seconds;
+        let expired_at = now + self.get_forward_config().await?.expired_seconds;
         let sign = Sign {
             uri: Some(uri.clone()),
             expired_at: Some(expired_at),
@@ -499,7 +514,7 @@ impl AppForwardService {
         let media_source_id = params.media_source_id.to_ascii_lowercase();
 
         Ok(format!(
-            "forward:sign_encrypt:item_id:{item_id}:media_source_id:{media_source_id}"
+            "{SIGN_ENCRYPT_CACHE_KEY_PREFIX}:item_id:{item_id}:media_source_id:{media_source_id}"
         ))
     }
 
@@ -508,36 +523,34 @@ impl AppForwardService {
             return Err(AppForwardError::InvalidStrmFile);
         }
         let path_hash = StringUtil::hash_hex(&path.to_lowercase());
-        Ok(format!("frontend:strm:path_hash:{path_hash}"))
+        Ok(format!("{STRM_CACHE_KEY_PREFIX}:path_hash:{path_hash}"))
     }
 
     fn strm_request_lock(&self, cache_key: &str) -> Arc<TokioMutex<()>> {
         AppState::request_lock(&self.state.strm_request_locks, cache_key)
     }
 
-    async fn get_forward_config(&self) -> Arc<ForwardConfig> {
-        let config_arc =
-            self.config
-                .get_or_init(|| async {
-                    let config = self.state.get_config().await;
+    async fn get_forward_config(
+        &self,
+    ) -> Result<Arc<ForwardConfig>, AppForwardError> {
+        if let Some(config) = self.config.get() {
+            return Ok(config.clone());
+        }
 
-                    let backend = config.backend.as_ref().expect(
-                        "Attempted to access backend config, but backend is not configured",
-                    );
-
-                    let (_, ttl) = self.state.get_cache_settings().await;
-
-                    Arc::new(ForwardConfig {
-                        expired_seconds: ttl,
-                        backend_url: backend.uri().to_string(),
-                        crypto_key: config.general.encipher_key.clone(),
-                        crypto_iv: config.general.encipher_iv.clone(),
-                        emby_api_key: config.emby.token.to_string(),
-                    })
-                })
-                .await;
-
-        config_arc.clone()
+        let config = self.state.get_config().await;
+        let Some(backend) = config.backend.as_ref() else {
+            return Err(AppForwardError::InvalidUri);
+        };
+        let (_, ttl) = self.state.get_cache_settings().await;
+        let forward_config = Arc::new(ForwardConfig {
+            expired_seconds: ttl,
+            backend_url: backend.uri().to_string(),
+            crypto_key: config.general.encipher_key.clone(),
+            crypto_iv: config.general.encipher_iv.clone(),
+            emby_api_key: config.emby.token.to_string(),
+        });
+        let _ = self.config.set(forward_config.clone());
+        Ok(forward_config)
     }
 }
 

@@ -574,12 +574,13 @@ impl AppStreamService {
         uri: &Uri,
         user_agent: &str,
     ) -> String {
+        const OPEN_LIST_CACHE_KEY_PREFIX: &str = "backend:openlist";
         let url_string = Uri::to_path_or_url_string(uri);
         let trimmed_url = url_string.trim_end();
         let path_hash = StringUtil::hash_hex(&trimmed_url.to_lowercase());
         let ua_hash = StringUtil::hash_hex(user_agent.trim());
         format!(
-            "backend:openlist:node:{}:path_hash:{}:ua_hash:{}",
+            "{OPEN_LIST_CACHE_KEY_PREFIX}:node:{}:path_hash:{}:ua_hash:{}",
             node_uuid.to_ascii_lowercase(),
             path_hash,
             ua_hash
@@ -764,6 +765,13 @@ impl StreamService for AppStreamService {
                 device_id,
                 playback_session_id,
             } => {
+                info_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "local_stream_context device_id={} playback_session_id={} path={:?}",
+                    device_id,
+                    playback_session_id,
+                    path
+                );
                 let client_info = ClientInfo::new(
                     Some(device_id),
                     Some(playback_session_id),
@@ -798,6 +806,13 @@ impl StreamService for AppStreamService {
                     let user_agent =
                         Self::resolve_upstream_user_agent(node, &request);
                     let stream_session_id = generate_stream_session_id();
+                    info_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "remote_stream_context stream_session_id={} node={} uri={}",
+                        stream_session_id,
+                        node.name,
+                        uri
+                    );
                     let extra_headers = self
                         .webdav_proxy_auth_headers(
                             node,

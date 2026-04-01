@@ -26,7 +26,6 @@ fn should_use_debug(ctx: &Context) -> bool {
 }
 
 const SLOW_REQUEST_THRESHOLD_MS: u128 = 1000;
-
 #[derive(Clone)]
 pub struct LoggerMiddleware;
 
@@ -42,10 +41,9 @@ impl Middleware for LoggerMiddleware {
         let request_id = ctx.request_id.clone();
         let start_time = ctx.start_time;
 
-        cond_log!(
-            use_debug,
+        info_log!(
             GATEWAY_LOGGER_DOMAIN,
-            "request_start request_id={} method={} path={}",
+            "request_context request_id={} method={} path={}",
             request_id,
             ctx.method,
             ctx.path
