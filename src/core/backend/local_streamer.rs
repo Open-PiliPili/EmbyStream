@@ -25,6 +25,7 @@ use super::{
 };
 use crate::cache::{FileMetadata, RateLimiter};
 use crate::gateway::error::Error as GatewayError;
+use crate::util::string_util::StringUtil;
 use crate::{
     AppState, LOCAL_STREAMER_LOGGER_DOMAIN, debug_log, error_log, info_log,
     warn_log,
@@ -123,7 +124,7 @@ impl LocalStreamer {
         state: Arc<AppState>,
         path: PathBuf,
     ) -> Result<PreparedLocalStreamTarget, StatusCode> {
-        match Self::prepare_direct_target(&path).await {
+        match Self::prepare_direct_target(state.clone(), &path).await {
             Ok(target) => Ok(target),
             Err(primary_err) => {
                 warn_log!(
@@ -144,7 +145,9 @@ impl LocalStreamer {
                     return Err(StatusCode::NOT_FOUND);
                 }
 
-                match Self::prepare_direct_target(&fallback_path).await {
+                match Self::prepare_direct_target(state.clone(), &fallback_path)
+                    .await
+                {
                     Ok(target) => {
                         warn_log!(
                             LOCAL_STREAMER_LOGGER_DOMAIN,
@@ -172,24 +175,76 @@ impl LocalStreamer {
     }
 
     async fn prepare_direct_target(
+        state: Arc<AppState>,
         path: &Path,
     ) -> Result<PreparedLocalStreamTarget, IoError> {
         let probe_path = path.to_path_buf();
-        let (opened_file, metadata) =
-            tokio::task::spawn_blocking(move || -> Result<_, IoError> {
-                let opened_file = StdFile::open(&probe_path)?;
-                let metadata = opened_file.metadata()?;
-                Ok((opened_file, metadata))
-            })
-            .await
-            .map_err(|err| {
-                IoError::other(format!(
-                    "blocking open task failed for {:?}: {}",
-                    path, err
-                ))
-            })??;
+        let opened_file =
+            tokio::task::spawn_blocking(move || StdFile::open(&probe_path))
+                .await
+                .map_err(|err| {
+                    IoError::other(format!(
+                        "blocking open task failed for {:?}: {}",
+                        path, err
+                    ))
+                })??;
+        let file_metadata =
+            Self::load_cached_file_metadata(state, path, &opened_file).await?;
 
+        Ok(
+            PreparedLocalStreamTarget::new(path.to_path_buf(), file_metadata)
+                .with_opened_file(opened_file),
+        )
+    }
+
+    async fn load_cached_file_metadata(
+        state: Arc<AppState>,
+        path: &Path,
+        opened_file: &StdFile,
+    ) -> Result<FileMetadata, IoError> {
+        let cache_key = Self::local_metadata_cache_key(path);
+        let cache = state.get_local_metadata_cache().await;
+
+        if let Some(cached) = cache.get::<FileMetadata>(&cache_key) {
+            debug_log!(
+                LOCAL_STREAMER_LOGGER_DOMAIN,
+                "local_metadata_cache_hit key={} path={:?}",
+                cache_key,
+                path
+            );
+            return Ok(cached);
+        }
+
+        let cache_lock = AppState::request_lock(
+            &state.local_metadata_request_locks,
+            &cache_key,
+        );
+        let guard = cache_lock.lock().await;
+
+        if let Some(cached) = cache.get::<FileMetadata>(&cache_key) {
+            debug_log!(
+                LOCAL_STREAMER_LOGGER_DOMAIN,
+                "local_metadata_inflight_wait_hit key={} path={:?}",
+                cache_key,
+                path
+            );
+            drop(guard);
+            AppState::cleanup_request_lock(
+                &state.local_metadata_request_locks,
+                &cache_key,
+                &cache_lock,
+            );
+            return Ok(cached);
+        }
+
+        let metadata = opened_file.metadata()?;
         if !metadata.is_file() {
+            drop(guard);
+            AppState::cleanup_request_lock(
+                &state.local_metadata_request_locks,
+                &cache_key,
+                &cache_lock,
+            );
             return Err(IoError::new(
                 ErrorKind::NotFound,
                 format!("path is not a file: {:?}", path),
@@ -210,10 +265,28 @@ impl LocalStreamer {
             updated_at: SystemTime::now(),
         };
 
-        Ok(
-            PreparedLocalStreamTarget::new(path.to_path_buf(), file_metadata)
-                .with_opened_file(opened_file),
-        )
+        cache.insert(cache_key.clone(), file_metadata.clone());
+        debug_log!(
+            LOCAL_STREAMER_LOGGER_DOMAIN,
+            "local_metadata_cache_store key={} path={:?}",
+            cache_key,
+            path
+        );
+
+        drop(guard);
+        AppState::cleanup_request_lock(
+            &state.local_metadata_request_locks,
+            &cache_key,
+            &cache_lock,
+        );
+
+        Ok(file_metadata)
+    }
+
+    fn local_metadata_cache_key(path: &Path) -> String {
+        let raw_path = path.to_string_lossy();
+        let path_hash = StringUtil::hash_hex(raw_path.trim_end());
+        format!("backend:local_metadata:path_hash:{path_hash}")
     }
 
     async fn fallback_path(state: Arc<AppState>) -> Option<PathBuf> {
@@ -460,6 +533,7 @@ mod tests {
         AppState,
         config::core::{finish_raw_config, parse_raw_config_str},
         core::backend::{result::Result as AppStreamResult, types::ClientInfo},
+        util::string_util::StringUtil,
     };
 
     async fn test_state_with_fallback(
@@ -527,6 +601,46 @@ listen_port = 60001
         assert_eq!(target.path, primary_path);
         assert!(!target.is_fallback);
         assert!(target.has_opened_file());
+    }
+
+    #[test]
+    fn local_metadata_cache_key_is_structured() {
+        let path = PathBuf::from("/tmp/media/Foo Bar.mp4");
+        let key = LocalStreamer::local_metadata_cache_key(&path);
+        let expected_hash =
+            StringUtil::hash_hex(path.to_string_lossy().trim_end());
+
+        assert_eq!(
+            key,
+            format!("backend:local_metadata:path_hash:{expected_hash}")
+        );
+    }
+
+    #[tokio::test]
+    async fn prepare_stream_target_reuses_cached_metadata() {
+        let dir = TempDir::new().expect("temp dir");
+        let primary_path = write_test_file(&dir, "primary.mp4");
+        let state = std::sync::Arc::new(test_state_with_fallback(None).await);
+
+        let first = LocalStreamer::prepare_stream_target(
+            state.clone(),
+            primary_path.clone(),
+        )
+        .await
+        .expect("first prepare target");
+        let key = LocalStreamer::local_metadata_cache_key(&primary_path);
+        let cache = state.get_local_metadata_cache().await;
+        let cached = cache
+            .get::<crate::cache::FileMetadata>(&key)
+            .expect("metadata cached after first prepare");
+
+        let second = LocalStreamer::prepare_stream_target(state, primary_path)
+            .await
+            .expect("second prepare target");
+
+        assert_eq!(cached.file_size, first.file_metadata.file_size);
+        assert_eq!(cached.updated_at, first.file_metadata.updated_at);
+        assert_eq!(second.file_metadata.updated_at, cached.updated_at);
     }
 
     #[tokio::test]

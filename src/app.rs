@@ -27,6 +27,7 @@ pub struct AppState {
     playback_info_cache: OnceCell<GeneralCache>,
     strm_file_cache: OnceCell<GeneralCache>,
     open_list_cache: OnceCell<GeneralCache>,
+    local_metadata_cache: OnceCell<GeneralCache>,
     api_response_cache: OnceCell<GeneralCache>,
     emby_client: OnceCell<Arc<EmbyClient>>,
     open_list_client: OnceCell<Arc<OpenListClient>>,
@@ -36,6 +37,8 @@ pub struct AppState {
     pub(crate) playback_info_request_locks:
         DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) strm_request_locks: DashMap<String, Arc<TokioMutex<()>>>,
+    pub(crate) local_metadata_request_locks:
+        DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) webdav_auth_cache: DashMap<String, String>,
     pub(crate) webdav_auth_probe_locks: DashMap<String, Arc<TokioMutex<()>>>,
 }
@@ -51,6 +54,7 @@ impl AppState {
             playback_info_cache: OnceCell::new(),
             strm_file_cache: OnceCell::new(),
             open_list_cache: OnceCell::new(),
+            local_metadata_cache: OnceCell::new(),
             api_response_cache: OnceCell::new(),
             emby_client: OnceCell::new(),
             open_list_client: OnceCell::new(),
@@ -59,6 +63,7 @@ impl AppState {
             open_list_request_locks: DashMap::new(),
             playback_info_request_locks: DashMap::new(),
             strm_request_locks: DashMap::new(),
+            local_metadata_request_locks: DashMap::new(),
             webdav_auth_cache: DashMap::new(),
             webdav_auth_probe_locks: DashMap::new(),
         }
@@ -165,6 +170,15 @@ impl AppState {
         let (capacity, ttl) = self.get_cache_settings().await;
         self.open_list_cache
             .get_or_init(|| async move { GeneralCache::new(capacity, ttl) })
+            .await
+    }
+
+    pub async fn get_local_metadata_cache(&self) -> &GeneralCache {
+        let (capacity, _) = self.get_cache_settings().await;
+        self.local_metadata_cache
+            .get_or_init(
+                || async move { GeneralCache::new(capacity, 60 * 60 * 2) },
+            )
             .await
     }
 
