@@ -14,13 +14,33 @@ use crate::{READ_STREAM_LOGGER_DOMAIN, debug_log, error_log};
 
 #[derive(Debug)]
 pub struct ReaderStream {
+    source: ReaderSource,
     path: Arc<PathBuf>,
     content_range: ContentRange,
+}
+
+#[derive(Debug)]
+enum ReaderSource {
+    Path,
+    OpenedFile(StdFile),
 }
 
 impl ReaderStream {
     pub fn new(path: impl Into<PathBuf>, content_range: ContentRange) -> Self {
         Self {
+            source: ReaderSource::Path,
+            path: Arc::new(path.into()),
+            content_range,
+        }
+    }
+
+    pub fn from_opened_file(
+        path: impl Into<PathBuf>,
+        opened_file: StdFile,
+        content_range: ContentRange,
+    ) -> Self {
+        Self {
+            source: ReaderSource::OpenedFile(opened_file),
             path: Arc::new(path.into()),
             content_range,
         }
@@ -28,14 +48,30 @@ impl ReaderStream {
 
     pub fn into_stream(self) -> impl Stream<Item = Result<Bytes, IoError>> {
         let (tx, rx) = mpsc::channel(self.get_optimal_channel_size());
+        let chunk_size = self.get_chunk_size_for_streaming();
+        let source = self.source;
         let path = self.path.clone();
         let content_range = self.content_range;
-        let chunk_size = self.get_chunk_size_for_streaming();
 
         tokio::task::spawn_blocking(move || {
-            if let Err(e) =
-                Self::read_file_to_channel(&path, content_range, chunk_size, tx)
-            {
+            let result = match source {
+                ReaderSource::Path => Self::read_file_to_channel(
+                    &path,
+                    content_range,
+                    chunk_size,
+                    tx,
+                ),
+                ReaderSource::OpenedFile(opened_file) => {
+                    Self::read_opened_file_to_channel(
+                        &path,
+                        opened_file,
+                        content_range,
+                        chunk_size,
+                        tx,
+                    )
+                }
+            };
+            if let Err(e) = result {
                 error_log!(
                     READ_STREAM_LOGGER_DOMAIN,
                     "Error in file streaming task: {}",
@@ -54,6 +90,22 @@ impl ReaderStream {
         tx: mpsc::Sender<Result<Bytes, IoError>>,
     ) -> Result<(), IoError> {
         let file = StdFile::open(path)?;
+        Self::read_opened_file_to_channel(
+            path,
+            file,
+            content_range,
+            main_chunk,
+            tx,
+        )
+    }
+
+    fn read_opened_file_to_channel(
+        path: &PathBuf,
+        file: StdFile,
+        content_range: ContentRange,
+        main_chunk: usize,
+        tx: mpsc::Sender<Result<Bytes, IoError>>,
+    ) -> Result<(), IoError> {
         let mut reader = BufReader::with_capacity(main_chunk, file);
 
         reader.seek(SeekFrom::Start(content_range.start))?;
@@ -146,7 +198,12 @@ pub(crate) fn disk_main_read_chunk(range_start: u64) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::disk_main_read_chunk;
+    use std::fs::{self, File as StdFile};
+
+    use futures_util::StreamExt;
+    use tempfile::NamedTempFile;
+
+    use super::{ContentRange, ReaderStream, disk_main_read_chunk};
 
     #[test]
     fn disk_main_read_chunk_from_zero_is_2mb() {
@@ -158,5 +215,35 @@ mod tests {
     fn disk_main_read_chunk_after_seek_is_4mb() {
         const MB: usize = 1024 * 1024;
         assert_eq!(disk_main_read_chunk(1), 4 * MB);
+    }
+
+    #[tokio::test]
+    async fn reader_stream_reads_range_from_opened_file() {
+        let temp = NamedTempFile::new().expect("temp file");
+        fs::write(temp.path(), b"hello world").expect("write temp file");
+        let opened_file = StdFile::open(temp.path()).expect("open temp file");
+
+        let content_range = ContentRange {
+            start: 6,
+            end: 10,
+            total_size: 11,
+        };
+
+        let chunks = ReaderStream::from_opened_file(
+            temp.path().to_path_buf(),
+            opened_file,
+            content_range,
+        )
+        .into_stream()
+        .collect::<Vec<_>>()
+        .await;
+
+        let bytes = chunks
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect("stream chunks")
+            .concat();
+
+        assert_eq!(bytes, b"world");
     }
 }
