@@ -9,13 +9,20 @@ use super::{
 };
 use crate::{GATEWAY_LOGGER_DOMAIN, debug_log, info_log};
 
+const PLAYBACK_INFO_PATH_SEGMENT: &str = "PlaybackInfo";
 const SIGN_QUERY_KEY: &str = "sign";
 const SLOW_REQUEST_THRESHOLD_MS: u128 = 1000;
 #[derive(Clone)]
 pub struct LoggerMiddleware;
 
+fn is_playback_info_path(path: &str) -> bool {
+    path.split('/')
+        .any(|segment| segment.eq_ignore_ascii_case(PLAYBACK_INFO_PATH_SEGMENT))
+}
+
 fn should_log_request_context_info(ctx: &Context) -> bool {
     find_cacheable_route(&ctx.path, ctx.method.as_str()).is_some()
+        || is_playback_info_path(&ctx.path)
         || ctx
             .get_query_params()
             .as_ref()
@@ -152,6 +159,16 @@ mod tests {
         let ctx = build_context(
             Method::GET,
             "http://localhost/stream?sign=abc&playback_session_id=playback:session:test",
+        );
+
+        assert!(should_log_request_context_info(&ctx));
+    }
+
+    #[test]
+    fn playback_info_request_uses_info_logging() {
+        let ctx = build_context(
+            Method::POST,
+            "http://localhost/emby/Items/257383/PlaybackInfo",
         );
 
         assert!(should_log_request_context_info(&ctx));
