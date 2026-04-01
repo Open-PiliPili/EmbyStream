@@ -16,7 +16,7 @@ pub struct SignParams {
     #[serde(default)]
     pub(crate) device_id: String,
 
-    #[serde(default)]
+    #[serde(default, rename = "session_id")]
     pub(crate) playback_session_id: String,
 }
 

@@ -22,7 +22,7 @@ use crate::{
     util::UriExt,
 };
 
-const PLAYBACK_SESSION_ID_QUERY_KEY: &str = "playback_session_id";
+const PLAYBACK_SESSION_ID_QUERY_KEY: &str = "session_id";
 
 #[derive(Clone)]
 pub struct StreamMiddleware {

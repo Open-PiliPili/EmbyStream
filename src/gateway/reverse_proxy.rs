@@ -24,7 +24,7 @@ use crate::{
     client::{
         PlaybackInfoRequest, PlaybackInfoService, PlaybackInfoServiceError,
     },
-    debug_log, error_log, info_log,
+    debug_log, error_log,
     util::StringUtil,
     warn_log,
 };
@@ -277,7 +277,7 @@ impl ReverseProxyMiddleware {
             return None;
         }
 
-        info_log!(
+        debug_log!(
             API_CACHE_LOGGER_DOMAIN,
             "[CACHE HIT] key={}{}",
             cache_key,
@@ -313,7 +313,7 @@ impl ReverseProxyMiddleware {
         };
 
         self.api_cache.insert(cache_key.clone(), cached);
-        info_log!(
+        debug_log!(
             API_CACHE_LOGGER_DOMAIN,
             "[CACHE STORE] key={}, ttl={}s, body_size={}{}",
             cache_key,
@@ -650,7 +650,7 @@ impl Middleware for ReverseProxyMiddleware {
                 let _guard = lock.lock().await;
 
                 if let Some(cached_response) = self.try_cache_hit(&key) {
-                    info_log!(
+                    debug_log!(
                         API_CACHE_LOGGER_DOMAIN,
                         "[CACHE WAIT HIT] key={}{}",
                         key,

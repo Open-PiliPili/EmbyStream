@@ -2,31 +2,21 @@ use async_trait::async_trait;
 use hyper::{Response, body::Incoming, header};
 
 use super::{
-    cacheable_routes::find_cacheable_route,
     chain::{Middleware, Next},
     context::Context,
     response::BoxBodyType,
 };
 use crate::{GATEWAY_LOGGER_DOMAIN, debug_log, info_log};
 
-const PLAYBACK_INFO_PATH_SEGMENT: &str = "PlaybackInfo";
 const SIGN_QUERY_KEY: &str = "sign";
 const SLOW_REQUEST_THRESHOLD_MS: u128 = 1000;
 #[derive(Clone)]
 pub struct LoggerMiddleware;
 
-fn is_playback_info_path(path: &str) -> bool {
-    path.split('/')
-        .any(|segment| segment.eq_ignore_ascii_case(PLAYBACK_INFO_PATH_SEGMENT))
-}
-
 fn should_log_request_context_info(ctx: &Context) -> bool {
-    find_cacheable_route(&ctx.path, ctx.method.as_str()).is_some()
-        || is_playback_info_path(&ctx.path)
-        || ctx
-            .get_query_params()
-            .as_ref()
-            .is_some_and(|query| query.contains_key(SIGN_QUERY_KEY))
+    ctx.get_query_params()
+        .as_ref()
+        .is_some_and(|query| query.contains_key(SIGN_QUERY_KEY))
 }
 
 #[async_trait]
@@ -140,7 +130,7 @@ mod tests {
             method,
             HeaderMap::new(),
             Instant::now(),
-            "request:id:test".to_string(),
+            "FEA299D5-9BAD-4824-A127-3BC94B6551C4".to_string(),
         )
     }
 
@@ -151,14 +141,14 @@ mod tests {
             "http://localhost/emby/Shows/NextUp?SeriesId=123",
         );
 
-        assert!(should_log_request_context_info(&ctx));
+        assert!(!should_log_request_context_info(&ctx));
     }
 
     #[test]
     fn signed_stream_request_uses_info_logging() {
         let ctx = build_context(
             Method::GET,
-            "http://localhost/stream?sign=abc&playback_session_id=playback:session:test",
+            "http://localhost/stream?sign=abc&session_id=D6FCD9F9-7B1F-47A2-AB78-689C5D7C5C72",
         );
 
         assert!(should_log_request_context_info(&ctx));
@@ -171,7 +161,7 @@ mod tests {
             "http://localhost/emby/Items/257383/PlaybackInfo",
         );
 
-        assert!(should_log_request_context_info(&ctx));
+        assert!(!should_log_request_context_info(&ctx));
     }
 
     #[test]

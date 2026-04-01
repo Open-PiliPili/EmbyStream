@@ -109,7 +109,7 @@ impl LocalStreamer {
 
         info_log!(
             LOCAL_STREAMER_LOGGER_DOMAIN,
-            "local_stream_playback_session device_id={} playback_session_id={} path={:?} range={}",
+            "local_stream_session device_id={} session_id={} path={:?} range={}",
             client_id_value,
             playback_session_id,
             path,

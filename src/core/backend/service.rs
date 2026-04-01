@@ -221,7 +221,7 @@ impl AppStreamService {
             warn_log!(
                 STREAM_LOGGER_DOMAIN,
                 "route_with_sign_slow elapsed_ms={} rewrite_ms={} \
-                 openlist_ms={} local_path_check_ms={} node={} playback_session_id={}",
+                 openlist_ms={} local_path_check_ms={} node={} session_id={}",
                 elapsed_ms,
                 rewrite_ms,
                 openlist_ms,
@@ -237,7 +237,7 @@ impl AppStreamService {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "route_with_sign_complete elapsed_ms={} rewrite_ms={} \
-                 openlist_ms={} local_path_check_ms={} playback_session_id={}",
+                 openlist_ms={} local_path_check_ms={} session_id={}",
                 elapsed_ms,
                 rewrite_ms,
                 openlist_ms,
@@ -767,7 +767,7 @@ impl StreamService for AppStreamService {
             } => {
                 info_log!(
                     STREAM_LOGGER_DOMAIN,
-                    "local_stream_context device_id={} playback_session_id={} path={:?}",
+                    "local_stream_context device_id={} session_id={} path={:?}",
                     device_id,
                     playback_session_id,
                     path

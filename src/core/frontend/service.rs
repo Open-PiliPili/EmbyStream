@@ -39,7 +39,7 @@ const MAX_STRM_FILE_SIZE: u64 = 1024 * 1024;
 const SLOW_FRONTEND_ROUTING_THRESHOLD_MS: u128 = 200;
 const SIGN_QUERY_KEY: &str = "sign";
 const DEVICE_ID_QUERY_KEY: &str = "device_id";
-const PLAYBACK_SESSION_ID_QUERY_KEY: &str = "playback_session_id";
+const PLAYBACK_SESSION_ID_QUERY_KEY: &str = "session_id";
 const SIGN_ENCRYPT_CACHE_KEY_PREFIX: &str = "forward:sign_encrypt";
 const STRM_CACHE_KEY_PREFIX: &str = "frontend:strm";
 
@@ -215,7 +215,7 @@ impl AppForwardService {
 
         info_log!(
             FORWARD_LOGGER_DOMAIN,
-            "playback_session_assigned item_id={} media_source_id={} device_id={} playback_session_id={}",
+            "session_assigned item_id={} media_source_id={} device_id={} session_id={}",
             forward_info.item_id,
             forward_info.media_source_id,
             forward_info.device_id,
@@ -614,7 +614,7 @@ mod tests {
             media_source_id: "Media-XYZ".into(),
             path: "/tmp/demo.mkv".into(),
             device_id: "device-1".into(),
-            playback_session_id: "play-123-1".into(),
+            playback_session_id: "D6FCD9F9-7B1F-47A2-AB78-689C5D7C5C72".into(),
         };
 
         let key = AppForwardService::encrypt_key(&params);
@@ -627,18 +627,22 @@ mod tests {
     }
 
     #[test]
-    fn signed_stream_query_carries_playback_session_id() {
-        let mut url = Url::parse("https://stream.example.com/stream")
-            .unwrap_or_else(|err| panic!("parse url failed: {err}"));
+    fn signed_stream_query_carries_session_id() {
+        let mut url = match Url::parse("https://stream.example.com/stream") {
+            Ok(url) => url,
+            Err(err) => panic!("parse url failed: {err}"),
+        };
         url.query_pairs_mut()
             .append_pair("sign", "encrypted")
             .append_pair("device_id", "device-1")
-            .append_pair("playback_session_id", "play-123-1");
+            .append_pair("session_id", "D6FCD9F9-7B1F-47A2-AB78-689C5D7C5C72");
 
         let query = url.query().unwrap_or_default();
         assert!(query.contains("sign=encrypted"));
         assert!(query.contains("device_id=device-1"));
-        assert!(query.contains("playback_session_id=play-123-1"));
+        assert!(
+            query.contains("session_id=D6FCD9F9-7B1F-47A2-AB78-689C5D7C5C72")
+        );
     }
 }
 

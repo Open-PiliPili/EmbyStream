@@ -1,22 +1,7 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-
-static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
-
-const TIMESTAMP_MODULO: u128 = 1_000_000_000;
-const REQUEST_ID_PREFIX: &str = "request:id";
-const TIMESTAMP_HEX_WIDTH: usize = 12;
-const COUNTER_HEX_WIDTH: usize = 8;
+use uuid::Uuid;
 
 pub fn generate_request_id() -> String {
-    let counter = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let timestamp_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() % TIMESTAMP_MODULO)
-        .unwrap_or(0);
-
-    format!(
-        "{REQUEST_ID_PREFIX}:{timestamp_ms:0TIMESTAMP_HEX_WIDTH$x}:{counter:0COUNTER_HEX_WIDTH$x}"
-    )
+    Uuid::new_v4().hyphenated().to_string().to_uppercase()
 }
 
 #[cfg(test)]
@@ -25,13 +10,13 @@ mod tests {
 
     use super::generate_request_id;
 
-    const MAX_REQUEST_ID_LENGTH: usize = 40;
+    const UUID_LENGTH: usize = 36;
 
     #[test]
     fn request_id_format_is_valid() {
         let request_id = generate_request_id();
-        assert!(request_id.starts_with("request:id:"));
-        assert_eq!(request_id.matches(':').count(), 3);
+        assert_eq!(request_id.len(), UUID_LENGTH);
+        assert_eq!(request_id.matches('-').count(), 4);
     }
 
     #[test]
@@ -44,11 +29,8 @@ mod tests {
     }
 
     #[test]
-    fn request_id_is_short() {
+    fn request_id_is_uuid_sized() {
         let request_id = generate_request_id();
-        assert!(
-            request_id.len() < MAX_REQUEST_ID_LENGTH,
-            "request id too long: {request_id}"
-        );
+        assert_eq!(request_id.len(), UUID_LENGTH);
     }
 }
