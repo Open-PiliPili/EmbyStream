@@ -89,10 +89,6 @@ impl LocalStreamer {
         let prepared_target =
             Self::prepare_stream_target(state.clone(), path).await?;
 
-        // Track file access for metadata prefetching
-        let prefetcher = state.get_metadata_prefetcher().await;
-        prefetcher.track_access(prepared_target.path.clone());
-
         let content_range = match Self::parse_content_range(
             range_value,
             prepared_target.file_metadata.file_size,
