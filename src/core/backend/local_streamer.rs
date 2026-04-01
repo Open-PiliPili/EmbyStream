@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
-    time::SystemTime,
+    time::{Instant, SystemTime},
 };
 
 use bytes::Bytes;
@@ -32,6 +32,13 @@ use crate::{
 };
 
 pub(crate) struct LocalStreamer;
+
+#[derive(Debug, Clone, Copy)]
+struct MetadataLoadStats {
+    cache_hit: bool,
+    lock_wait_ms: u128,
+    metadata_ms: u128,
+}
 
 impl LocalStreamer {
     pub async fn stream(
@@ -178,7 +185,11 @@ impl LocalStreamer {
         state: Arc<AppState>,
         path: &Path,
     ) -> Result<PreparedLocalStreamTarget, IoError> {
+        const SLOW_PREPARE_TARGET_THRESHOLD_MS: u128 = 500;
+
+        let prepare_started = Instant::now();
         let probe_path = path.to_path_buf();
+        let open_started = Instant::now();
         let opened_file =
             tokio::task::spawn_blocking(move || StdFile::open(&probe_path))
                 .await
@@ -188,8 +199,38 @@ impl LocalStreamer {
                         path, err
                     ))
                 })??;
-        let file_metadata =
+        let open_ms = open_started.elapsed().as_millis();
+        let metadata_started = Instant::now();
+        let (file_metadata, metadata_stats) =
             Self::load_cached_file_metadata(state, path, &opened_file).await?;
+        let metadata_total_ms = metadata_started.elapsed().as_millis();
+        let prepare_ms = prepare_started.elapsed().as_millis();
+
+        if prepare_ms >= SLOW_PREPARE_TARGET_THRESHOLD_MS {
+            info_log!(
+                LOCAL_STREAMER_LOGGER_DOMAIN,
+                "local_prepare_target_slow elapsed_ms={} open_ms={} metadata_total_ms={} metadata_io_ms={} lock_wait_ms={} cache_hit={} path={:?}",
+                prepare_ms,
+                open_ms,
+                metadata_total_ms,
+                metadata_stats.metadata_ms,
+                metadata_stats.lock_wait_ms,
+                metadata_stats.cache_hit,
+                path
+            );
+        } else {
+            debug_log!(
+                LOCAL_STREAMER_LOGGER_DOMAIN,
+                "local_prepare_target_complete elapsed_ms={} open_ms={} metadata_total_ms={} metadata_io_ms={} lock_wait_ms={} cache_hit={} path={:?}",
+                prepare_ms,
+                open_ms,
+                metadata_total_ms,
+                metadata_stats.metadata_ms,
+                metadata_stats.lock_wait_ms,
+                metadata_stats.cache_hit,
+                path
+            );
+        }
 
         Ok(
             PreparedLocalStreamTarget::new(path.to_path_buf(), file_metadata)
@@ -201,7 +242,7 @@ impl LocalStreamer {
         state: Arc<AppState>,
         path: &Path,
         opened_file: &StdFile,
-    ) -> Result<FileMetadata, IoError> {
+    ) -> Result<(FileMetadata, MetadataLoadStats), IoError> {
         let cache_key = Self::local_metadata_cache_key(path);
         let cache = state.get_local_metadata_cache().await;
 
@@ -212,14 +253,23 @@ impl LocalStreamer {
                 cache_key,
                 path
             );
-            return Ok(cached);
+            return Ok((
+                cached,
+                MetadataLoadStats {
+                    cache_hit: true,
+                    lock_wait_ms: 0,
+                    metadata_ms: 0,
+                },
+            ));
         }
 
         let cache_lock = AppState::request_lock(
             &state.local_metadata_request_locks,
             &cache_key,
         );
+        let lock_started = Instant::now();
         let guard = cache_lock.lock().await;
+        let lock_wait_ms = lock_started.elapsed().as_millis();
 
         if let Some(cached) = cache.get::<FileMetadata>(&cache_key) {
             debug_log!(
@@ -234,10 +284,19 @@ impl LocalStreamer {
                 &cache_key,
                 &cache_lock,
             );
-            return Ok(cached);
+            return Ok((
+                cached,
+                MetadataLoadStats {
+                    cache_hit: true,
+                    lock_wait_ms,
+                    metadata_ms: 0,
+                },
+            ));
         }
 
+        let metadata_started = Instant::now();
         let metadata = opened_file.metadata()?;
+        let metadata_ms = metadata_started.elapsed().as_millis();
         if !metadata.is_file() {
             drop(guard);
             AppState::cleanup_request_lock(
@@ -280,7 +339,14 @@ impl LocalStreamer {
             &cache_lock,
         );
 
-        Ok(file_metadata)
+        Ok((
+            file_metadata,
+            MetadataLoadStats {
+                cache_hit: false,
+                lock_wait_ms,
+                metadata_ms,
+            },
+        ))
     }
 
     fn local_metadata_cache_key(path: &Path) -> String {

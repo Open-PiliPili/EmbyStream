@@ -3,6 +3,7 @@ use std::{
     io::{BufReader, Error as IoError, Read, Seek, SeekFrom},
     path::PathBuf,
     sync::Arc,
+    time::Instant,
 };
 
 use bytes::Bytes;
@@ -106,9 +107,12 @@ impl ReaderStream {
         main_chunk: usize,
         tx: mpsc::Sender<Result<Bytes, IoError>>,
     ) -> Result<(), IoError> {
+        const SLOW_FIRST_IO_THRESHOLD_MS: u128 = 500;
         let mut reader = BufReader::with_capacity(main_chunk, file);
 
+        let seek_started = Instant::now();
         reader.seek(SeekFrom::Start(content_range.start))?;
+        let seek_ms = seek_started.elapsed().as_millis();
 
         let mut limited_reader = reader.take(content_range.length());
         let mut buffer = vec![0u8; main_chunk];
@@ -129,14 +133,46 @@ impl ReaderStream {
             }
 
             let read_cap = if is_first_read {
-                is_first_read = false;
                 const FIRST_READ_CAP: usize = 256 * 1024;
                 FIRST_READ_CAP.min(main_chunk).max(1)
             } else {
                 main_chunk
             };
 
+            let read_started = if is_first_read {
+                Some(Instant::now())
+            } else {
+                None
+            };
             let bytes_read = limited_reader.read(&mut buffer[..read_cap])?;
+            if let Some(started) = read_started {
+                let first_read_ms = started.elapsed().as_millis();
+                let total_first_io_ms = seek_ms + first_read_ms;
+                if total_first_io_ms >= SLOW_FIRST_IO_THRESHOLD_MS {
+                    debug_log!(
+                        READ_STREAM_LOGGER_DOMAIN,
+                        "local_first_io_slow seek_ms={} first_read_ms={} total_first_io_ms={} bytes_read={} range_start={} path={:?}",
+                        seek_ms,
+                        first_read_ms,
+                        total_first_io_ms,
+                        bytes_read,
+                        content_range.start,
+                        path
+                    );
+                } else {
+                    debug_log!(
+                        READ_STREAM_LOGGER_DOMAIN,
+                        "local_first_io_complete seek_ms={} first_read_ms={} total_first_io_ms={} bytes_read={} range_start={} path={:?}",
+                        seek_ms,
+                        first_read_ms,
+                        total_first_io_ms,
+                        bytes_read,
+                        content_range.start,
+                        path
+                    );
+                }
+                is_first_read = false;
+            }
             if bytes_read == 0 {
                 break;
             }
