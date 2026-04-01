@@ -494,21 +494,60 @@ impl ReverseProxyMiddleware {
         .ok()
     }
 
+    fn should_passthrough_playback_info_error(
+        error: &PlaybackInfoServiceError,
+    ) -> bool {
+        matches!(
+            error,
+            PlaybackInfoServiceError::InvalidItemId
+                | PlaybackInfoServiceError::InvalidMediaSourceId
+                | PlaybackInfoServiceError::UnsupportedMethod
+                | PlaybackInfoServiceError::EmptyApiToken
+        )
+    }
+
+    async fn proxy_playback_info_passthrough(
+        &self,
+        ctx: &Context,
+        body_bytes: Option<Bytes>,
+    ) -> Response<BoxBodyType> {
+        match self.proxy_and_read(ctx, body_bytes).await {
+            Some((status, resp_headers, resp_body)) => {
+                Self::build_proxy_response(status, &resp_headers, resp_body)
+            }
+            None => ResponseBuilder::with_status_code(StatusCode::BAD_GATEWAY),
+        }
+    }
+
     async fn handle_playback_info_request(
         &self,
         ctx: &Context,
         body: Option<Incoming>,
     ) -> Response<BoxBodyType> {
         let body_bytes = Self::read_body(body).await;
+        let content_type = ctx
+            .headers
+            .get(hyper::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok());
         let Some(request) =
             self.playback_info_request(ctx, body_bytes.as_deref())
         else {
-            return ResponseBuilder::with_status_code(StatusCode::BAD_REQUEST);
+            warn_log!(
+                REVERSE_PROXY_LOGGER_DOMAIN,
+                "playback_info_request_parse_failed method={} path={} \
+                 fallback=proxy_to_emby",
+                ctx.method,
+                ctx.path
+            );
+            return self.proxy_playback_info_passthrough(ctx, body_bytes).await;
         };
-        let api_token = PlaybackInfoService::api_token_from_headers_and_query(
-            &ctx.headers,
-            ctx.uri.query(),
-        );
+        let api_token =
+            PlaybackInfoService::api_token_from_headers_query_and_body(
+                &ctx.headers,
+                ctx.uri.query(),
+                body_bytes.as_deref(),
+                content_type,
+            );
 
         let playback_info = match self
             .playback_info_service
@@ -517,17 +556,21 @@ impl ReverseProxyMiddleware {
         {
             Ok(playback_info) => playback_info,
             Err(error) => {
-                let status = match error {
-                    PlaybackInfoServiceError::InvalidItemId
-                    | PlaybackInfoServiceError::InvalidMediaSourceId
-                    | PlaybackInfoServiceError::UnsupportedMethod
-                    | PlaybackInfoServiceError::EmptyApiToken => {
-                        StatusCode::BAD_REQUEST
-                    }
-                    PlaybackInfoServiceError::Upstream(_) => {
-                        StatusCode::BAD_GATEWAY
-                    }
-                };
+                if Self::should_passthrough_playback_info_error(&error) {
+                    warn_log!(
+                        REVERSE_PROXY_LOGGER_DOMAIN,
+                        "playback_info_request_unhandled_locally method={} \
+                         path={} error={} fallback=proxy_to_emby",
+                        ctx.method,
+                        ctx.path,
+                        error
+                    );
+                    return self
+                        .proxy_playback_info_passthrough(ctx, body_bytes)
+                        .await;
+                }
+
+                let status = StatusCode::BAD_GATEWAY;
                 error_log!(
                     REVERSE_PROXY_LOGGER_DOMAIN,
                     "playback_info_request_failed method={} path={} status={} \
@@ -676,6 +719,7 @@ mod tests {
     use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 
     use super::{MAX_CACHEABLE_BODY_BYTES, ReverseProxyMiddleware};
+    use crate::client::PlaybackInfoServiceError;
     use crate::gateway::{
         cacheable_routes::{
             BodyKeyStrategy, CacheKeyStrategy, CompiledCacheableRoute,
@@ -808,5 +852,40 @@ mod tests {
             ReverseProxyMiddleware::build_cache_key(&ctx, &route, Some(&body));
 
         assert!(key.is_none());
+    }
+
+    #[test]
+    fn passthroughs_playback_info_parse_errors() {
+        assert!(
+            ReverseProxyMiddleware::should_passthrough_playback_info_error(
+                &PlaybackInfoServiceError::InvalidItemId
+            )
+        );
+        assert!(
+            ReverseProxyMiddleware::should_passthrough_playback_info_error(
+                &PlaybackInfoServiceError::InvalidMediaSourceId
+            )
+        );
+        assert!(
+            ReverseProxyMiddleware::should_passthrough_playback_info_error(
+                &PlaybackInfoServiceError::UnsupportedMethod
+            )
+        );
+        assert!(
+            ReverseProxyMiddleware::should_passthrough_playback_info_error(
+                &PlaybackInfoServiceError::EmptyApiToken
+            )
+        );
+    }
+
+    #[test]
+    fn does_not_passthrough_playback_info_upstream_errors() {
+        assert!(
+            !ReverseProxyMiddleware::should_passthrough_playback_info_error(
+                &PlaybackInfoServiceError::Upstream(anyhow::anyhow!(
+                    "upstream"
+                ))
+            )
+        );
     }
 }

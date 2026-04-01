@@ -44,15 +44,33 @@ pub struct InfuseAuthorization {
     pub(crate) device_id: String,
 }
 
-static INFUSE_AUTH_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"([^=,]+)="([^"]+)""#).expect("Invalid regex pattern")
-});
+static INFUSE_AUTH_REGEX: Lazy<Option<Regex>> =
+    Lazy::new(|| Regex::new(r#"([^=,]+)=("([^"]*)"|[^,]+)"#).ok());
 
 impl InfuseAuthorization {
     pub fn from_header_str(header_str: &str) -> Option<Self> {
-        let fields: HashMap<String, String> = INFUSE_AUTH_REGEX
+        let regex = match INFUSE_AUTH_REGEX.as_ref() {
+            Some(regex) => regex,
+            None => {
+                error_log!(
+                    FORWARD_LOGGER_DOMAIN,
+                    "Failed to initialize InfuseAuthorization regex"
+                );
+                return None;
+            }
+        };
+
+        let fields: HashMap<String, String> = regex
             .captures_iter(header_str)
-            .map(|cap| (cap[1].trim().to_string(), cap[2].to_string()))
+            .map(|cap| {
+                let value = cap
+                    .get(3)
+                    .or_else(|| cap.get(2))
+                    .map(|value| value.as_str().trim().trim_matches('"'))
+                    .unwrap_or_default()
+                    .to_string();
+                (cap[1].trim().to_string(), value)
+            })
             .collect();
 
         if fields.is_empty() {
@@ -175,6 +193,21 @@ mod tests {
             assert_eq!(
                 auth.media_browser_token,
                 "335558c5e9194253a20ba0edd65dd4a6"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_unquoted_emby_authorization_header() {
+        let header = "Emby UserId=7feff4c9-b450-4089-b68d-4b021664321b,Client=Yamby,Device=Xiaomi-2410DPN6CC,DeviceId=22a62951-a0fe-4e40-9d71-1fc0f3236834,Version=2.0.0.5,Token=abc123";
+        let auth = InfuseAuthorization::from_header_str(header);
+        assert!(auth.is_some(), "Should parse unquoted Emby header");
+        if let Some(auth) = auth {
+            assert_eq!(auth.get("Token"), Some("abc123".to_string()));
+            assert_eq!(auth.get("Client"), Some("Yamby".to_string()));
+            assert_eq!(
+                auth.get("DeviceId"),
+                Some("22a62951-a0fe-4e40-9d71-1fc0f3236834".to_string())
             );
         }
     }

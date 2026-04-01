@@ -97,6 +97,7 @@ impl PlaybackInfoRequest {
         let item_id = Self::item_id_from_path(path)
             .ok_or(PlaybackInfoServiceError::InvalidItemId)?;
         let media_source_id = Self::media_source_id_from_query(query)
+            .or_else(|| Self::media_source_id_from_body(body, content_type))
             .ok_or(PlaybackInfoServiceError::InvalidMediaSourceId)?;
         let method = match *method {
             Method::GET => HttpMethod::Get,
@@ -134,13 +135,63 @@ impl PlaybackInfoRequest {
     fn media_source_id_from_query(query: Option<&str>) -> Option<String> {
         query.and_then(|query_str| {
             form_urlencoded::parse(query_str.as_bytes())
-                .find(|(key, _)| {
-                    key.eq_ignore_ascii_case(
-                        PLAYBACK_INFO_MEDIA_SOURCE_ID_QUERY_KEY,
-                    )
-                })
+                .find(|(key, _)| Self::is_media_source_id_key(key))
                 .map(|(_, value)| value.into_owned())
         })
+    }
+
+    fn media_source_id_from_body(
+        body: Option<&[u8]>,
+        content_type: Option<&str>,
+    ) -> Option<String> {
+        let body = body?;
+        let trimmed = std::str::from_utf8(body).ok()?.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        match Self::normalized_content_type(content_type) {
+            Some(CONTENT_TYPE_JSON) => Self::media_source_id_from_json(trimmed),
+            Some(CONTENT_TYPE_FORM_URLENCODED) => {
+                Self::media_source_id_from_form(trimmed)
+            }
+            Some("text/plain") | None => {
+                Self::media_source_id_from_json(trimmed)
+                    .or_else(|| Self::media_source_id_from_form(trimmed))
+            }
+            _ => None,
+        }
+    }
+
+    fn media_source_id_from_json(body: &str) -> Option<String> {
+        let value = serde_json::from_str::<JsonValue>(body).ok()?;
+        match value {
+            JsonValue::Object(map) => {
+                map.into_iter().find_map(|(key, value)| {
+                    if !Self::is_media_source_id_key(&key) {
+                        return None;
+                    }
+                    value
+                        .as_str()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_string)
+                })
+            }
+            _ => None,
+        }
+    }
+
+    fn media_source_id_from_form(body: &str) -> Option<String> {
+        form_urlencoded::parse(body.as_bytes())
+            .find(|(key, _)| Self::is_media_source_id_key(key))
+            .map(|(_, value)| value.into_owned())
+    }
+
+    fn is_media_source_id_key(key: &str) -> bool {
+        key.eq_ignore_ascii_case(PLAYBACK_INFO_MEDIA_SOURCE_ID_QUERY_KEY)
+            || key.eq_ignore_ascii_case("mediaSourceId")
+            || key.eq_ignore_ascii_case("media_source_id")
     }
 
     fn body_hash(content_type: Option<&str>, body: &[u8]) -> String {
@@ -362,6 +413,16 @@ impl PlaybackInfoService {
             .or_else(|| Self::api_token_from_headers(headers))
     }
 
+    pub fn api_token_from_headers_query_and_body(
+        headers: &hyper::HeaderMap,
+        query: Option<&str>,
+        body: Option<&[u8]>,
+        content_type: Option<&str>,
+    ) -> Option<String> {
+        Self::api_token_from_headers_and_query(headers, query)
+            .or_else(|| Self::api_token_from_body(body, content_type))
+    }
+
     async fn fetch_from_emby(
         &self,
         request: &PlaybackInfoRequest,
@@ -379,10 +440,7 @@ impl PlaybackInfoService {
 
     fn api_token_from_query(query: &str) -> Option<String> {
         form_urlencoded::parse(query.as_bytes())
-            .find(|(key, _)| {
-                key.eq_ignore_ascii_case("api_key")
-                    || key.eq_ignore_ascii_case("X-Emby-Token")
-            })
+            .find(|(key, _)| Self::is_api_token_key(key))
             .map(|(_, value)| value.into_owned())
     }
 
@@ -399,6 +457,69 @@ impl PlaybackInfoService {
                     .and_then(|auth| auth.get("MediaBrowser Token"))
             })
     }
+
+    fn api_token_from_body(
+        body: Option<&[u8]>,
+        content_type: Option<&str>,
+    ) -> Option<String> {
+        let body = body?;
+        let trimmed = std::str::from_utf8(body).ok()?.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        match Self::normalized_body_content_type(content_type) {
+            Some(CONTENT_TYPE_JSON) => Self::api_token_from_json(trimmed),
+            Some(CONTENT_TYPE_FORM_URLENCODED) => {
+                Self::api_token_from_form(trimmed)
+            }
+            Some("text/plain") | None => Self::api_token_from_json(trimmed)
+                .or_else(|| Self::api_token_from_form(trimmed)),
+            _ => None,
+        }
+    }
+
+    fn api_token_from_json(body: &str) -> Option<String> {
+        let value = serde_json::from_str::<JsonValue>(body).ok()?;
+        match value {
+            JsonValue::Object(map) => {
+                map.into_iter().find_map(|(key, value)| {
+                    if !Self::is_api_token_key(&key) {
+                        return None;
+                    }
+                    value
+                        .as_str()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_string)
+                })
+            }
+            _ => None,
+        }
+    }
+
+    fn api_token_from_form(body: &str) -> Option<String> {
+        form_urlencoded::parse(body.as_bytes())
+            .find(|(key, _)| Self::is_api_token_key(key))
+            .map(|(_, value)| value.into_owned())
+    }
+
+    fn is_api_token_key(key: &str) -> bool {
+        key.eq_ignore_ascii_case("api_key")
+            || key.eq_ignore_ascii_case("X-Emby-Token")
+            || key.eq_ignore_ascii_case("Token")
+            || key.eq_ignore_ascii_case("MediaBrowser Token")
+    }
+
+    fn normalized_body_content_type(
+        content_type: Option<&str>,
+    ) -> Option<&str> {
+        content_type
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .and_then(|value| value.split(';').next())
+            .map(str::trim)
+    }
 }
 
 #[cfg(test)]
@@ -407,6 +528,7 @@ mod tests {
 
     use super::{
         CONTENT_TYPE_FORM_URLENCODED, CONTENT_TYPE_JSON, PlaybackInfoRequest,
+        PlaybackInfoService,
     };
     use crate::network::HttpMethod;
 
@@ -440,6 +562,39 @@ mod tests {
         assert!(request.is_ok());
         if let Ok(request) = request {
             assert_eq!(request.item_id, "249971");
+            assert_eq!(request.media_source_id, "abc123");
+        }
+    }
+
+    #[test]
+    fn playback_info_request_parses_media_source_id_from_json_body() {
+        let request = PlaybackInfoRequest::from_http_parts(
+            "/emby/Items/249971/PlaybackInfo",
+            Some("reqformat=json"),
+            &Method::POST,
+            Some(br#"{"MediaSourceId":"abc123"}"#),
+            Some(CONTENT_TYPE_JSON),
+        );
+
+        assert!(request.is_ok());
+        if let Ok(request) = request {
+            assert_eq!(request.item_id, "249971");
+            assert_eq!(request.media_source_id, "abc123");
+        }
+    }
+
+    #[test]
+    fn playback_info_request_parses_media_source_id_from_form_body() {
+        let request = PlaybackInfoRequest::from_http_parts(
+            "/emby/Items/249971/PlaybackInfo",
+            None,
+            &Method::POST,
+            Some(b"MediaSourceId=abc123"),
+            Some(CONTENT_TYPE_FORM_URLENCODED),
+        );
+
+        assert!(request.is_ok());
+        if let Ok(request) = request {
             assert_eq!(request.media_source_id, "abc123");
         }
     }
@@ -541,5 +696,38 @@ mod tests {
         );
 
         assert_eq!(request1.cache_key().ok(), request2.cache_key().ok());
+    }
+
+    #[test]
+    fn playback_info_service_parses_api_token_from_unquoted_emby_header() {
+        let mut headers = hyper::HeaderMap::new();
+        headers.insert(
+            "x-emby-authorization",
+            hyper::header::HeaderValue::from_static(
+                "Emby UserId=user1,Client=Yamby,Device=Phone,DeviceId=device1,Version=1.0,Token=abc123",
+            ),
+        );
+
+        assert_eq!(
+            PlaybackInfoService::api_token_from_headers_and_query(
+                &headers, None
+            ),
+            Some("abc123".to_string())
+        );
+    }
+
+    #[test]
+    fn playback_info_service_parses_api_token_from_json_body() {
+        let headers = hyper::HeaderMap::new();
+
+        assert_eq!(
+            PlaybackInfoService::api_token_from_headers_query_and_body(
+                &headers,
+                None,
+                Some(br#"{"Token":"abc123"}"#),
+                Some(CONTENT_TYPE_JSON),
+            ),
+            Some("abc123".to_string())
+        );
     }
 }
