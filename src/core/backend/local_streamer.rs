@@ -40,6 +40,7 @@ const DUPLICATE_PREPARE_WINDOW: Duration =
     Duration::from_millis(DUPLICATE_PREPARE_WINDOW_MS);
 const LOCAL_METADATA_CACHE_KEY_PREFIX: &str = "backend:local_metadata";
 const LOCAL_PREPARE_CACHE_KEY_PREFIX: &str = "backend:local_prepare";
+const LOCAL_PREPARE_DEVICE_HASH_SEGMENT: &str = "device_hash";
 
 #[derive(Debug, Clone, Copy)]
 struct MetadataLoadStats {
@@ -138,7 +139,7 @@ impl LocalStreamer {
 
         let duplicate_prepare_permit = Self::acquire_duplicate_prepare_permit(
             state.clone(),
-            &playback_session_id,
+            &client_id_value,
             &path,
             range_value,
         )
@@ -205,15 +206,12 @@ impl LocalStreamer {
 
     async fn acquire_duplicate_prepare_permit(
         state: Arc<AppState>,
-        playback_session_id: &str,
+        device_id: &str,
         path: &Path,
         range_value: &str,
     ) -> DuplicatePreparePermit {
-        let request_key = Self::local_prepare_request_key(
-            playback_session_id,
-            path,
-            range_value,
-        );
+        let request_key =
+            Self::local_prepare_request_key(device_id, path, range_value);
         let mutex = Arc::new(Mutex::new(()));
         let leader_guard = match mutex.clone().try_lock_owned() {
             Ok(guard) => guard,
@@ -232,9 +230,9 @@ impl LocalStreamer {
                 entry.insert(new_state);
                 debug_log!(
                     LOCAL_STREAMER_LOGGER_DOMAIN,
-                    "local_duplicate_prepare_leader key={} playback_session_id={}",
+                    "local_duplicate_prepare_leader key={} device_id={}",
                     request_key,
-                    playback_session_id
+                    device_id
                 );
                 return DuplicatePreparePermit {
                     state: Some(state.clone()),
@@ -256,9 +254,9 @@ impl LocalStreamer {
             let wait_ms = wait_started.elapsed().as_millis();
             debug_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
-                "local_duplicate_prepare_wait_hit key={} playback_session_id={} age_ms={} wait_ms={}",
+                "local_duplicate_prepare_wait_hit key={} device_id={} age_ms={} wait_ms={}",
                 request_key,
-                playback_session_id,
+                device_id,
                 age_ms,
                 wait_ms
             );
@@ -272,9 +270,9 @@ impl LocalStreamer {
         } else {
             debug_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
-                "local_duplicate_prepare_bypass_stale key={} playback_session_id={} age_ms={} window_ms={}",
+                "local_duplicate_prepare_bypass_stale key={} device_id={} age_ms={} window_ms={}",
                 request_key,
-                playback_session_id,
+                device_id,
                 age_ms,
                 DUPLICATE_PREPARE_WINDOW_MS
             );
@@ -516,16 +514,15 @@ impl LocalStreamer {
     }
 
     fn local_prepare_request_key(
-        playback_session_id: &str,
+        device_id: &str,
         path: &Path,
         range_value: &str,
     ) -> String {
-        let playback_session_hash =
-            StringUtil::hash_hex(playback_session_id.trim());
+        let device_hash = StringUtil::hash_hex(device_id.trim());
         let path_hash = StringUtil::hash_hex(path.to_string_lossy().trim_end());
         let range_hash = StringUtil::hash_hex(range_value.trim());
         format!(
-            "{LOCAL_PREPARE_CACHE_KEY_PREFIX}:playback_session_hash:{playback_session_hash}:path_hash:{path_hash}:range_hash:{range_hash}"
+            "{LOCAL_PREPARE_CACHE_KEY_PREFIX}:{LOCAL_PREPARE_DEVICE_HASH_SEGMENT}:{device_hash}:path_hash:{path_hash}:range_hash:{range_hash}"
         )
     }
 
@@ -874,11 +871,9 @@ listen_port = 60001
     fn local_prepare_request_key_is_structured() {
         let path = PathBuf::from("/tmp/media/Foo Bar.mp4");
         let key = LocalStreamer::local_prepare_request_key(
-            "play-123-1",
-            &path,
-            "bytes=0-",
+            "device-1", &path, "bytes=0-",
         );
-        let expected_session_hash = StringUtil::hash_hex("play-123-1");
+        let expected_device_hash = StringUtil::hash_hex("device-1");
         let expected_path_hash =
             StringUtil::hash_hex(path.to_string_lossy().trim_end());
         let expected_range_hash = StringUtil::hash_hex("bytes=0-");
@@ -886,7 +881,7 @@ listen_port = 60001
         assert_eq!(
             key,
             format!(
-                "backend:local_prepare:playback_session_hash:{expected_session_hash}:path_hash:{expected_path_hash}:range_hash:{expected_range_hash}"
+                "backend:local_prepare:device_hash:{expected_device_hash}:path_hash:{expected_path_hash}:range_hash:{expected_range_hash}"
             )
         );
     }
@@ -898,7 +893,7 @@ listen_port = 60001
 
         let leader = LocalStreamer::acquire_duplicate_prepare_permit(
             state.clone(),
-            "play-123-1",
+            "device-1",
             &path,
             "bytes=0-",
         )
@@ -909,10 +904,7 @@ listen_port = 60001
             let path = path.clone();
             async move {
                 LocalStreamer::acquire_duplicate_prepare_permit(
-                    state,
-                    "play-123-1",
-                    &path,
-                    "bytes=0-",
+                    state, "device-1", &path, "bytes=0-",
                 )
                 .await
             }
@@ -943,9 +935,7 @@ listen_port = 60001
         let state = Arc::new(test_state_with_fallback(None).await);
         let path = PathBuf::from("/tmp/media/repeat.mp4");
         let key = LocalStreamer::local_prepare_request_key(
-            "play-123-1",
-            &path,
-            "bytes=0-",
+            "device-1", &path, "bytes=0-",
         );
         let mutex = Arc::new(Mutex::new(()));
         let held_guard = mutex.clone().lock_owned().await;
@@ -963,7 +953,7 @@ listen_port = 60001
             Duration::from_millis(50),
             LocalStreamer::acquire_duplicate_prepare_permit(
                 state.clone(),
-                "play-123-1",
+                "device-1",
                 &path,
                 "bytes=0-",
             ),
