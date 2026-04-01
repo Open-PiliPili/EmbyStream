@@ -115,8 +115,7 @@ impl LocalStreamer {
         };
 
         Self::stream_file(
-            &prepared_target.path,
-            &prepared_target.file_metadata,
+            prepared_target,
             content_range,
             StatusCode::PARTIAL_CONTENT,
             limiter,
@@ -243,12 +242,18 @@ impl LocalStreamer {
     }
 
     async fn stream_file(
-        path: &Path,
-        file_metadata: &FileMetadata,
+        prepared_target: PreparedLocalStreamTarget,
         content_range: ContentRange,
         status_code: StatusCode,
         limiter: Arc<RateLimiter>,
     ) -> Result<AppStreamResult, StatusCode> {
+        let PreparedLocalStreamTarget {
+            path,
+            file_metadata,
+            opened_file,
+            ..
+        } = prepared_target;
+
         info_log!(
             LOCAL_STREAMER_LOGGER_DOMAIN,
             "Streaming file status {:?}, range: {:?}",
@@ -265,14 +270,23 @@ impl LocalStreamer {
             >,
         >;
 
+        let reader_stream = match opened_file {
+            Some(opened_file) => ReaderStream::from_opened_file(
+                path.clone(),
+                opened_file,
+                content_range,
+            ),
+            None => ReaderStream::new(path.clone(), content_range),
+        };
+
         let stream: Framed = if limiter.skip_semaphore {
-            let s = ReaderStream::new(path.to_path_buf(), content_range)
+            let s = reader_stream
                 .into_stream()
                 .map(|res| res.map(Frame::data).map_err(GatewayError::from));
             Box::pin(s)
         } else {
             let sem = limiter.semaphore.clone();
-            let s = ReaderStream::new(path.to_path_buf(), content_range)
+            let s = reader_stream
                 .into_stream()
                 .and_then(move |chunk| {
                     let sem = sem.clone();
@@ -449,6 +463,7 @@ mod tests {
     use crate::{
         AppState,
         config::core::{finish_raw_config, parse_raw_config_str},
+        core::backend::{result::Result as AppStreamResult, types::ClientInfo},
     };
 
     async fn test_state_with_fallback(
@@ -551,5 +566,107 @@ listen_port = 60001
             .expect_err("missing primary and fallback should fail");
 
         assert_eq!(err, hyper::StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn stream_returns_partial_content_for_primary_target() {
+        let dir = TempDir::new().expect("temp dir");
+        let primary_path = write_test_file(&dir, "primary.mp4");
+        let fallback_path = write_test_file(&dir, "fallback.mp4");
+        let state = std::sync::Arc::new(
+            test_state_with_fallback(Some(&fallback_path)).await,
+        );
+
+        let result = LocalStreamer::stream(
+            state,
+            primary_path,
+            Some("bytes=0-".to_string()),
+            ClientInfo::new(Some("client-1".to_string()), None, None),
+            "test-node",
+        )
+        .await
+        .expect("stream primary file");
+
+        match result {
+            AppStreamResult::Stream(response) => {
+                assert_eq!(response.status, hyper::StatusCode::PARTIAL_CONTENT);
+            }
+            AppStreamResult::Redirect(_) => panic!("expected stream response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn stream_uses_fallback_when_primary_missing() {
+        let dir = TempDir::new().expect("temp dir");
+        let primary_path = dir.path().join("missing.mp4");
+        let fallback_path = write_test_file(&dir, "fallback.mp4");
+        let state = std::sync::Arc::new(
+            test_state_with_fallback(Some(&fallback_path)).await,
+        );
+
+        let result = LocalStreamer::stream(
+            state,
+            primary_path,
+            Some("bytes=0-".to_string()),
+            ClientInfo::new(Some("client-1".to_string()), None, None),
+            "test-node",
+        )
+        .await
+        .expect("stream fallback file");
+
+        match result {
+            AppStreamResult::Stream(response) => {
+                assert_eq!(response.status, hyper::StatusCode::PARTIAL_CONTENT);
+            }
+            AppStreamResult::Redirect(_) => panic!("expected stream response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn stream_returns_not_found_when_primary_and_fallback_missing() {
+        let dir = TempDir::new().expect("temp dir");
+        let primary_path = dir.path().join("missing.mp4");
+        let fallback_path = dir.path().join("missing-fallback.mp4");
+        let state = std::sync::Arc::new(
+            test_state_with_fallback(Some(&fallback_path)).await,
+        );
+
+        let err = LocalStreamer::stream(
+            state,
+            primary_path,
+            Some("bytes=0-".to_string()),
+            ClientInfo::new(Some("client-1".to_string()), None, None),
+            "test-node",
+        )
+        .await;
+
+        match err {
+            Ok(_) => panic!("missing primary and fallback should fail"),
+            Err(status) => assert_eq!(status, hyper::StatusCode::NOT_FOUND),
+        }
+    }
+
+    #[tokio::test]
+    async fn stream_rejects_malformed_range() {
+        let dir = TempDir::new().expect("temp dir");
+        let primary_path = write_test_file(&dir, "primary.mp4");
+        let fallback_path = write_test_file(&dir, "fallback.mp4");
+        let state = std::sync::Arc::new(
+            test_state_with_fallback(Some(&fallback_path)).await,
+        );
+
+        let err = LocalStreamer::stream(
+            state,
+            primary_path,
+            Some("bytes=bad".to_string()),
+            ClientInfo::new(Some("client-1".to_string()), None, None),
+            "test-node",
+        )
+        .await;
+
+        match err {
+            Ok(_) => panic!("malformed range should fail"),
+            Err(status) => assert_eq!(status, hyper::StatusCode::BAD_REQUEST),
+        }
     }
 }
