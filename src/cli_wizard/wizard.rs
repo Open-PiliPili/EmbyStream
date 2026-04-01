@@ -1074,22 +1074,6 @@ fn prompt_frontend_section() -> Result<Frontend> {
         None,
     );
     let listen_port: u16 = wiz_input_u16(60001)?;
-    const CHECK_DEFAULT: bool = true;
-    let check_default_label = if CHECK_DEFAULT {
-        tr("wizard.yes")
-    } else {
-        tr("wizard.no")
-    };
-    intro(
-        tr("wizard.field.check_file_existence"),
-        tr("wizard.prompt.check_file_existence_true"),
-        Some(check_default_label.as_str()),
-        None,
-    );
-    let check = confirm_yes_no(
-        tr("wizard.confirm.probe_emby_before_stream"),
-        CHECK_DEFAULT,
-    )?;
     let path_rewrites = prompt_path_rewrites(
         tr("wizard.label.path_rewrite"),
         tr("wizard.prompt.path_rewrite_to_emby_cdn"),
@@ -1097,7 +1081,6 @@ fn prompt_frontend_section() -> Result<Frontend> {
     let anti = prompt_anti_reverse(tr("wizard.label.anti_reverse_proxy"))?;
     Ok(Frontend {
         listen_port,
-        check_file_existence: check,
         path_rewrites,
         anti_reverse_proxy: anti,
     })
@@ -1112,12 +1095,6 @@ fn prompt_backend_section() -> Result<Backend> {
         None,
     );
     let listen_port: u16 = wiz_input_u16(60001)?;
-    const CHECK_DEFAULT: bool = true;
-    let check_default_label = if CHECK_DEFAULT {
-        tr("wizard.yes")
-    } else {
-        tr("wizard.no")
-    };
     intro(
         tr("wizard.field.base_url"),
         tr("wizard.prompt.backend_public_base_url"),
@@ -1140,16 +1117,6 @@ fn prompt_backend_section() -> Result<Backend> {
     );
     let path: String = wiz_input_string(None, true)?;
     intro(
-        tr("wizard.field.check_file_existence"),
-        tr("wizard.prompt.check_file_existence_true"),
-        Some(check_default_label.as_str()),
-        None,
-    );
-    let check_file_existence = confirm_yes_no(
-        tr("wizard.confirm.probe_emby_before_stream"),
-        CHECK_DEFAULT,
-    )?;
-    intro(
         tr("wizard.field.problematic_clients"),
         tr("wizard.prompt.problematic_clients_csv"),
         Some(tr("wizard.example.problematic_clients").as_str()),
@@ -1163,7 +1130,6 @@ fn prompt_backend_section() -> Result<Backend> {
         base_url,
         port,
         path,
-        check_file_existence,
         problematic_clients,
     })
 }

@@ -364,7 +364,6 @@ deny_ua = []
 
 [Frontend]
 listen_port = 60001
-check_file_existence = true
 
 [Frontend.AntiReverseProxy]
 enable = false

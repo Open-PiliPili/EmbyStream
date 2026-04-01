@@ -8,7 +8,6 @@ use super::{
 };
 use crate::{
     config::types::{AntiReverseProxyConfig, PathRewriteConfig},
-    defaults,
     util::path_rewriter::PathRewriter,
 };
 
@@ -19,8 +18,6 @@ pub struct Backend {
     pub port: String,
     #[serde(default)]
     pub path: String,
-    #[serde(default = "defaults::default_true")]
-    pub check_file_existence: bool,
     #[serde(default)]
     pub problematic_clients: Vec<String>,
 }

@@ -43,7 +43,6 @@ deny_ua = []
 
 [Frontend]
 listen_port = 60001
-check_file_existence = true
 
 [Frontend.AntiReverseProxy]
 enable = false
@@ -83,7 +82,6 @@ fn emit_wizard_keeps_core_defaults_visible() {
         parse_raw_config_str(MIN_FRONTEND_TOML).expect("fixture TOML");
     let s = emit_wizard_config_toml(&raw).expect("emit wizard");
     assert!(s.contains("memory_mode = \"middle\""));
-    assert!(s.contains("check_file_existence = true"));
     assert!(s.contains("allow_ua = []"));
     assert!(
         !s.contains("[Frontend.AntiReverseProxy]"),
@@ -187,7 +185,6 @@ fn invalid_regex_in_node_rejected() {
         base_url: "http://x".into(),
         port: "80".into(),
         path: "".into(),
-        check_file_existence: true,
         problematic_clients: vec![],
     });
     raw.general.stream_mode = StreamMode::Backend;

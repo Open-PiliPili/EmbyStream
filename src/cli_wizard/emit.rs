@@ -249,7 +249,6 @@ struct WizardEmitAntiRev {
 #[derive(Serialize)]
 struct WizardEmitFrontend {
     listen_port: u16,
-    check_file_existence: bool,
     #[serde(rename = "PathRewrite", skip_serializing_if = "Vec::is_empty")]
     path_rewrites: Vec<EmitPathRewrite>,
     #[serde(
@@ -265,7 +264,6 @@ struct WizardEmitBackend {
     base_url: String,
     port: String,
     path: String,
-    check_file_existence: bool,
     problematic_clients: Vec<String>,
 }
 
@@ -318,7 +316,6 @@ fn map_frontend_wizard(f: &Frontend) -> WizardEmitFrontend {
         .collect();
     WizardEmitFrontend {
         listen_port: f.listen_port,
-        check_file_existence: f.check_file_existence,
         path_rewrites,
         anti_reverse_proxy: map_anti_wizard_opt(&f.anti_reverse_proxy),
     }
@@ -330,7 +327,6 @@ fn map_backend_wizard(b: &Backend) -> WizardEmitBackend {
         base_url: b.base_url.clone(),
         port: b.port.clone(),
         path: b.path.clone(),
-        check_file_existence: b.check_file_existence,
         problematic_clients: b.problematic_clients.clone(),
     }
 }
@@ -440,8 +436,6 @@ pub(crate) mod compact_emit_test {
     #[derive(Serialize)]
     struct EmitFrontend {
         listen_port: u16,
-        #[serde(skip_serializing_if = "is_true")]
-        check_file_existence: bool,
         #[serde(rename = "PathRewrite", skip_serializing_if = "Vec::is_empty")]
         path_rewrites: Vec<EmitPathRewrite>,
         #[serde(rename = "AntiReverseProxy")]
@@ -457,7 +451,6 @@ pub(crate) mod compact_emit_test {
         port: String,
         #[serde(skip_serializing_if = "str::is_empty")]
         path: String,
-        check_file_existence: bool,
         #[serde(skip_serializing_if = "Vec::is_empty")]
         problematic_clients: Vec<String>,
     }
@@ -500,10 +493,6 @@ pub(crate) mod compact_emit_test {
         s == "allow"
     }
 
-    fn is_true(b: &bool) -> bool {
-        *b
-    }
-
     fn map_frontend(f: &Frontend) -> EmitFrontend {
         let path_rewrites: Vec<EmitPathRewrite> = f
             .path_rewrites
@@ -513,7 +502,6 @@ pub(crate) mod compact_emit_test {
             .collect();
         EmitFrontend {
             listen_port: f.listen_port,
-            check_file_existence: f.check_file_existence,
             path_rewrites,
             anti_reverse_proxy: map_anti(&f.anti_reverse_proxy),
         }
@@ -525,7 +513,6 @@ pub(crate) mod compact_emit_test {
             base_url: b.base_url.clone(),
             port: b.port.clone(),
             path: b.path.clone(),
-            check_file_existence: b.check_file_existence,
             problematic_clients: b.problematic_clients.clone(),
         }
     }

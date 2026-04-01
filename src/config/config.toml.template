@@ -28,7 +28,6 @@ video_missing_path = ""
 
 [Frontend]
 listen_port = 60001
-check_file_existence = true
 
 [[Frontend.PathRewrite]]
 enable = false
@@ -54,7 +53,6 @@ listen_port = 60002
 base_url = "https://example.com"
 port = "443"
 path = "stream"
-check_file_existence = true
 problematic_clients = []
 
 [[BackendNode]]

@@ -28,7 +28,6 @@ video_missing_path = "/mnt/anime/fallback/video_missing.mp4"
 
 [Frontend]
 listen_port = 60001
-check_file_existence = true
 
 [[Frontend.PathRewrite]]
 enable = false

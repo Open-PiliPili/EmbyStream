@@ -31,7 +31,6 @@ listen_port = 60001
 base_url = "https://backend.example.com"
 port = "443"
 path = "stream"
-check_file_existence = true
 problematic_clients = ["yamby", "hills", "embytolocalplayer", "Emby/"]
 
 [[BackendNode]]

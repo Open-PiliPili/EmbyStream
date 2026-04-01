@@ -28,7 +28,6 @@ video_missing_path = "/mnt/anime/fallback/video_missing.mp4"
 
 [Frontend]
 listen_port = 60001
-check_file_existence = true
 
 [[Frontend.PathRewrite]]
 enable = false
@@ -44,7 +43,6 @@ listen_port = 3000
 base_url = "http://127.0.0.1"
 port = "3000"
 path = ""
-check_file_existence = true
 problematic_clients = ["yamby", "hills", "embytolocalplayer", "Emby/"]
 
 [[BackendNode]]
