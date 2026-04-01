@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Instant};
 
 use hyper::Method;
+use serde_json::{Map as JsonMap, Value as JsonValue};
 
 use crate::{
     AppState, PLAYBACK_INFO_LOGGER_DOMAIN, api::PlaybackInfo,
@@ -18,6 +19,8 @@ const PLAYBACK_INFO_BODY_HASH_SEGMENT: &str = "body_hash";
 const PLAYBACK_INFO_ITEMS_SEGMENT: &str = "Items";
 const PLAYBACK_INFO_PATH_SEGMENT: &str = "PlaybackInfo";
 const PLAYBACK_INFO_MEDIA_SOURCE_ID_QUERY_KEY: &str = "MediaSourceId";
+const CONTENT_TYPE_JSON: &str = "application/json";
+const CONTENT_TYPE_FORM_URLENCODED: &str = "application/x-www-form-urlencoded";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackInfoRequest {
@@ -67,7 +70,7 @@ impl PlaybackInfoRequest {
             let body_hash = self
                 .body
                 .as_deref()
-                .map(StringUtil::hash_bytes)
+                .map(|body| Self::body_hash(self.content_type.as_deref(), body))
                 .unwrap_or_default();
             let content_type_hash = self
                 .content_type
@@ -138,6 +141,89 @@ impl PlaybackInfoRequest {
                 })
                 .map(|(_, value)| value.into_owned())
         })
+    }
+
+    fn body_hash(content_type: Option<&str>, body: &[u8]) -> String {
+        match Self::normalized_content_type(content_type) {
+            Some(CONTENT_TYPE_JSON) => Self::json_body_hash(body),
+            Some(CONTENT_TYPE_FORM_URLENCODED) => Self::form_body_hash(body),
+            _ => StringUtil::hash_bytes(body),
+        }
+    }
+
+    fn normalized_content_type(content_type: Option<&str>) -> Option<&str> {
+        content_type
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .and_then(|value| value.split(';').next())
+            .map(str::trim)
+    }
+
+    fn json_body_hash(body: &[u8]) -> String {
+        let canonical_json = serde_json::from_slice::<JsonValue>(body)
+            .map(Self::canonicalize_json_value)
+            .and_then(|value| serde_json::to_vec(&value))
+            .unwrap_or_else(|_| body.to_vec());
+        StringUtil::hash_bytes(&canonical_json)
+    }
+
+    fn canonicalize_json_value(value: JsonValue) -> JsonValue {
+        match value {
+            JsonValue::Array(values) => JsonValue::Array(
+                values
+                    .into_iter()
+                    .map(Self::canonicalize_json_value)
+                    .collect(),
+            ),
+            JsonValue::Object(map) => {
+                let mut entries: Vec<(String, JsonValue)> = map
+                    .into_iter()
+                    .map(|(key, value)| {
+                        (key, Self::canonicalize_json_value(value))
+                    })
+                    .collect();
+                entries.sort_by(|(left_key, _), (right_key, _)| {
+                    left_key.cmp(right_key)
+                });
+                let canonical_map: JsonMap<String, JsonValue> =
+                    entries.into_iter().collect();
+                JsonValue::Object(canonical_map)
+            }
+            other => other,
+        }
+    }
+
+    fn form_body_hash(body: &[u8]) -> String {
+        let Ok(form_body) = std::str::from_utf8(body) else {
+            return StringUtil::hash_bytes(body);
+        };
+        let trimmed = form_body.trim();
+        if trimmed.is_empty() {
+            return String::new();
+        }
+
+        let mut form_pairs: Vec<(String, String)> =
+            form_urlencoded::parse(trimmed.as_bytes())
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect();
+        form_pairs.sort_by(
+            |(left_key, left_value), (right_key, right_value)| {
+                left_key
+                    .to_ascii_lowercase()
+                    .cmp(&right_key.to_ascii_lowercase())
+                    .then_with(|| left_value.cmp(right_value))
+            },
+        );
+
+        let normalized_form = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(
+                form_pairs
+                    .iter()
+                    .map(|(key, value)| (key.as_str(), value.as_str())),
+            )
+            .finish();
+
+        StringUtil::hash_hex(&normalized_form)
     }
 }
 
@@ -319,7 +405,9 @@ impl PlaybackInfoService {
 mod tests {
     use hyper::Method;
 
-    use super::PlaybackInfoRequest;
+    use super::{
+        CONTENT_TYPE_FORM_URLENCODED, CONTENT_TYPE_JSON, PlaybackInfoRequest,
+    };
     use crate::network::HttpMethod;
 
     #[test]
@@ -393,5 +481,65 @@ mod tests {
         ));
         assert!(cache_key.contains(":content_type_hash:"));
         assert!(cache_key.contains(":body_hash:"));
+    }
+
+    #[test]
+    fn playback_info_json_body_hash_ignores_object_key_order() {
+        let request1 = PlaybackInfoRequest::new(
+            "249971",
+            "ABC123",
+            HttpMethod::Post,
+            Some(br#"{"B":2,"A":1}"#.to_vec()),
+            Some(CONTENT_TYPE_JSON.to_string()),
+        );
+        let request2 = PlaybackInfoRequest::new(
+            "249971",
+            "ABC123",
+            HttpMethod::Post,
+            Some(br#"{"A":1,"B":2}"#.to_vec()),
+            Some(CONTENT_TYPE_JSON.to_string()),
+        );
+
+        assert_eq!(request1.cache_key().ok(), request2.cache_key().ok());
+    }
+
+    #[test]
+    fn playback_info_json_body_hash_preserves_array_order() {
+        let request1 = PlaybackInfoRequest::new(
+            "249971",
+            "ABC123",
+            HttpMethod::Post,
+            Some(br#"{"A":[1,2]}"#.to_vec()),
+            Some(CONTENT_TYPE_JSON.to_string()),
+        );
+        let request2 = PlaybackInfoRequest::new(
+            "249971",
+            "ABC123",
+            HttpMethod::Post,
+            Some(br#"{"A":[2,1]}"#.to_vec()),
+            Some(CONTENT_TYPE_JSON.to_string()),
+        );
+
+        assert_ne!(request1.cache_key().ok(), request2.cache_key().ok());
+    }
+
+    #[test]
+    fn playback_info_form_body_hash_ignores_pair_order() {
+        let request1 = PlaybackInfoRequest::new(
+            "249971",
+            "ABC123",
+            HttpMethod::Post,
+            Some(b"X=1&Y=2".to_vec()),
+            Some(CONTENT_TYPE_FORM_URLENCODED.to_string()),
+        );
+        let request2 = PlaybackInfoRequest::new(
+            "249971",
+            "ABC123",
+            HttpMethod::Post,
+            Some(b"Y=2&X=1".to_vec()),
+            Some(CONTENT_TYPE_FORM_URLENCODED.to_string()),
+        );
+
+        assert_eq!(request1.cache_key().ok(), request2.cache_key().ok());
     }
 }
