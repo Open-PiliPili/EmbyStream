@@ -2,28 +2,11 @@ use async_trait::async_trait;
 use hyper::{Response, body::Incoming, header};
 
 use super::{
-    cacheable_routes::find_cacheable_route,
     chain::{Middleware, Next},
     context::Context,
-    debug_paths::is_debug_path,
     response::BoxBodyType,
 };
 use crate::{GATEWAY_LOGGER_DOMAIN, debug_log, info_log};
-
-macro_rules! cond_log {
-    ($use_debug:expr, $domain:expr, $($args:tt)*) => {
-        if $use_debug {
-            debug_log!($domain, $($args)*);
-        } else {
-            info_log!($domain, $($args)*);
-        }
-    };
-}
-
-fn should_use_debug(ctx: &Context) -> bool {
-    is_debug_path(&ctx.path)
-        && find_cacheable_route(&ctx.path, ctx.method.as_str()).is_none()
-}
 
 const SLOW_REQUEST_THRESHOLD_MS: u128 = 1000;
 #[derive(Clone)]
@@ -37,27 +20,24 @@ impl Middleware for LoggerMiddleware {
         body: Option<Incoming>,
         next: Next,
     ) -> Response<BoxBodyType> {
-        let use_debug = should_use_debug(&ctx);
         let request_id = ctx.request_id.clone();
         let start_time = ctx.start_time;
 
-        info_log!(
+        debug_log!(
             GATEWAY_LOGGER_DOMAIN,
             "request_context request_id={} method={} path={}",
             request_id,
             ctx.method,
             ctx.path
         );
-        cond_log!(
-            use_debug,
+        debug_log!(
             GATEWAY_LOGGER_DOMAIN,
             "request_details request_id={} host={:?} query={:?}",
             request_id,
             ctx.get_host(),
             ctx.get_query_params()
         );
-        cond_log!(
-            use_debug,
+        debug_log!(
             GATEWAY_LOGGER_DOMAIN,
             "request_headers request_id={} headers={:?}",
             request_id,
@@ -77,8 +57,10 @@ impl Middleware for LoggerMiddleware {
         let elapsed_ms = start_time.elapsed().as_millis();
         let status = response.status();
         let is_slow = elapsed_ms >= SLOW_REQUEST_THRESHOLD_MS;
+        let should_log_info =
+            is_slow || status.is_client_error() || status.is_server_error();
 
-        if is_slow || !use_debug {
+        if should_log_info {
             info_log!(
                 GATEWAY_LOGGER_DOMAIN,
                 "request_complete request_id={} status={} elapsed_ms={} slow={}",
@@ -97,8 +79,7 @@ impl Middleware for LoggerMiddleware {
             );
         }
 
-        cond_log!(
-            use_debug,
+        debug_log!(
             GATEWAY_LOGGER_DOMAIN,
             "response_headers request_id={} headers={:?}",
             request_id,
