@@ -18,7 +18,9 @@ use super::{
     read_stream::ReaderStream,
     response::Response,
     result::Result as AppStreamResult,
-    types::{ClientInfo, ContentRange, RangeParseError},
+    types::{
+        ClientInfo, ContentRange, PreparedLocalStreamTarget, RangeParseError,
+    },
 };
 use crate::cache::{FileMetadata, RateLimiter};
 use crate::gateway::error::Error as GatewayError;
@@ -83,23 +85,23 @@ impl LocalStreamer {
             return Err(StatusCode::FORBIDDEN);
         };
 
-        let (stream_path, file_metadata) =
-            Self::resolve_stream_target(state.clone(), path).await?;
+        let prepared_target =
+            Self::prepare_stream_target(state.clone(), path).await?;
 
         // Track file access for metadata prefetching
         let prefetcher = state.get_metadata_prefetcher().await;
-        prefetcher.track_access(stream_path.clone());
+        prefetcher.track_access(prepared_target.path.clone());
 
         let content_range = match Self::parse_content_range(
             range_value,
-            file_metadata.file_size,
+            prepared_target.file_metadata.file_size,
         ) {
             Ok(range) => {
                 debug_log!(
                     LOCAL_STREAMER_LOGGER_DOMAIN,
                     "Successfully parsed content range: {:?} for path: {:?}",
                     range,
-                    &stream_path
+                    &prepared_target.path
                 );
                 range
             }
@@ -112,8 +114,8 @@ impl LocalStreamer {
         };
 
         Self::stream_file(
-            &stream_path,
-            &file_metadata,
+            &prepared_target.path,
+            &prepared_target.file_metadata,
             content_range,
             StatusCode::PARTIAL_CONTENT,
             limiter,
@@ -121,12 +123,12 @@ impl LocalStreamer {
         .await
     }
 
-    async fn resolve_stream_target(
+    async fn prepare_stream_target(
         state: Arc<AppState>,
         path: PathBuf,
-    ) -> Result<(PathBuf, FileMetadata), StatusCode> {
-        match Self::load_stream_target(state.clone(), &path).await {
-            Ok(metadata) => Ok((path, metadata)),
+    ) -> Result<PreparedLocalStreamTarget, StatusCode> {
+        match Self::prepare_direct_target(state.clone(), &path).await {
+            Ok(target) => Ok(target),
             Err(primary_err) => {
                 warn_log!(
                     LOCAL_STREAMER_LOGGER_DOMAIN,
@@ -146,8 +148,8 @@ impl LocalStreamer {
                     return Err(StatusCode::NOT_FOUND);
                 }
 
-                match Self::load_stream_target(state, &fallback_path).await {
-                    Ok(metadata) => {
+                match Self::prepare_direct_target(state, &fallback_path).await {
+                    Ok(target) => {
                         warn_log!(
                             LOCAL_STREAMER_LOGGER_DOMAIN,
                             "Using fallback video for unavailable path={:?} \
@@ -155,7 +157,7 @@ impl LocalStreamer {
                             path,
                             fallback_path
                         );
-                        Ok((fallback_path, metadata))
+                        Ok(target.with_fallback(true))
                     }
                     Err(fallback_err) => {
                         error_log!(
@@ -173,10 +175,10 @@ impl LocalStreamer {
         }
     }
 
-    async fn load_stream_target(
+    async fn prepare_direct_target(
         state: Arc<AppState>,
         path: &Path,
-    ) -> Result<FileMetadata, IoError> {
+    ) -> Result<PreparedLocalStreamTarget, IoError> {
         let cache = state.get_metadata_cache().await;
         let file_metadata =
             cache.fetch_metadata(path).await.map_err(|err| {
@@ -198,7 +200,10 @@ impl LocalStreamer {
             ))
         })??;
 
-        Ok(file_metadata)
+        Ok(PreparedLocalStreamTarget::new(
+            path.to_path_buf(),
+            file_metadata,
+        ))
     }
 
     async fn fallback_path(state: Arc<AppState>) -> Option<PathBuf> {
@@ -417,4 +422,117 @@ pub fn get_content_type(extension: &str) -> &'static str {
     CONTENT_TYPES
         .get(ext.as_str())
         .unwrap_or(&"application/octet-stream")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
+
+    use tempfile::TempDir;
+
+    use super::LocalStreamer;
+    use crate::{
+        AppState,
+        config::core::{finish_raw_config, parse_raw_config_str},
+    };
+
+    async fn test_state_with_fallback(
+        fallback_path: Option<&std::path::Path>,
+    ) -> AppState {
+        let fallback_value = fallback_path
+            .map(|path| path.to_string_lossy().replace('\\', "\\\\"))
+            .unwrap_or_default();
+        let raw = format!(
+            r#"
+[Log]
+level = "info"
+prefix = ""
+root_path = "./logs"
+
+[General]
+memory_mode = "middle"
+stream_mode = "frontend"
+encipher_key = "1234567890123456"
+encipher_iv = "1234567890123456"
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "tok"
+
+[UserAgent]
+mode = "allow"
+allow_ua = []
+deny_ua = []
+
+[Fallback]
+video_missing_path = "{fallback_value}"
+
+[Frontend]
+listen_port = 60001
+"#
+        );
+        let parsed = parse_raw_config_str(&raw).expect("parse raw config");
+        let config = finish_raw_config(PathBuf::from("test.toml"), parsed)
+            .expect("finish raw config");
+        AppState::new(config).await
+    }
+
+    fn write_test_file(dir: &TempDir, name: &str) -> PathBuf {
+        let path = dir.path().join(name);
+        fs::write(&path, b"hello world").expect("write test file");
+        path
+    }
+
+    #[tokio::test]
+    async fn prepare_stream_target_prefers_primary_path() {
+        let dir = TempDir::new().expect("temp dir");
+        let primary_path = write_test_file(&dir, "primary.mp4");
+        let fallback_path = write_test_file(&dir, "fallback.mp4");
+        let state = std::sync::Arc::new(
+            test_state_with_fallback(Some(&fallback_path)).await,
+        );
+
+        let target =
+            LocalStreamer::prepare_stream_target(state, primary_path.clone())
+                .await
+                .expect("prepare primary target");
+
+        assert_eq!(target.path, primary_path);
+        assert!(!target.is_fallback);
+    }
+
+    #[tokio::test]
+    async fn prepare_stream_target_uses_fallback_when_primary_missing() {
+        let dir = TempDir::new().expect("temp dir");
+        let primary_path = dir.path().join("missing.mp4");
+        let fallback_path = write_test_file(&dir, "fallback.mp4");
+        let state = std::sync::Arc::new(
+            test_state_with_fallback(Some(&fallback_path)).await,
+        );
+
+        let target = LocalStreamer::prepare_stream_target(state, primary_path)
+            .await
+            .expect("prepare fallback target");
+
+        assert_eq!(target.path, fallback_path);
+        assert!(target.is_fallback);
+    }
+
+    #[tokio::test]
+    async fn prepare_stream_target_returns_not_found_when_primary_and_fallback_fail()
+     {
+        let dir = TempDir::new().expect("temp dir");
+        let primary_path = dir.path().join("missing.mp4");
+        let fallback_path = dir.path().join("missing-fallback.mp4");
+        let state = std::sync::Arc::new(
+            test_state_with_fallback(Some(&fallback_path)).await,
+        );
+
+        let err = LocalStreamer::prepare_stream_target(state, primary_path)
+            .await
+            .expect_err("missing primary and fallback should fail");
+
+        assert_eq!(err, hyper::StatusCode::NOT_FOUND);
+    }
 }
