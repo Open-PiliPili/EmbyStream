@@ -72,6 +72,7 @@ pub enum RangeParseError {
 
 pub struct ClientInfo {
     pub(crate) id: Option<String>,
+    pub(crate) playback_session_id: Option<String>,
     pub(crate) user_agent: Option<String>,
     pub(crate) ip: Option<String>,
 }
@@ -79,10 +80,16 @@ pub struct ClientInfo {
 impl ClientInfo {
     pub fn new(
         id: Option<String>,
+        playback_session_id: Option<String>,
         user_agent: Option<String>,
         ip: Option<String>,
     ) -> ClientInfo {
-        Self { id, user_agent, ip }
+        Self {
+            id,
+            playback_session_id,
+            user_agent,
+            ip,
+        }
     }
 }
 

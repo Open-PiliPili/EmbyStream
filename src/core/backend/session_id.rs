@@ -9,18 +9,27 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// At 1 million requests/sec, this takes ~584,942 years to overflow.
 /// Combined with timestamp prefix, IDs remain unique even after wrap.
 static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
+static PLAYBACK_SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 const TIMESTAMP_MODULO: u128 = 1_000_000_000;
 
-/// Generates a unique session ID for stream correlation.
-/// Format: "s{process_start_ms}-{counter}" for easy grep and uniqueness.
-pub fn generate_stream_session_id() -> String {
-    let counter = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
+fn generate_prefixed_session_id(prefix: &str, counter: &AtomicU64) -> String {
+    let counter = counter.fetch_add(1, Ordering::Relaxed);
     let start_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() % TIMESTAMP_MODULO)
         .unwrap_or(0);
-    format!("s{}-{}", start_ms, counter)
+    format!("{prefix}{start_ms}-{counter}")
+}
+
+/// Generates a unique session ID for stream correlation.
+/// Format: "s{process_start_ms}-{counter}" for easy grep and uniqueness.
+pub fn generate_stream_session_id() -> String {
+    generate_prefixed_session_id("s", &SESSION_COUNTER)
+}
+
+pub fn generate_playback_session_id() -> String {
+    generate_prefixed_session_id("play-", &PLAYBACK_SESSION_COUNTER)
 }
 
 #[cfg(test)]
@@ -54,5 +63,21 @@ mod tests {
             "Session ID too long: {}",
             id
         );
+    }
+
+    #[test]
+    fn playback_session_id_format_is_valid() {
+        let id = generate_playback_session_id();
+        assert!(id.starts_with("play-"));
+        assert_eq!(id.matches('-').count(), 2);
+    }
+
+    #[test]
+    fn playback_session_ids_are_unique() {
+        let mut ids = HashSet::new();
+        for _ in 0..1000 {
+            let id = generate_playback_session_id();
+            assert!(ids.insert(id), "Duplicate playback session ID");
+        }
     }
 }

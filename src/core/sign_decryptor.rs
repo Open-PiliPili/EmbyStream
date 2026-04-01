@@ -83,6 +83,7 @@ mod tests {
         let params = SignParams {
             sign: "EncryptedSignValue".into(),
             device_id: String::new(),
+            playback_session_id: String::new(),
         };
 
         let key = SignDecryptor::build_cache_key(&params);
@@ -99,6 +100,7 @@ mod tests {
         let params = SignParams {
             sign: String::new(),
             device_id: String::new(),
+            playback_session_id: String::new(),
         };
 
         let key = SignDecryptor::build_cache_key(&params);

@@ -12,6 +12,7 @@ pub struct ForwardInfo {
     pub media_source_id: String,
     pub path: String,
     pub device_id: String,
+    pub playback_session_id: String,
 }
 
 #[derive(Clone, Debug)]

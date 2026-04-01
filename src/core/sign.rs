@@ -15,6 +15,9 @@ pub struct SignParams {
 
     #[serde(default)]
     pub(crate) device_id: String,
+
+    #[serde(default)]
+    pub(crate) playback_session_id: String,
 }
 
 impl Default for SignParams {
@@ -22,6 +25,7 @@ impl Default for SignParams {
         Self {
             sign: "".into(),
             device_id: "".into(),
+            playback_session_id: "".into(),
         }
     }
 }

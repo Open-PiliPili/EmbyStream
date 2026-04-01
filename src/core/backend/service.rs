@@ -103,6 +103,10 @@ impl AppStreamService {
         let openlist_ms = openlist_start.elapsed().as_millis();
 
         let device_id = params.device_id;
+        let playback_session_id = params.playback_session_id;
+        if playback_session_id.trim().is_empty() {
+            return Err(AppStreamError::EmptyPlaybackSessionId);
+        }
         let node = request
             .node
             .as_ref()
@@ -204,7 +208,11 @@ impl AppStreamService {
                     "Routing to local path {:?}",
                     path
                 );
-                Ok(Source::Local { path, device_id })
+                Ok(Source::Local {
+                    path,
+                    device_id,
+                    playback_session_id: playback_session_id.clone(),
+                })
             }
         };
 
@@ -213,7 +221,7 @@ impl AppStreamService {
             warn_log!(
                 STREAM_LOGGER_DOMAIN,
                 "route_with_sign_slow elapsed_ms={} rewrite_ms={} \
-                 openlist_ms={} local_path_check_ms={} node={}",
+                 openlist_ms={} local_path_check_ms={} node={} playback_session_id={}",
                 elapsed_ms,
                 rewrite_ms,
                 openlist_ms,
@@ -222,17 +230,19 @@ impl AppStreamService {
                     .node
                     .as_ref()
                     .map(|n| n.name.as_str())
-                    .unwrap_or("-")
+                    .unwrap_or("-"),
+                playback_session_id
             );
         } else {
             debug_log!(
                 STREAM_LOGGER_DOMAIN,
                 "route_with_sign_complete elapsed_ms={} rewrite_ms={} \
-                 openlist_ms={} local_path_check_ms={}",
+                 openlist_ms={} local_path_check_ms={} playback_session_id={}",
                 elapsed_ms,
                 rewrite_ms,
                 openlist_ms,
-                0
+                0,
+                playback_session_id
             );
         }
 
@@ -749,9 +759,14 @@ impl StreamService for AppStreamService {
         info_log!(STREAM_LOGGER_DOMAIN, "Routing stream source: {:?}", source);
 
         match source {
-            Source::Local { path, device_id } => {
+            Source::Local {
+                path,
+                device_id,
+                playback_session_id,
+            } => {
                 let client_info = ClientInfo::new(
                     Some(device_id),
+                    Some(playback_session_id),
                     request.client(),
                     request.client_ip(),
                 );

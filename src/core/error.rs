@@ -34,6 +34,8 @@ pub enum Error {
     EmptyEmbyToken,
     #[error("Empty emby device id")]
     EmptyEmbyDeviceId,
+    #[error("Empty playback session id")]
+    EmptyPlaybackSessionId,
     #[error("Emby path request error")]
     EmbyPathRequestError,
     #[error("Emby path parser error")]

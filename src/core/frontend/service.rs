@@ -26,6 +26,7 @@ use crate::{
         PlaybackInfoRequest, PlaybackInfoService, PlaybackInfoServiceError,
     },
     core::{
+        backend::session_id::generate_playback_session_id,
         error::Error as AppForwardError, redirect_info::RedirectInfo,
         request::Request as AppForwardRequest, sign::Sign,
         sign_encryptor::SignEncryptor,
@@ -182,6 +183,7 @@ impl AppForwardService {
                 media_source_id: path_params.media_source_id.clone(),
                 path: path.to_string(),
                 device_id,
+                playback_session_id: generate_playback_session_id(),
             })
             .ok_or_else(|| {
                 error_log!(
@@ -191,6 +193,15 @@ impl AppForwardService {
                 );
                 AppForwardError::EmbyPathParserError
             })?;
+
+        info_log!(
+            FORWARD_LOGGER_DOMAIN,
+            "playback_session_assigned item_id={} media_source_id={} device_id={} playback_session_id={}",
+            forward_info.item_id,
+            forward_info.media_source_id,
+            forward_info.device_id,
+            forward_info.playback_session_id
+        );
 
         Ok(forward_info)
     }
@@ -212,7 +223,11 @@ impl AppForwardService {
 
         url.query_pairs_mut()
             .append_pair("sign", &sign_value)
-            .append_pair("device_id", &forward_info.device_id);
+            .append_pair("device_id", &forward_info.device_id)
+            .append_pair(
+                "playback_session_id",
+                &forward_info.playback_session_id,
+            );
 
         let url_str = url.as_str();
         debug_log!(
@@ -527,6 +542,7 @@ mod tests {
     use std::sync::Arc;
 
     use dashmap::DashMap;
+    use reqwest::Url;
     use tokio::sync::Mutex as TokioMutex;
 
     use super::AppForwardService;
@@ -581,6 +597,7 @@ mod tests {
             media_source_id: "Media-XYZ".into(),
             path: "/tmp/demo.mkv".into(),
             device_id: "device-1".into(),
+            playback_session_id: "play-123-1".into(),
         };
 
         let key = AppForwardService::encrypt_key(&params);
@@ -590,6 +607,21 @@ mod tests {
             key.unwrap_or_default(),
             "forward:sign_encrypt:item_id:item-abc:media_source_id:media-xyz"
         );
+    }
+
+    #[test]
+    fn signed_stream_query_carries_playback_session_id() {
+        let mut url = Url::parse("https://stream.example.com/stream")
+            .unwrap_or_else(|err| panic!("parse url failed: {err}"));
+        url.query_pairs_mut()
+            .append_pair("sign", "encrypted")
+            .append_pair("device_id", "device-1")
+            .append_pair("playback_session_id", "play-123-1");
+
+        let query = url.query().unwrap_or_default();
+        assert!(query.contains("sign=encrypted"));
+        assert!(query.contains("device_id=device-1"));
+        assert!(query.contains("playback_session_id=play-123-1"));
     }
 }
 

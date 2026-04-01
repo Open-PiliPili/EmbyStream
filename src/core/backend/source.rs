@@ -6,6 +6,13 @@ use super::proxy_mode::ProxyMode;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Source {
-    Local { path: PathBuf, device_id: String },
-    Remote { uri: Uri, mode: ProxyMode },
+    Local {
+        path: PathBuf,
+        device_id: String,
+        playback_session_id: String,
+    },
+    Remote {
+        uri: Uri,
+        mode: ProxyMode,
+    },
 }

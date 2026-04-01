@@ -15,7 +15,7 @@ use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::{HeaderMap, StatusCode, header};
 use lazy_static::lazy_static;
-use tokio::sync::OwnedMutexGuard;
+use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::{
     read_stream::ReaderStream,
@@ -88,6 +88,17 @@ impl LocalStreamer {
                 return Err(StatusCode::FORBIDDEN);
             }
         };
+        let playback_session_id = match client_info.playback_session_id {
+            Some(value) if !value.is_empty() => value,
+            _ => {
+                error_log!(
+                    LOCAL_STREAMER_LOGGER_DOMAIN,
+                    "Empty playback session id for '{:?}'",
+                    &path,
+                );
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        };
 
         let limiter = match state.get_rate_limiter_cache(node_uuid).await {
             Some(cache) => cache.fetch_limiter(&client_id_value).await,
@@ -125,7 +136,7 @@ impl LocalStreamer {
 
         let duplicate_prepare_permit = Self::acquire_duplicate_prepare_permit(
             state.clone(),
-            &client_id_value,
+            &playback_session_id,
             &path,
             range_value,
         )
@@ -135,8 +146,9 @@ impl LocalStreamer {
             DuplicatePrepareMode::Waited { wait_ms, age_ms } => {
                 debug_log!(
                     LOCAL_STREAMER_LOGGER_DOMAIN,
-                    "local_duplicate_prepare_wait_complete device_id={} path={:?} age_ms={} wait_ms={}",
+                    "local_duplicate_prepare_wait_complete device_id={} playback_session_id={} path={:?} age_ms={} wait_ms={}",
                     client_id_value,
+                    playback_session_id,
                     path,
                     age_ms,
                     wait_ms
@@ -145,8 +157,9 @@ impl LocalStreamer {
             DuplicatePrepareMode::BypassStale { age_ms } => {
                 debug_log!(
                     LOCAL_STREAMER_LOGGER_DOMAIN,
-                    "local_duplicate_prepare_bypass_complete device_id={} path={:?} age_ms={} window_ms={}",
+                    "local_duplicate_prepare_bypass_complete device_id={} playback_session_id={} path={:?} age_ms={} window_ms={}",
                     client_id_value,
+                    playback_session_id,
                     path,
                     age_ms,
                     DUPLICATE_PREPARE_WINDOW_MS
@@ -190,17 +203,20 @@ impl LocalStreamer {
 
     async fn acquire_duplicate_prepare_permit(
         state: Arc<AppState>,
-        device_id: &str,
+        playback_session_id: &str,
         path: &Path,
         range_value: &str,
     ) -> DuplicatePreparePermit {
-        let request_key =
-            Self::local_prepare_request_key(device_id, path, range_value);
-        let mutex = Arc::new(tokio::sync::Mutex::new(()));
-        let leader_guard = mutex
-            .clone()
-            .try_lock_owned()
-            .expect("new prepare mutex should be unlocked");
+        let request_key = Self::local_prepare_request_key(
+            playback_session_id,
+            path,
+            range_value,
+        );
+        let mutex = Arc::new(Mutex::new(()));
+        let leader_guard = match mutex.clone().try_lock_owned() {
+            Ok(guard) => guard,
+            Err(_) => unreachable!("new prepare mutex should be unlocked"),
+        };
         let new_state = Arc::new(crate::app::LocalPrepareRequestState {
             started_at: Instant::now(),
             mutex,
@@ -214,9 +230,9 @@ impl LocalStreamer {
                 entry.insert(new_state);
                 debug_log!(
                     LOCAL_STREAMER_LOGGER_DOMAIN,
-                    "local_duplicate_prepare_leader key={} device_id={}",
+                    "local_duplicate_prepare_leader key={} playback_session_id={}",
                     request_key,
-                    device_id
+                    playback_session_id
                 );
                 return DuplicatePreparePermit {
                     state: Some(state.clone()),
@@ -238,9 +254,9 @@ impl LocalStreamer {
             let wait_ms = wait_started.elapsed().as_millis();
             debug_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
-                "local_duplicate_prepare_wait_hit key={} device_id={} age_ms={} wait_ms={}",
+                "local_duplicate_prepare_wait_hit key={} playback_session_id={} age_ms={} wait_ms={}",
                 request_key,
-                device_id,
+                playback_session_id,
                 age_ms,
                 wait_ms
             );
@@ -254,9 +270,9 @@ impl LocalStreamer {
         } else {
             debug_log!(
                 LOCAL_STREAMER_LOGGER_DOMAIN,
-                "local_duplicate_prepare_bypass_stale key={} device_id={} age_ms={} window_ms={}",
+                "local_duplicate_prepare_bypass_stale key={} playback_session_id={} age_ms={} window_ms={}",
                 request_key,
-                device_id,
+                playback_session_id,
                 age_ms,
                 DUPLICATE_PREPARE_WINDOW_MS
             );
@@ -498,15 +514,16 @@ impl LocalStreamer {
     }
 
     fn local_prepare_request_key(
-        device_id: &str,
+        playback_session_id: &str,
         path: &Path,
         range_value: &str,
     ) -> String {
-        let device_hash = StringUtil::hash_hex(device_id.trim());
+        let playback_session_hash =
+            StringUtil::hash_hex(playback_session_id.trim());
         let path_hash = StringUtil::hash_hex(path.to_string_lossy().trim_end());
         let range_hash = StringUtil::hash_hex(range_value.trim());
         format!(
-            "backend:local_prepare:device_hash:{device_hash}:path_hash:{path_hash}:range_hash:{range_hash}"
+            "backend:local_prepare:playback_session_hash:{playback_session_hash}:path_hash:{path_hash}:range_hash:{range_hash}"
         )
     }
 
@@ -748,7 +765,10 @@ mod tests {
     use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 
     use tempfile::TempDir;
-    use tokio::time::{Duration, timeout};
+    use tokio::{
+        sync::Mutex,
+        time::{Duration, timeout},
+    };
 
     use super::LocalStreamer;
     use crate::{
@@ -795,21 +815,30 @@ video_missing_path = "{fallback_value}"
 listen_port = 60001
 "#
         );
-        let parsed = parse_raw_config_str(&raw).expect("parse raw config");
-        let config = finish_raw_config(PathBuf::from("test.toml"), parsed)
-            .expect("finish raw config");
+        let parsed = match parse_raw_config_str(&raw) {
+            Ok(parsed) => parsed,
+            Err(err) => panic!("parse raw config failed: {err}"),
+        };
+        let config = match finish_raw_config(PathBuf::from("test.toml"), parsed)
+        {
+            Ok(config) => config,
+            Err(err) => panic!("finish raw config failed: {err}"),
+        };
         AppState::new(config).await
     }
 
     fn write_test_file(dir: &TempDir, name: &str) -> PathBuf {
         let path = dir.path().join(name);
-        fs::write(&path, b"hello world").expect("write test file");
+        assert!(fs::write(&path, b"hello world").is_ok());
         path
     }
 
     #[tokio::test]
     async fn prepare_stream_target_prefers_primary_path() {
-        let dir = TempDir::new().expect("temp dir");
+        let dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(err) => panic!("temp dir failed: {err}"),
+        };
         let primary_path = write_test_file(&dir, "primary.mp4");
         let fallback_path = write_test_file(&dir, "fallback.mp4");
         let state = std::sync::Arc::new(
@@ -819,7 +848,7 @@ listen_port = 60001
         let target =
             LocalStreamer::prepare_stream_target(state, primary_path.clone())
                 .await
-                .expect("prepare primary target");
+                .unwrap_or_else(|err| panic!("prepare primary target: {err}"));
 
         assert_eq!(target.path, primary_path);
         assert!(!target.is_fallback);
@@ -843,9 +872,11 @@ listen_port = 60001
     fn local_prepare_request_key_is_structured() {
         let path = PathBuf::from("/tmp/media/Foo Bar.mp4");
         let key = LocalStreamer::local_prepare_request_key(
-            "device-1", &path, "bytes=0-",
+            "play-123-1",
+            &path,
+            "bytes=0-",
         );
-        let expected_device_hash = StringUtil::hash_hex("device-1");
+        let expected_session_hash = StringUtil::hash_hex("play-123-1");
         let expected_path_hash =
             StringUtil::hash_hex(path.to_string_lossy().trim_end());
         let expected_range_hash = StringUtil::hash_hex("bytes=0-");
@@ -853,7 +884,7 @@ listen_port = 60001
         assert_eq!(
             key,
             format!(
-                "backend:local_prepare:device_hash:{expected_device_hash}:path_hash:{expected_path_hash}:range_hash:{expected_range_hash}"
+                "backend:local_prepare:playback_session_hash:{expected_session_hash}:path_hash:{expected_path_hash}:range_hash:{expected_range_hash}"
             )
         );
     }
@@ -865,7 +896,7 @@ listen_port = 60001
 
         let leader = LocalStreamer::acquire_duplicate_prepare_permit(
             state.clone(),
-            "device-1",
+            "play-123-1",
             &path,
             "bytes=0-",
         )
@@ -876,7 +907,10 @@ listen_port = 60001
             let path = path.clone();
             async move {
                 LocalStreamer::acquire_duplicate_prepare_permit(
-                    state, "device-1", &path, "bytes=0-",
+                    state,
+                    "play-123-1",
+                    &path,
+                    "bytes=0-",
                 )
                 .await
             }
@@ -898,7 +932,7 @@ listen_port = 60001
 
         match follower.mode {
             super::DuplicatePrepareMode::Waited { .. } => {}
-            _ => panic!("expected waited mode for duplicate request"),
+            _ => unreachable!("expected waited mode for duplicate request"),
         }
     }
 
@@ -907,9 +941,11 @@ listen_port = 60001
         let state = Arc::new(test_state_with_fallback(None).await);
         let path = PathBuf::from("/tmp/media/repeat.mp4");
         let key = LocalStreamer::local_prepare_request_key(
-            "device-1", &path, "bytes=0-",
+            "play-123-1",
+            &path,
+            "bytes=0-",
         );
-        let mutex = Arc::new(tokio::sync::Mutex::new(()));
+        let mutex = Arc::new(Mutex::new(()));
         let held_guard = mutex.clone().lock_owned().await;
         state.local_prepare_request_states.insert(
             key,
@@ -925,17 +961,17 @@ listen_port = 60001
             Duration::from_millis(50),
             LocalStreamer::acquire_duplicate_prepare_permit(
                 state.clone(),
-                "device-1",
+                "play-123-1",
                 &path,
                 "bytes=0-",
             ),
         )
         .await
-        .expect("stale inflight request should not block");
+        .unwrap_or_else(|_| panic!("stale inflight request should not block"));
 
         match permit.mode {
             super::DuplicatePrepareMode::BypassStale { .. } => {}
-            _ => panic!("expected stale inflight request to bypass"),
+            _ => unreachable!("expected stale inflight request to bypass"),
         }
 
         drop(held_guard);
@@ -944,7 +980,10 @@ listen_port = 60001
 
     #[tokio::test]
     async fn prepare_stream_target_reuses_cached_metadata() {
-        let dir = TempDir::new().expect("temp dir");
+        let dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(err) => panic!("temp dir failed: {err}"),
+        };
         let primary_path = write_test_file(&dir, "primary.mp4");
         let state = std::sync::Arc::new(test_state_with_fallback(None).await);
 
@@ -953,16 +992,16 @@ listen_port = 60001
             primary_path.clone(),
         )
         .await
-        .expect("first prepare target");
+        .unwrap_or_else(|err| panic!("first prepare target: {err}"));
         let key = LocalStreamer::local_metadata_cache_key(&primary_path);
         let cache = state.get_local_metadata_cache().await;
         let cached = cache
             .get::<crate::cache::FileMetadata>(&key)
-            .expect("metadata cached after first prepare");
+            .unwrap_or_else(|| panic!("metadata cached after first prepare"));
 
         let second = LocalStreamer::prepare_stream_target(state, primary_path)
             .await
-            .expect("second prepare target");
+            .unwrap_or_else(|err| panic!("second prepare target: {err}"));
 
         assert_eq!(cached.file_size, first.file_metadata.file_size);
         assert_eq!(cached.updated_at, first.file_metadata.updated_at);
@@ -971,7 +1010,10 @@ listen_port = 60001
 
     #[tokio::test]
     async fn prepare_stream_target_uses_fallback_when_primary_missing() {
-        let dir = TempDir::new().expect("temp dir");
+        let dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(err) => panic!("temp dir failed: {err}"),
+        };
         let primary_path = dir.path().join("missing.mp4");
         let fallback_path = write_test_file(&dir, "fallback.mp4");
         let state = std::sync::Arc::new(
@@ -980,7 +1022,7 @@ listen_port = 60001
 
         let target = LocalStreamer::prepare_stream_target(state, primary_path)
             .await
-            .expect("prepare fallback target");
+            .unwrap_or_else(|err| panic!("prepare fallback target: {err}"));
 
         assert_eq!(target.path, fallback_path);
         assert!(target.is_fallback);
@@ -990,7 +1032,10 @@ listen_port = 60001
     #[tokio::test]
     async fn prepare_stream_target_returns_not_found_when_primary_and_fallback_fail()
      {
-        let dir = TempDir::new().expect("temp dir");
+        let dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(err) => panic!("temp dir failed: {err}"),
+        };
         let primary_path = dir.path().join("missing.mp4");
         let fallback_path = dir.path().join("missing-fallback.mp4");
         let state = std::sync::Arc::new(
@@ -1006,7 +1051,10 @@ listen_port = 60001
 
     #[tokio::test]
     async fn stream_returns_partial_content_for_primary_target() {
-        let dir = TempDir::new().expect("temp dir");
+        let dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(err) => panic!("temp dir failed: {err}"),
+        };
         let primary_path = write_test_file(&dir, "primary.mp4");
         let fallback_path = write_test_file(&dir, "fallback.mp4");
         let state = std::sync::Arc::new(
@@ -1017,23 +1065,33 @@ listen_port = 60001
             state,
             primary_path,
             Some("bytes=0-".to_string()),
-            ClientInfo::new(Some("client-1".to_string()), None, None),
+            ClientInfo::new(
+                Some("client-1".to_string()),
+                Some("play-123-1".to_string()),
+                None,
+                None,
+            ),
             "test-node",
         )
         .await
-        .expect("stream primary file");
+        .unwrap_or_else(|err| panic!("stream primary file: {err}"));
 
         match result {
             AppStreamResult::Stream(response) => {
                 assert_eq!(response.status, hyper::StatusCode::PARTIAL_CONTENT);
             }
-            AppStreamResult::Redirect(_) => panic!("expected stream response"),
+            AppStreamResult::Redirect(_) => {
+                unreachable!("expected stream response")
+            }
         }
     }
 
     #[tokio::test]
     async fn stream_uses_fallback_when_primary_missing() {
-        let dir = TempDir::new().expect("temp dir");
+        let dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(err) => panic!("temp dir failed: {err}"),
+        };
         let primary_path = dir.path().join("missing.mp4");
         let fallback_path = write_test_file(&dir, "fallback.mp4");
         let state = std::sync::Arc::new(
@@ -1044,23 +1102,33 @@ listen_port = 60001
             state,
             primary_path,
             Some("bytes=0-".to_string()),
-            ClientInfo::new(Some("client-1".to_string()), None, None),
+            ClientInfo::new(
+                Some("client-1".to_string()),
+                Some("play-123-1".to_string()),
+                None,
+                None,
+            ),
             "test-node",
         )
         .await
-        .expect("stream fallback file");
+        .unwrap_or_else(|err| panic!("stream fallback file: {err}"));
 
         match result {
             AppStreamResult::Stream(response) => {
                 assert_eq!(response.status, hyper::StatusCode::PARTIAL_CONTENT);
             }
-            AppStreamResult::Redirect(_) => panic!("expected stream response"),
+            AppStreamResult::Redirect(_) => {
+                unreachable!("expected stream response")
+            }
         }
     }
 
     #[tokio::test]
     async fn stream_returns_not_found_when_primary_and_fallback_missing() {
-        let dir = TempDir::new().expect("temp dir");
+        let dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(err) => panic!("temp dir failed: {err}"),
+        };
         let primary_path = dir.path().join("missing.mp4");
         let fallback_path = dir.path().join("missing-fallback.mp4");
         let state = std::sync::Arc::new(
@@ -1071,20 +1139,28 @@ listen_port = 60001
             state,
             primary_path,
             Some("bytes=0-".to_string()),
-            ClientInfo::new(Some("client-1".to_string()), None, None),
+            ClientInfo::new(
+                Some("client-1".to_string()),
+                Some("play-123-1".to_string()),
+                None,
+                None,
+            ),
             "test-node",
         )
         .await;
 
         match err {
-            Ok(_) => panic!("missing primary and fallback should fail"),
+            Ok(_) => unreachable!("missing primary and fallback should fail"),
             Err(status) => assert_eq!(status, hyper::StatusCode::NOT_FOUND),
         }
     }
 
     #[tokio::test]
     async fn stream_rejects_malformed_range() {
-        let dir = TempDir::new().expect("temp dir");
+        let dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(err) => panic!("temp dir failed: {err}"),
+        };
         let primary_path = write_test_file(&dir, "primary.mp4");
         let fallback_path = write_test_file(&dir, "fallback.mp4");
         let state = std::sync::Arc::new(
@@ -1095,13 +1171,18 @@ listen_port = 60001
             state,
             primary_path,
             Some("bytes=bad".to_string()),
-            ClientInfo::new(Some("client-1".to_string()), None, None),
+            ClientInfo::new(
+                Some("client-1".to_string()),
+                Some("play-123-1".to_string()),
+                None,
+                None,
+            ),
             "test-node",
         )
         .await;
 
         match err {
-            Ok(_) => panic!("malformed range should fail"),
+            Ok(_) => unreachable!("malformed range should fail"),
             Err(status) => assert_eq!(status, hyper::StatusCode::BAD_REQUEST),
         }
     }
