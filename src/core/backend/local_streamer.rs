@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
+    time::SystemTime,
 };
 
 use bytes::Bytes;
@@ -127,7 +128,7 @@ impl LocalStreamer {
         state: Arc<AppState>,
         path: PathBuf,
     ) -> Result<PreparedLocalStreamTarget, StatusCode> {
-        match Self::prepare_direct_target(state.clone(), &path).await {
+        match Self::prepare_direct_target(&path).await {
             Ok(target) => Ok(target),
             Err(primary_err) => {
                 warn_log!(
@@ -148,7 +149,7 @@ impl LocalStreamer {
                     return Err(StatusCode::NOT_FOUND);
                 }
 
-                match Self::prepare_direct_target(state, &fallback_path).await {
+                match Self::prepare_direct_target(&fallback_path).await {
                     Ok(target) => {
                         warn_log!(
                             LOCAL_STREAMER_LOGGER_DOMAIN,
@@ -176,34 +177,48 @@ impl LocalStreamer {
     }
 
     async fn prepare_direct_target(
-        state: Arc<AppState>,
         path: &Path,
     ) -> Result<PreparedLocalStreamTarget, IoError> {
-        let cache = state.get_metadata_cache().await;
-        let file_metadata =
-            cache.fetch_metadata(path).await.map_err(|err| {
-                IoError::new(
-                    ErrorKind::NotFound,
-                    format!("metadata unavailable for {:?}: {}", path, err),
-                )
-            })?;
-
         let probe_path = path.to_path_buf();
-        tokio::task::spawn_blocking(move || -> Result<(), IoError> {
-            StdFile::open(&probe_path).map(|_| ())
-        })
-        .await
-        .map_err(|err| {
-            IoError::other(format!(
-                "blocking open task failed for {:?}: {}",
-                path, err
-            ))
-        })??;
+        let (opened_file, metadata) =
+            tokio::task::spawn_blocking(move || -> Result<_, IoError> {
+                let opened_file = StdFile::open(&probe_path)?;
+                let metadata = opened_file.metadata()?;
+                Ok((opened_file, metadata))
+            })
+            .await
+            .map_err(|err| {
+                IoError::other(format!(
+                    "blocking open task failed for {:?}: {}",
+                    path, err
+                ))
+            })??;
 
-        Ok(PreparedLocalStreamTarget::new(
-            path.to_path_buf(),
-            file_metadata,
-        ))
+        if !metadata.is_file() {
+            return Err(IoError::new(
+                ErrorKind::NotFound,
+                format!("path is not a file: {:?}", path),
+            ));
+        }
+
+        let file_metadata = FileMetadata {
+            file_size: metadata.len(),
+            file_name: path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map_or_else(|| "unknown".to_string(), |s| s.to_string()),
+            format: path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map_or_else(|| "unknown".to_string(), |s| s.to_string()),
+            last_modified: metadata.modified().ok(),
+            updated_at: SystemTime::now(),
+        };
+
+        Ok(
+            PreparedLocalStreamTarget::new(path.to_path_buf(), file_metadata)
+                .with_opened_file(opened_file),
+        )
     }
 
     async fn fallback_path(state: Arc<AppState>) -> Option<PathBuf> {
@@ -500,6 +515,7 @@ listen_port = 60001
 
         assert_eq!(target.path, primary_path);
         assert!(!target.is_fallback);
+        assert!(target.has_opened_file());
     }
 
     #[tokio::test]
@@ -517,6 +533,7 @@ listen_port = 60001
 
         assert_eq!(target.path, fallback_path);
         assert!(target.is_fallback);
+        assert!(target.has_opened_file());
     }
 
     #[tokio::test]
