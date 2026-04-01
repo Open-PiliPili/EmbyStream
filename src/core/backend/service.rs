@@ -77,7 +77,6 @@ impl AppStreamService {
         request: &AppStreamRequest,
     ) -> Result<Source, AppStreamError> {
         let timer = Instant::now();
-        let mut local_path_check_ms = None;
 
         let sign = request
             .sign
@@ -205,50 +204,7 @@ impl AppStreamService {
                     "Routing to local path {:?}",
                     path
                 );
-
-                if !self.should_check_file_existence().await {
-                    debug_log!(
-                        STREAM_LOGGER_DOMAIN,
-                        "Backend check_file_existence disabled, skipping path \
-                         probe for {:?}",
-                        path
-                    );
-                    Ok(Source::Local { path, device_id })
-                } else {
-                    let path_check_start = Instant::now();
-                    let path_exists = path.exists();
-                    local_path_check_ms =
-                        Some(path_check_start.elapsed().as_millis());
-
-                    if path_exists {
-                        Ok(Source::Local { path, device_id })
-                    } else {
-                        debug_log!(
-                            STREAM_LOGGER_DOMAIN,
-                            "File not found at original path: {:?}, checking \
-                             fallback",
-                            path
-                        );
-
-                        let fallback_path = self.get_fallback_path().await;
-                        match fallback_path {
-                            Some(fallback_path) => {
-                                debug_log!(
-                                    STREAM_LOGGER_DOMAIN,
-                                    "Using fallback path: {:?}",
-                                    fallback_path
-                                );
-                                Ok(Source::Local {
-                                    path: fallback_path,
-                                    device_id,
-                                })
-                            }
-                            None => Err(AppStreamError::FileNotFound(
-                                path.display().to_string(),
-                            )),
-                        }
-                    }
-                }
+                Ok(Source::Local { path, device_id })
             }
         };
 
@@ -261,7 +217,7 @@ impl AppStreamService {
                 elapsed_ms,
                 rewrite_ms,
                 openlist_ms,
-                local_path_check_ms.unwrap_or(0),
+                0,
                 request
                     .node
                     .as_ref()
@@ -276,7 +232,7 @@ impl AppStreamService {
                 elapsed_ms,
                 rewrite_ms,
                 openlist_ms,
-                local_path_check_ms.unwrap_or(0)
+                0
             );
         }
 
@@ -299,36 +255,6 @@ impl AppStreamService {
             _ => base,
         };
         full.parse().map_err(|_| AppStreamError::InvalidUri)
-    }
-
-    async fn get_fallback_path(&self) -> Option<PathBuf> {
-        let config = self.state.get_config().await;
-
-        let fallback_path_str = &config.fallback.video_missing_path;
-        if fallback_path_str.is_empty() {
-            return None;
-        }
-
-        let fallback_path = PathBuf::from(fallback_path_str);
-        if !fallback_path.exists() {
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "Fallback path does not exist: {:?}",
-                fallback_path_str
-            );
-            return None;
-        }
-
-        Some(fallback_path)
-    }
-
-    async fn should_check_file_existence(&self) -> bool {
-        let config = self.state.get_config().await;
-        config
-            .backend
-            .as_ref()
-            .map(|backend| backend.check_file_existence)
-            .unwrap_or(true)
     }
 
     async fn rewrite_uri_if_needed(

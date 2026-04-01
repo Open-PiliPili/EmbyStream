@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fs::File as StdFile,
     io::{Error as IoError, ErrorKind},
     path::{Path, PathBuf},
     pin::Pin,
@@ -36,10 +37,6 @@ impl LocalStreamer {
         client_info: ClientInfo,
         node_uuid: &str,
     ) -> Result<AppStreamResult, StatusCode> {
-        if !path.is_file() {
-            return Err(StatusCode::NOT_FOUND);
-        }
-
         let client_id_value = match client_info.id {
             Some(value) if !value.is_empty() => value,
             _ => {
@@ -86,19 +83,12 @@ impl LocalStreamer {
             return Err(StatusCode::FORBIDDEN);
         };
 
-        let cache = state.get_metadata_cache().await;
-        let Ok(file_metadata) = cache.fetch_metadata(&path).await else {
-            error_log!(
-                LOCAL_STREAMER_LOGGER_DOMAIN,
-                "Failed to obtain cache metadata for the route: {:?}",
-                &path
-            );
-            return Err(StatusCode::NOT_FOUND);
-        };
+        let (stream_path, file_metadata) =
+            Self::resolve_stream_target(state.clone(), path).await?;
 
         // Track file access for metadata prefetching
         let prefetcher = state.get_metadata_prefetcher().await;
-        prefetcher.track_access(path.clone());
+        prefetcher.track_access(stream_path.clone());
 
         let content_range = match Self::parse_content_range(
             range_value,
@@ -109,7 +99,7 @@ impl LocalStreamer {
                     LOCAL_STREAMER_LOGGER_DOMAIN,
                     "Successfully parsed content range: {:?} for path: {:?}",
                     range,
-                    &path
+                    &stream_path
                 );
                 range
             }
@@ -122,13 +112,114 @@ impl LocalStreamer {
         };
 
         Self::stream_file(
-            &path,
+            &stream_path,
             &file_metadata,
             content_range,
             StatusCode::PARTIAL_CONTENT,
             limiter,
         )
         .await
+    }
+
+    async fn resolve_stream_target(
+        state: Arc<AppState>,
+        path: PathBuf,
+    ) -> Result<(PathBuf, FileMetadata), StatusCode> {
+        match Self::load_stream_target(state.clone(), &path).await {
+            Ok(metadata) => Ok((path, metadata)),
+            Err(primary_err) => {
+                warn_log!(
+                    LOCAL_STREAMER_LOGGER_DOMAIN,
+                    "primary_stream_target_unavailable path={:?} error={} \
+                     hint=trying_fallback_video",
+                    path,
+                    primary_err
+                );
+
+                let Some(fallback_path) =
+                    Self::fallback_path(state.clone()).await
+                else {
+                    return Err(StatusCode::NOT_FOUND);
+                };
+
+                if fallback_path == path {
+                    return Err(StatusCode::NOT_FOUND);
+                }
+
+                match Self::load_stream_target(state, &fallback_path).await {
+                    Ok(metadata) => {
+                        warn_log!(
+                            LOCAL_STREAMER_LOGGER_DOMAIN,
+                            "Using fallback video for unavailable path={:?} \
+                             fallback={:?}",
+                            path,
+                            fallback_path
+                        );
+                        Ok((fallback_path, metadata))
+                    }
+                    Err(fallback_err) => {
+                        error_log!(
+                            LOCAL_STREAMER_LOGGER_DOMAIN,
+                            "fallback_stream_target_unavailable path={:?} \
+                             fallback={:?} error={}",
+                            path,
+                            fallback_path,
+                            fallback_err
+                        );
+                        Err(StatusCode::NOT_FOUND)
+                    }
+                }
+            }
+        }
+    }
+
+    async fn load_stream_target(
+        state: Arc<AppState>,
+        path: &Path,
+    ) -> Result<FileMetadata, IoError> {
+        let cache = state.get_metadata_cache().await;
+        let file_metadata =
+            cache.fetch_metadata(path).await.map_err(|err| {
+                IoError::new(
+                    ErrorKind::NotFound,
+                    format!("metadata unavailable for {:?}: {}", path, err),
+                )
+            })?;
+
+        let probe_path = path.to_path_buf();
+        tokio::task::spawn_blocking(move || -> Result<(), IoError> {
+            StdFile::open(&probe_path).map(|_| ())
+        })
+        .await
+        .map_err(|err| {
+            IoError::other(format!(
+                "blocking open task failed for {:?}: {}",
+                path, err
+            ))
+        })??;
+
+        Ok(file_metadata)
+    }
+
+    async fn fallback_path(state: Arc<AppState>) -> Option<PathBuf> {
+        let config = state.get_config().await;
+        let fallback_path_str = &config.fallback.video_missing_path;
+        if fallback_path_str.is_empty() {
+            return None;
+        }
+
+        let fallback_path = PathBuf::from(fallback_path_str);
+        if fallback_path.is_absolute() {
+            Some(fallback_path)
+        } else {
+            Some(
+                config
+                    .path
+                    .parent()
+                    .unwrap_or_else(|| Path::new(""))
+                    .join(fallback_path),
+            )
+        }
     }
 
     async fn stream_file(

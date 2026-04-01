@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
@@ -295,42 +295,13 @@ impl AppForwardService {
     fn create_uri(
         &self,
         path: &mut String,
-        config: Arc<ForwardConfig>,
+        _config: Arc<ForwardConfig>,
     ) -> Result<Uri, AppForwardError> {
-        let uri = {
-            let initial_result = if config.check_file_existence {
-                Uri::from_path_or_url(&path).or_else(|e| match e {
-                    UriExtError::FileNotFound(original_path) => config
-                        .fallback_video_path
-                        .as_ref()
-                        .map(|fallback_path| {
-                            info_log!(
-                                FORWARD_LOGGER_DOMAIN,
-                                "File not found: '{}'. Using fallback: '{}'",
-                                original_path,
-                                fallback_path
-                            );
-                            Uri::from_path_or_url(fallback_path)
-                        })
-                        .unwrap_or(Err(UriExtError::FileNotFound(
-                            original_path,
-                        ))),
-                    e => Err(e),
-                })
-            } else {
-                Uri::force_from_path_or_url(&path)
-            };
-
-            initial_result.map_err(|e| match e {
-                UriExtError::FileNotFound(p) => {
-                    AppForwardError::FileNotFound(p)
-                }
-                UriExtError::InvalidUri => AppForwardError::InvalidUri,
-                UriExtError::IoError(io_err) => {
-                    AppForwardError::IoError(io_err)
-                }
-            })?
-        };
+        let uri = Uri::force_from_path_or_url(path).map_err(|e| match e {
+            UriExtError::FileNotFound(p) => AppForwardError::FileNotFound(p),
+            UriExtError::InvalidUri => AppForwardError::InvalidUri,
+            UriExtError::IoError(io_err) => AppForwardError::IoError(io_err),
+        })?;
         Ok(uri)
     }
 
@@ -531,25 +502,9 @@ impl AppForwardService {
                 .get_or_init(|| async {
                     let config = self.state.get_config().await;
 
-                    let frontend = config.frontend.as_ref().expect(
-                        "Attempted to access frontend config, but frontend is not configured",
-                    );
                     let backend = config.backend.as_ref().expect(
                         "Attempted to access backend config, but backend is not configured",
                     );
-
-                    let fallback_video_path = Some(&config.fallback.video_missing_path)
-                        .filter(|p| !p.is_empty())
-                        .map(PathBuf::from)
-                        .map(|path| {
-                            if path.is_absolute() {
-                                path
-                            } else {
-                                config.path.parent().unwrap_or_else(|| Path::new("")).join(path)
-                            }
-                        })
-                        .filter(|path| path.exists())
-                        .map(|path| path.to_string_lossy().into_owned());
 
                     let (_, ttl) = self.state.get_cache_settings().await;
 
@@ -559,8 +514,6 @@ impl AppForwardService {
                         crypto_key: config.general.encipher_key.clone(),
                         crypto_iv: config.general.encipher_iv.clone(),
                         emby_api_key: config.emby.token.to_string(),
-                        check_file_existence: frontend.check_file_existence,
-                        fallback_video_path,
                     })
                 })
                 .await;
