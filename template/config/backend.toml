@@ -106,7 +106,9 @@ user_agent = "Mozilla/5.0 (MockClient)"
 # client_burst_speed_kbs = 0
 
 # WebDav: decrypted logical path is mapped to upstream HTTP(S). redirect does not send
-# credentials; proxy may use HTTP Basic (cached). url_mode: path_join | query_path |
+# credentials; proxy may use HTTP Basic (cached). accel_redirect returns
+# X-Accel-Redirect: /_origin/webdav/<node_uuid>/<file_path> to Nginx. `file_path`
+# is the file path with normal URL-escaped segments. url_mode: path_join | query_path |
 # url_template (default path_join when empty).
 [[BackendNode]]
 name = "RcloneWebDav"
@@ -116,7 +118,7 @@ base_url = "http://127.0.0.1"
 port = "60005"
 path = ""
 priority = 0
-proxy_mode = "proxy"
+proxy_mode = "accel_redirect"
 client_speed_limit_kbs = 0
 client_burst_speed_kbs = 0
 
@@ -130,6 +132,7 @@ enable = false
 host = ""
 
 [BackendNode.WebDav]
+node_uuid = "webdav_node_a"
 url_mode = "path_join"
 query_param = "path"
 url_template = ""

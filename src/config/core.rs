@@ -19,6 +19,9 @@ use super::{
     http2::Http2,
     types::{FallbackConfig, PathRewriteConfig, RawConfig},
 };
+use crate::core::backend::webdav::{
+    BACKEND_TYPE as WEBDAV_BACKEND_TYPE, PROXY_MODE_ACCEL_REDIRECT,
+};
 use crate::{
     CONFIG_LOGGER_DOMAIN,
     cli::RunArgs,
@@ -256,6 +259,64 @@ pub fn validate_raw_regexes(raw: &RawConfig) -> Result<(), ConfigError> {
     Ok(())
 }
 
+fn validate_webdav_accel_redirect_nodes(
+    backend_nodes: &[BackendNode],
+) -> Result<(), ConfigError> {
+    let node_uuid_pattern =
+        Regex::new(r"^[A-Za-z0-9_-]+$").map_err(ConfigError::InvalidRegex)?;
+    let mut seen = std::collections::HashSet::new();
+
+    for node in backend_nodes {
+        let is_webdav =
+            node.backend_type.eq_ignore_ascii_case(WEBDAV_BACKEND_TYPE);
+        let is_accel_redirect = node
+            .proxy_mode
+            .eq_ignore_ascii_case(PROXY_MODE_ACCEL_REDIRECT);
+
+        if is_accel_redirect && !is_webdav {
+            return Err(ConfigError::InvalidValue(format!(
+                "proxy_mode '{}' is only supported for WebDav nodes (node '{}')",
+                PROXY_MODE_ACCEL_REDIRECT, node.name
+            )));
+        }
+
+        if !is_accel_redirect {
+            continue;
+        }
+
+        let Some(webdav_cfg) = node.webdav.as_ref() else {
+            return Err(ConfigError::MissingConfig(format!(
+                "BackendNode.WebDav for node '{}'",
+                node.name
+            )));
+        };
+
+        let node_uuid = webdav_cfg.node_uuid.trim();
+        if node_uuid.is_empty() {
+            return Err(ConfigError::MissingConfig(format!(
+                "BackendNode.WebDav.node_uuid for accel_redirect node '{}'",
+                node.name
+            )));
+        }
+
+        if !node_uuid_pattern.is_match(node_uuid) {
+            return Err(ConfigError::InvalidValue(format!(
+                "BackendNode.WebDav.node_uuid '{}' on node '{}' must match [A-Za-z0-9_-]+",
+                node_uuid, node.name
+            )));
+        }
+
+        if !seen.insert(node_uuid.to_string()) {
+            return Err(ConfigError::InvalidValue(format!(
+                "Duplicate BackendNode.WebDav.node_uuid '{}' for accel_redirect nodes",
+                node_uuid
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 /// Build runtime [`Config`] from parsed TOML (UUIDs, compiled regex, path rewriters).
 pub fn finish_raw_config(
     path: PathBuf,
@@ -265,6 +326,7 @@ pub fn finish_raw_config(
     validate_raw_regexes(&raw_config)?;
 
     let mut backend_nodes = raw_config.backend_nodes.unwrap_or_default();
+    validate_webdav_accel_redirect_nodes(&backend_nodes)?;
     for node in &mut backend_nodes {
         node.uuid = Uuid::new_v4().to_string();
 

@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hyper::{Method, Response, StatusCode, Uri, body::Incoming, header};
+use hyper::{
+    HeaderMap, Method, Response, StatusCode, Uri, body::Incoming, header,
+};
 
 use super::{result::Result as AppStreamResult, service::StreamService};
+use crate::core::backend::webdav::ACCEL_REDIRECT_HEADER;
 use crate::{
     AppState, GATEWAY_LOGGER_DOMAIN, REMOTE_STREAMER_LOGGER_DOMAIN, debug_log,
     error_log, info_log, warn_log,
@@ -264,6 +267,27 @@ impl Middleware for StreamMiddleware {
                             StatusCode::MOVED_PERMANENTLY,
                             Some(redirect_info.final_headers),
                         )
+                    }
+                    AppStreamResult::AccelRedirect(accel_redirect_info) => {
+                        let mut headers = HeaderMap::new();
+                        if let Ok(value) =
+                            accel_redirect_info.internal_path.parse()
+                        {
+                            headers.insert(ACCEL_REDIRECT_HEADER, value);
+                            ResponseBuilder::with_headers(
+                                StatusCode::OK,
+                                headers,
+                            )
+                        } else {
+                            error_log!(
+                                REMOTE_STREAMER_LOGGER_DOMAIN,
+                                "Invalid accel redirect path {:?}",
+                                accel_redirect_info.internal_path
+                            );
+                            ResponseBuilder::with_status_code(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                            )
+                        }
                     }
                 },
                 Err(status_code) => {

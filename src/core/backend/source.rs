@@ -15,4 +15,8 @@ pub(crate) enum Source {
         uri: Uri,
         mode: ProxyMode,
     },
+    WebDavAccelRedirect {
+        node_uuid: String,
+        file_path: String,
+    },
 }

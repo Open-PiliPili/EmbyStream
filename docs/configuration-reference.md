@@ -253,7 +253,7 @@ Common fields:
 | `pattern`                  | string | If non-empty, must be valid **regex**: for normal nodes it matches the decrypted Emby file path; for `StreamRelay` it matches the **HTTP** request path. If empty, matching falls back to `path` or a catch-all (see code). |
 | `base_url`, `port`, `path` | strings| Upstream base URI parts (see template). |
 | `priority`                 | i32    | Ordering where applicable (e.g. StreamRelay nodes). |
-| `proxy_mode`               | string | `redirect` or `proxy` — how responses are delivered to clients. |
+| `proxy_mode`               | string | `redirect`, `proxy`, or `accel_redirect` (`WebDav` only) — how responses are delivered to clients. |
 | `client_speed_limit_kbs`   | u64    | Per-device speed limit (0 = unlimited). |
 | `client_burst_speed_kbs`   | u64    | Burst allowance for the limiter. |
 
@@ -317,11 +317,16 @@ Optional `[BackendNode.WebDav]`:
 
 | Field          | Description |
 |----------------|-------------|
+| `node_uuid`    | Required when `proxy_mode = "accel_redirect"`. Used to build `X-Accel-Redirect: /_origin/webdav/<node_uuid>/<file_path>`. |
 | `url_mode`     | `path_join`, `query_path`, or `url_template`. |
 | `query_param`  | Query name when `url_mode = query_path` (default `path`). |
 | `url_template` | Template with `{file_path}` when `url_mode = url_template`. |
 | `username` / `password` | Basic auth when needed. |
 | `user_agent`   | Custom UA for WebDAV HTTP calls. |
+
+`accel_redirect` is intended for Nginx `X-Accel-Redirect` deployments. It is
+validated at startup and is only allowed on `WebDav` nodes. When enabled,
+`node_uuid` must be unique across all `WebDav + accel_redirect` nodes.
 
 ### `StreamRelay`
 

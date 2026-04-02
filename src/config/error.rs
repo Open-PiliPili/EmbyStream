@@ -21,4 +21,6 @@ pub enum ConfigError {
     MissingConfig(String),
     #[error("Invalid regex pattern: '{0}'")]
     InvalidRegex(#[from] regex::Error),
+    #[error("Invalid config value: {0}")]
+    InvalidValue(String),
 }

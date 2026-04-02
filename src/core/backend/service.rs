@@ -19,7 +19,7 @@ use super::{
 };
 use crate::backend::types::ClientInfo;
 use crate::config::backend::BackendNode;
-use crate::core::redirect_info::RedirectInfo;
+use crate::core::redirect_info::{AccelRedirectInfo, RedirectInfo};
 use crate::{
     AppState, STREAM_LOGGER_DOMAIN, debug_log, error_log, info_log, warn_log,
 };
@@ -127,21 +127,29 @@ impl AppStreamService {
             && Uri::is_local(&uri)
         {
             let path_str = Uri::to_path_or_url_string(&uri);
-            let upstream = webdav::build_upstream_uri(
-                node,
-                &path_str,
-                node.webdav.as_ref(),
-            )
-            .map_err(|e| AppStreamError::WebDavUrl(e.to_string()))?;
-            debug_log!(
-                STREAM_LOGGER_DOMAIN,
-                "WebDav upstream URI: {}",
-                upstream
-            );
-            Ok(Source::Remote {
-                uri: upstream,
-                mode: proxy_mode,
-            })
+            if proxy_mode == ProxyMode::AccelRedirect {
+                let node_uuid = Self::webdav_accel_redirect_node_uuid(node)?;
+                Ok(Source::WebDavAccelRedirect {
+                    node_uuid,
+                    file_path: path_str,
+                })
+            } else {
+                let upstream = webdav::build_upstream_uri(
+                    node,
+                    &path_str,
+                    node.webdav.as_ref(),
+                )
+                .map_err(|e| AppStreamError::WebDavUrl(e.to_string()))?;
+                debug_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "WebDav upstream URI: {}",
+                    upstream
+                );
+                Ok(Source::Remote {
+                    uri: upstream,
+                    mode: proxy_mode,
+                })
+            }
         } else if !Uri::is_local(&uri) {
             debug_log!(STREAM_LOGGER_DOMAIN, "URI is already remote: {}", uri);
             Ok(Source::Remote {
@@ -569,6 +577,45 @@ impl AppStreamService {
         })
     }
 
+    fn build_accel_redirect_info(
+        node_uuid: &str,
+        file_path: &str,
+    ) -> Result<AccelRedirectInfo, AppStreamError> {
+        let encoded_path = webdav::encode_path_segments(file_path);
+        if encoded_path.is_empty() {
+            return Err(AppStreamError::WebDavUrl(
+                "empty WebDav logical file path for accel_redirect".to_string(),
+            ));
+        }
+
+        Ok(AccelRedirectInfo {
+            internal_path: format!(
+                "{}/{}/{}",
+                webdav::ACCEL_REDIRECT_PREFIX,
+                node_uuid,
+                encoded_path
+            ),
+        })
+    }
+
+    fn webdav_accel_redirect_node_uuid(
+        node: &BackendNode,
+    ) -> Result<String, AppStreamError> {
+        let node_uuid = node
+            .webdav
+            .as_ref()
+            .map(|cfg| cfg.node_uuid.trim())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                AppStreamError::WebDavUrl(format!(
+                    "missing WebDav node_uuid for accel_redirect node '{}'",
+                    node.name
+                ))
+            })?;
+
+        Ok(node_uuid.to_string())
+    }
+
     fn open_list_cache_key(
         node_uuid: &str,
         uri: &Uri,
@@ -755,6 +802,7 @@ impl StreamService for AppStreamService {
             match &source {
                 Source::Local { .. } => "Local",
                 Source::Remote { .. } => "Remote",
+                Source::WebDavAccelRedirect { .. } => "WebDavAccelRedirect",
             }
         );
         info_log!(STREAM_LOGGER_DOMAIN, "Routing stream source: {:?}", source);
@@ -787,6 +835,19 @@ impl StreamService for AppStreamService {
                 )
                 .await
             }
+            Source::WebDavAccelRedirect {
+                node_uuid,
+                file_path,
+            } => Self::build_accel_redirect_info(&node_uuid, &file_path)
+                .map(AppStreamResult::AccelRedirect)
+                .map_err(|e| {
+                    error_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "Failed to build accel redirect info: {:?}",
+                        e
+                    );
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }),
             Source::Remote { uri, mode } => match mode {
                 ProxyMode::Redirect => {
                     let redirect_info = self
@@ -834,6 +895,9 @@ impl StreamService for AppStreamService {
                         stream_session_id,
                     })
                     .await
+                }
+                ProxyMode::AccelRedirect => {
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
                 }
             },
         }

@@ -35,7 +35,7 @@ fn encode_query_value(value: &str) -> String {
 ///
 /// This keeps non-ASCII text, parentheses, `#`, `?`, etc. consistently percent-encoded so upstream
 /// WebDAV stacks (e.g. rclone) do not see a mix of raw ASCII sub-delims and encoded UTF-8.
-fn encode_path_segments(logical_path: &str) -> String {
+pub(crate) fn encode_path_segments(logical_path: &str) -> String {
     trim_slash(logical_path)
         .split('/')
         .filter(|p| !p.is_empty())

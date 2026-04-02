@@ -3,7 +3,7 @@
 use crate::config::{
     backend::{
         Backend, BackendNode, direct::DirectLink, disk::Disk,
-        openlist::OpenList,
+        openlist::OpenList, webdav::WebDavConfig,
     },
     frontend::Frontend,
     general::{Emby, General, Log, StreamMode, UserAgent},
@@ -149,6 +149,7 @@ pub(crate) fn build_template_raw(mode: StreamMode) -> RawConfig {
             backend_nodes: Some(vec![
                 openlist_example_node(),
                 directlink_example_node(),
+                webdav_accel_example_node(),
             ]),
             ..base
         },
@@ -170,6 +171,7 @@ pub(crate) fn build_template_raw(mode: StreamMode) -> RawConfig {
                 disk_example_node(),
                 openlist_node_dual(),
                 directlink_node_dual(),
+                webdav_accel_example_node(),
             ]),
             ..base
         },
@@ -235,6 +237,37 @@ fn directlink_example_node() -> BackendNode {
             user_agent: "Mozilla/5.0 (MockClient)".into(),
         }),
         webdav: None,
+    }
+}
+
+fn webdav_accel_example_node() -> BackendNode {
+    BackendNode {
+        name: "RcloneWebDav".into(),
+        backend_type: "WebDav".into(),
+        pattern: "/rclone/.*".into(),
+        pattern_regex: None,
+        base_url: "http://127.0.0.1".into(),
+        port: "60005".into(),
+        path: String::new(),
+        priority: 0,
+        proxy_mode: "accel_redirect".into(),
+        client_speed_limit_kbs: 0,
+        client_burst_speed_kbs: 0,
+        path_rewrites: vec![PathRewriteConfig {
+            enable: false,
+            pattern: "^/rclone(/.*)$".into(),
+            replacement: "$1".into(),
+        }],
+        anti_reverse_proxy: anti_rev_default(),
+        path_rewriter_cache: vec![],
+        uuid: String::new(),
+        disk: None,
+        open_list: None,
+        direct_link: None,
+        webdav: Some(WebDavConfig {
+            node_uuid: "webdav_node_a".into(),
+            ..Default::default()
+        }),
     }
 }
 

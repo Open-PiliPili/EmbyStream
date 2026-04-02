@@ -56,6 +56,16 @@ impl ResponseBuilder {
             })
     }
 
+    pub fn with_headers(
+        status_code: StatusCode,
+        headers: HeaderMap,
+    ) -> Response<BoxBodyType> {
+        let mut response = Response::new(Self::empty());
+        *response.status_mut() = status_code;
+        *response.headers_mut() = headers;
+        response
+    }
+
     pub fn with_json(
         status_code: StatusCode,
         json: &str,

@@ -818,6 +818,9 @@ listen_port = 60001
             AppStreamResult::Redirect(_) => {
                 unreachable!("expected stream response")
             }
+            AppStreamResult::AccelRedirect(_) => {
+                unreachable!("expected stream response")
+            }
         }
     }
 
@@ -853,6 +856,9 @@ listen_port = 60001
                 assert_eq!(response.status, hyper::StatusCode::PARTIAL_CONTENT);
             }
             AppStreamResult::Redirect(_) => {
+                unreachable!("expected stream response")
+            }
+            AppStreamResult::AccelRedirect(_) => {
                 unreachable!("expected stream response")
             }
         }

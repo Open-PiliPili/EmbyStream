@@ -121,7 +121,8 @@ fn should_omit_webdav_table(w: &WebDavConfig) -> bool {
     if !path_join {
         return false;
     }
-    w.url_template.trim().is_empty()
+    w.node_uuid.trim().is_empty()
+        && w.url_template.trim().is_empty()
         && w.username.trim().is_empty()
         && w.password.trim().is_empty()
         && w.user_agent.trim().is_empty()
@@ -141,6 +142,8 @@ fn skip_webdav_query_param(s: &str) -> bool {
 struct EmitWebDav {
     #[serde(skip_serializing_if = "skip_webdav_url_mode")]
     url_mode: String,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    node_uuid: String,
     #[serde(skip_serializing_if = "skip_webdav_query_param")]
     query_param: String,
     #[serde(skip_serializing_if = "str::is_empty")]
@@ -159,6 +162,7 @@ fn map_webdav_emit(w: &WebDavConfig) -> Option<EmitWebDav> {
     }
     Some(EmitWebDav {
         url_mode: w.url_mode.clone(),
+        node_uuid: w.node_uuid.clone(),
         query_param: w.query_param.clone(),
         url_template: w.url_template.clone(),
         username: w.username.clone(),

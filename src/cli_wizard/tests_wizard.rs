@@ -216,6 +216,127 @@ fn invalid_regex_in_node_rejected() {
 }
 
 #[test]
+fn finish_raw_rejects_webdav_accel_redirect_without_node_uuid() {
+    let toml = r#"
+[Log]
+level = "info"
+prefix = ""
+root_path = "./logs"
+
+[General]
+memory_mode = "middle"
+stream_mode = "backend"
+encipher_key = "1234567890123456"
+encipher_iv = "1234567890123456"
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "tok"
+
+[UserAgent]
+mode = "allow"
+allow_ua = []
+deny_ua = []
+
+[Fallback]
+
+[Backend]
+listen_port = 60002
+base_url = "https://b.example"
+port = "443"
+path = "stream"
+problematic_clients = []
+
+[[BackendNode]]
+name = "node"
+type = "WebDav"
+pattern = "/mnt/webdav/.*"
+base_url = "http://127.0.0.1"
+port = "6222"
+path = ""
+priority = 0
+proxy_mode = "accel_redirect"
+
+[BackendNode.WebDav]
+url_mode = "path_join"
+"#;
+
+    let raw: RawConfig = parse_raw_config_str(toml).expect("fixture TOML");
+    let err = finish_raw_config(std::path::PathBuf::from("x.toml"), raw)
+        .expect_err("missing node_uuid must fail");
+    assert!(err.to_string().contains("node_uuid"));
+}
+
+#[test]
+fn finish_raw_rejects_duplicate_webdav_accel_redirect_node_uuid() {
+    let toml = r#"
+[Log]
+level = "info"
+prefix = ""
+root_path = "./logs"
+
+[General]
+memory_mode = "middle"
+stream_mode = "backend"
+encipher_key = "1234567890123456"
+encipher_iv = "1234567890123456"
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "tok"
+
+[UserAgent]
+mode = "allow"
+allow_ua = []
+deny_ua = []
+
+[Fallback]
+
+[Backend]
+listen_port = 60002
+base_url = "https://b.example"
+port = "443"
+path = "stream"
+problematic_clients = []
+
+[[BackendNode]]
+name = "node-a"
+type = "WebDav"
+pattern = "/mnt/a/.*"
+base_url = "http://127.0.0.1"
+port = "6222"
+path = ""
+priority = 0
+proxy_mode = "accel_redirect"
+
+[BackendNode.WebDav]
+node_uuid = "dup_node"
+url_mode = "path_join"
+
+[[BackendNode]]
+name = "node-b"
+type = "WebDav"
+pattern = "/mnt/b/.*"
+base_url = "http://127.0.0.1"
+port = "6333"
+path = ""
+priority = 0
+proxy_mode = "accel_redirect"
+
+[BackendNode.WebDav]
+node_uuid = "dup_node"
+url_mode = "path_join"
+"#;
+
+    let raw: RawConfig = parse_raw_config_str(toml).expect("fixture TOML");
+    let err = finish_raw_config(std::path::PathBuf::from("x.toml"), raw)
+        .expect_err("duplicate node_uuid must fail");
+    assert!(err.to_string().contains("Duplicate"));
+}
+
+#[test]
 fn discover_finds_valid_file() {
     let dir = tempdir().expect("tempdir");
     let p = dir.path().join("a.toml");

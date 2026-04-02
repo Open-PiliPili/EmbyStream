@@ -1339,6 +1339,15 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
         tr("wizard.option.proxy_mode.redirect_long"),
         tr("wizard.option.proxy_mode.proxy_long"),
     ];
+    let proxy_items = if backend_type.eq_ignore_ascii_case(BACKEND_TYPE) {
+        vec![
+            tr("wizard.option.proxy_mode.redirect_long"),
+            tr("wizard.option.proxy_mode.proxy_long"),
+            tr("wizard.option.proxy_mode.accel_redirect_long"),
+        ]
+    } else {
+        proxy_items
+    };
     let pidx = Select::with_theme(&theme())
         .with_prompt("")
         .items(&proxy_items)
@@ -1346,10 +1355,12 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
         .report(false)
         .interact()
         .map_err(|e| anyhow!(e.to_string()))?;
-    let proxy_mode = if pidx == 1 {
-        tr("wizard.value.proxy_mode.proxy")
-    } else {
-        tr("wizard.value.proxy_mode.redirect")
+    let proxy_mode = match pidx {
+        1 => tr("wizard.value.proxy_mode.proxy"),
+        2 if backend_type.eq_ignore_ascii_case(BACKEND_TYPE) => {
+            tr("wizard.value.proxy_mode.accel_redirect")
+        }
+        _ => tr("wizard.value.proxy_mode.redirect"),
     }
     .to_string();
     print_field_value_line(&proxy_mode);
@@ -1448,6 +1459,13 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
             let url_mode: String =
                 input_text_w_echo(Some("path_join".into()), false)?;
             intro(
+                tr("wizard.field.node_uuid"),
+                tr("wizard.prompt.webdav_node_uuid"),
+                None,
+                Some("webdav_node_a"),
+            );
+            let node_uuid: String = input_text_w_echo(None, true)?;
+            intro(
                 tr("wizard.field.query_param"),
                 tr("wizard.prompt.webdav_query_param_key"),
                 Some("path"),
@@ -1489,6 +1507,7 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
                 None,
                 Some(WebDavConfig {
                     url_mode,
+                    node_uuid,
                     query_param,
                     url_template,
                     username,

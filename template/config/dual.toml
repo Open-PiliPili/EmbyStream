@@ -117,3 +117,33 @@ host = ""
 
 [BackendNode.DirectLink]
 user_agent = "Mozilla/5.0 (MockClient)"
+
+[[BackendNode]]
+name = "RcloneWebDav"
+type = "WebDav"
+pattern = "/rclone/.*"
+base_url = "http://127.0.0.1"
+port = "60005"
+path = ""
+priority = 0
+proxy_mode = "accel_redirect"
+client_speed_limit_kbs = 0
+client_burst_speed_kbs = 0
+
+[[BackendNode.PathRewrite]]
+enable = false
+pattern = "^/rclone(/.*)$"
+replacement = "$1"
+
+[BackendNode.AntiReverseProxy]
+enable = false
+host = ""
+
+[BackendNode.WebDav]
+node_uuid = "webdav_node_a"
+url_mode = "path_join"
+query_param = "path"
+url_template = ""
+username = ""
+password = ""
+user_agent = ""

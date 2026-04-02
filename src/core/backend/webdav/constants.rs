@@ -8,6 +8,12 @@ pub const MODE_QUERY_PATH: &str = "query_path";
 
 pub const MODE_URL_TEMPLATE: &str = "url_template";
 
+pub const PROXY_MODE_ACCEL_REDIRECT: &str = "accel_redirect";
+
 pub const TEMPLATE_PLACEHOLDER: &str = "{file_path}";
 
 pub const DEFAULT_QUERY_PARAM: &str = "path";
+
+pub const ACCEL_REDIRECT_HEADER: &str = "x-accel-redirect";
+
+pub const ACCEL_REDIRECT_PREFIX: &str = "/_origin/webdav";
