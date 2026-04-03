@@ -210,9 +210,184 @@ fn invalid_regex_in_node_rejected() {
         }),
         open_list: None,
         direct_link: None,
+        google_drive: None,
         webdav: None,
     }]);
     assert!(validate_raw_regexes(&raw).is_err());
+}
+
+#[test]
+fn finish_raw_rejects_google_drive_without_node_uuid() {
+    let toml = r#"
+[Log]
+level = "info"
+prefix = ""
+root_path = "./logs"
+
+[General]
+memory_mode = "middle"
+stream_mode = "backend"
+encipher_key = "1234567890123456"
+encipher_iv = "1234567890123456"
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "tok"
+
+[UserAgent]
+mode = "allow"
+allow_ua = []
+deny_ua = []
+
+[Fallback]
+
+[Backend]
+listen_port = 60002
+base_url = "https://b.example"
+port = "443"
+path = "stream"
+problematic_clients = []
+
+[[BackendNode]]
+name = "gdrive"
+type = "googleDrive"
+pattern = "/mnt/media/.*"
+base_url = "https://www.googleapis.com"
+port = "443"
+path = ""
+priority = 0
+proxy_mode = "proxy"
+
+[BackendNode.GoogleDrive]
+refresh_token = "refresh"
+"#;
+
+    let raw: RawConfig = parse_raw_config_str(toml).expect("fixture TOML");
+    let err = finish_raw_config(std::path::PathBuf::from("x.toml"), raw)
+        .expect_err("missing node_uuid must fail");
+    assert!(err.to_string().contains("node_uuid"));
+}
+
+#[test]
+fn finish_raw_rejects_google_drive_without_refresh_token() {
+    let toml = r#"
+[Log]
+level = "info"
+prefix = ""
+root_path = "./logs"
+
+[General]
+memory_mode = "middle"
+stream_mode = "backend"
+encipher_key = "1234567890123456"
+encipher_iv = "1234567890123456"
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "tok"
+
+[UserAgent]
+mode = "allow"
+allow_ua = []
+deny_ua = []
+
+[Fallback]
+
+[Backend]
+listen_port = 60002
+base_url = "https://b.example"
+port = "443"
+path = "stream"
+problematic_clients = []
+
+[[BackendNode]]
+name = "gdrive"
+type = "googleDrive"
+pattern = "/mnt/media/.*"
+base_url = "https://www.googleapis.com"
+port = "443"
+path = ""
+priority = 0
+proxy_mode = "proxy"
+
+[BackendNode.GoogleDrive]
+node_uuid = "google_drive_a"
+"#;
+
+    let raw: RawConfig = parse_raw_config_str(toml).expect("fixture TOML");
+    let err = finish_raw_config(std::path::PathBuf::from("x.toml"), raw)
+        .expect_err("missing refresh_token must fail");
+    assert!(err.to_string().contains("refresh_token"));
+}
+
+#[test]
+fn finish_raw_rejects_duplicate_google_drive_node_uuid() {
+    let toml = r#"
+[Log]
+level = "info"
+prefix = ""
+root_path = "./logs"
+
+[General]
+memory_mode = "middle"
+stream_mode = "backend"
+encipher_key = "1234567890123456"
+encipher_iv = "1234567890123456"
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "tok"
+
+[UserAgent]
+mode = "allow"
+allow_ua = []
+deny_ua = []
+
+[Fallback]
+
+[Backend]
+listen_port = 60002
+base_url = "https://b.example"
+port = "443"
+path = "stream"
+problematic_clients = []
+
+[[BackendNode]]
+name = "gdrive-a"
+type = "googleDrive"
+pattern = "/mnt/a/.*"
+base_url = "https://www.googleapis.com"
+port = "443"
+path = ""
+priority = 0
+proxy_mode = "proxy"
+
+[BackendNode.GoogleDrive]
+node_uuid = "dup_google_drive"
+refresh_token = "refresh-a"
+
+[[BackendNode]]
+name = "gdrive-b"
+type = "googleDrive"
+pattern = "/mnt/b/.*"
+base_url = "https://www.googleapis.com"
+port = "443"
+path = ""
+priority = 0
+proxy_mode = "redirect"
+
+[BackendNode.GoogleDrive]
+node_uuid = "dup_google_drive"
+refresh_token = "refresh-b"
+"#;
+
+    let raw: RawConfig = parse_raw_config_str(toml).expect("fixture TOML");
+    let err = finish_raw_config(std::path::PathBuf::from("x.toml"), raw)
+        .expect_err("duplicate node_uuid must fail");
+    assert!(err.to_string().contains("Duplicate"));
 }
 
 #[test]

@@ -34,6 +34,8 @@ use crate::{
     util::path_rewriter::PathRewriter,
 };
 
+const GOOGLE_DRIVE_BACKEND_TYPE: &str = "googleDrive";
+
 const CONFIG_DIR_NAME: &str = "embystream";
 const CONFIG_FILE_NAME: &str = "config.toml";
 const SSL_DIR_NAME: &str = "ssl";
@@ -317,6 +319,70 @@ fn validate_webdav_accel_redirect_nodes(
     Ok(())
 }
 
+fn validate_google_drive_nodes(
+    backend_nodes: &[BackendNode],
+) -> Result<(), ConfigError> {
+    let node_uuid_pattern =
+        Regex::new(r"^[A-Za-z0-9_-]+$").map_err(ConfigError::InvalidRegex)?;
+    let mut seen = std::collections::HashSet::new();
+
+    for node in backend_nodes {
+        if !node
+            .backend_type
+            .eq_ignore_ascii_case(GOOGLE_DRIVE_BACKEND_TYPE)
+        {
+            continue;
+        }
+
+        let Some(cfg) = node.google_drive.as_ref() else {
+            return Err(ConfigError::MissingConfig(format!(
+                "BackendNode.GoogleDrive for node '{}'",
+                node.name
+            )));
+        };
+
+        let node_uuid = cfg.node_uuid.trim();
+        if node_uuid.is_empty() {
+            return Err(ConfigError::MissingConfig(format!(
+                "BackendNode.GoogleDrive.node_uuid for node '{}'",
+                node.name
+            )));
+        }
+
+        if !node_uuid_pattern.is_match(node_uuid) {
+            return Err(ConfigError::InvalidValue(format!(
+                "BackendNode.GoogleDrive.node_uuid '{}' on node '{}' must match [A-Za-z0-9_-]+",
+                node_uuid, node.name
+            )));
+        }
+
+        if !seen.insert(node_uuid.to_string()) {
+            return Err(ConfigError::InvalidValue(format!(
+                "Duplicate BackendNode.GoogleDrive.node_uuid '{}' across googleDrive nodes",
+                node_uuid
+            )));
+        }
+
+        if cfg.refresh_token.trim().is_empty() {
+            return Err(ConfigError::MissingConfig(format!(
+                "BackendNode.GoogleDrive.refresh_token for node '{}'",
+                node.name
+            )));
+        }
+
+        if node.proxy_mode.eq_ignore_ascii_case("redirect") {
+            config_warn_log!(
+                CONFIG_LOGGER_DOMAIN,
+                "googleDrive node '{}' uses proxy_mode=redirect; \
+                 access_token may be exposed to clients via redirect headers",
+                node.name
+            );
+        }
+    }
+
+    Ok(())
+}
+
 /// Build runtime [`Config`] from parsed TOML (UUIDs, compiled regex, path rewriters).
 pub fn finish_raw_config(
     path: PathBuf,
@@ -327,6 +393,7 @@ pub fn finish_raw_config(
 
     let mut backend_nodes = raw_config.backend_nodes.unwrap_or_default();
     validate_webdav_accel_redirect_nodes(&backend_nodes)?;
+    validate_google_drive_nodes(&backend_nodes)?;
     for node in &mut backend_nodes {
         node.uuid = Uuid::new_v4().to_string();
 

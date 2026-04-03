@@ -3,7 +3,8 @@
 use crate::config::{
     backend::{
         Backend, BackendNode, direct::DirectLink, disk::Disk,
-        openlist::OpenList, webdav::WebDavConfig,
+        google_drive::GoogleDriveConfig, openlist::OpenList,
+        webdav::WebDavConfig,
     },
     frontend::Frontend,
     general::{Emby, General, Log, StreamMode, UserAgent},
@@ -149,6 +150,7 @@ pub(crate) fn build_template_raw(mode: StreamMode) -> RawConfig {
             backend_nodes: Some(vec![
                 openlist_example_node(),
                 directlink_example_node(),
+                google_drive_example_node(),
                 webdav_accel_example_node(),
             ]),
             ..base
@@ -171,6 +173,7 @@ pub(crate) fn build_template_raw(mode: StreamMode) -> RawConfig {
                 disk_example_node(),
                 openlist_node_dual(),
                 directlink_node_dual(),
+                google_drive_example_node(),
                 webdav_accel_example_node(),
             ]),
             ..base
@@ -206,6 +209,7 @@ fn openlist_example_node() -> BackendNode {
             token: "replace_openlist_token".into(),
         }),
         direct_link: None,
+        google_drive: None,
         webdav: None,
     }
 }
@@ -236,6 +240,7 @@ fn directlink_example_node() -> BackendNode {
         direct_link: Some(DirectLink {
             user_agent: "Mozilla/5.0 (MockClient)".into(),
         }),
+        google_drive: None,
         webdav: None,
     }
 }
@@ -264,6 +269,7 @@ fn webdav_accel_example_node() -> BackendNode {
         disk: None,
         open_list: None,
         direct_link: None,
+        google_drive: None,
         webdav: Some(WebDavConfig {
             node_uuid: "webdav_node_a".into(),
             ..Default::default()
@@ -304,6 +310,42 @@ fn disk_example_node() -> BackendNode {
         }),
         open_list: None,
         direct_link: None,
+        google_drive: None,
+        webdav: None,
+    }
+}
+
+fn google_drive_example_node() -> BackendNode {
+    BackendNode {
+        name: "GoogleDriveMedia".into(),
+        backend_type: "googleDrive".into(),
+        pattern: "/gdrive/.*".into(),
+        pattern_regex: None,
+        base_url: "https://www.googleapis.com".into(),
+        port: "443".into(),
+        path: String::new(),
+        priority: 0,
+        proxy_mode: "proxy".into(),
+        client_speed_limit_kbs: 0,
+        client_burst_speed_kbs: 0,
+        path_rewrites: vec![PathRewriteConfig {
+            enable: false,
+            pattern: "^/gdrive(/.*)$".into(),
+            replacement: "$1".into(),
+        }],
+        anti_reverse_proxy: anti_rev_default(),
+        path_rewriter_cache: vec![],
+        uuid: String::new(),
+        disk: None,
+        open_list: None,
+        direct_link: None,
+        google_drive: Some(GoogleDriveConfig {
+            node_uuid: "google_drive_node_a".into(),
+            drive_name: "SharedMedia".into(),
+            access_token: "replace_with_google_access_token".into(),
+            refresh_token: "replace_with_google_refresh_token".into(),
+            ..Default::default()
+        }),
         webdav: None,
     }
 }
@@ -336,6 +378,7 @@ fn openlist_node_dual() -> BackendNode {
             token: "replace_openlist_token".into(),
         }),
         direct_link: None,
+        google_drive: None,
         webdav: None,
     }
 }
@@ -366,6 +409,7 @@ fn directlink_node_dual() -> BackendNode {
         direct_link: Some(DirectLink {
             user_agent: "Mozilla/5.0 (MockClient)".into(),
         }),
+        google_drive: None,
         webdav: None,
     }
 }

@@ -3,7 +3,7 @@
 use serde::Serialize;
 
 use crate::config::{
-    backend::{Backend, BackendNode, WebDavConfig},
+    backend::{Backend, BackendNode, GoogleDriveConfig, WebDavConfig},
     frontend::Frontend,
     general::StreamMode,
     http2::Http2,
@@ -71,6 +71,8 @@ struct EmitBackendNode {
     open_list: Option<crate::config::backend::openlist::OpenList>,
     #[serde(rename = "DirectLink", skip_serializing_if = "Option::is_none")]
     direct_link: Option<crate::config::backend::direct::DirectLink>,
+    #[serde(rename = "GoogleDrive", skip_serializing_if = "Option::is_none")]
+    google_drive: Option<EmitGoogleDrive>,
     #[serde(rename = "WebDav", skip_serializing_if = "Option::is_none")]
     webdav: Option<EmitWebDav>,
 }
@@ -138,6 +140,41 @@ fn skip_webdav_query_param(s: &str) -> bool {
     s.trim().is_empty() || s == DEFAULT_QUERY_PARAM
 }
 
+fn should_omit_google_drive_table(g: &GoogleDriveConfig) -> bool {
+    g.node_uuid.trim().is_empty()
+        && g.drive_id.trim().is_empty()
+        && g.drive_name.trim().is_empty()
+        && g.access_token.trim().is_empty()
+        && g.refresh_token.trim().is_empty()
+}
+
+#[derive(Serialize)]
+struct EmitGoogleDrive {
+    #[serde(skip_serializing_if = "str::is_empty")]
+    node_uuid: String,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    drive_id: String,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    drive_name: String,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    access_token: String,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    refresh_token: String,
+}
+
+fn map_google_drive_emit(g: &GoogleDriveConfig) -> Option<EmitGoogleDrive> {
+    if should_omit_google_drive_table(g) {
+        return None;
+    }
+    Some(EmitGoogleDrive {
+        node_uuid: g.node_uuid.clone(),
+        drive_id: g.drive_id.clone(),
+        drive_name: g.drive_name.clone(),
+        access_token: g.access_token.clone(),
+        refresh_token: g.refresh_token.clone(),
+    })
+}
+
 #[derive(Serialize)]
 struct EmitWebDav {
     #[serde(skip_serializing_if = "skip_webdav_url_mode")]
@@ -198,6 +235,7 @@ fn map_node(n: &BackendNode) -> EmitBackendNode {
         disk: n.disk.clone(),
         open_list: n.open_list.clone(),
         direct_link: n.direct_link.clone(),
+        google_drive: n.google_drive.as_ref().and_then(map_google_drive_emit),
         webdav: n.webdav.as_ref().and_then(map_webdav_emit),
     }
 }

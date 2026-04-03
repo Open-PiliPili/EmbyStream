@@ -249,11 +249,11 @@ Common fields:
 | Field                      | Type   | Description |
 |----------------------------|--------|-------------|
 | `name`                     | string | Display name. |
-| `type`                     | string | `Disk`, `OpenList`, `DirectLink`, `WebDav`, or `StreamRelay`. |
+| `type`                     | string | `Disk`, `OpenList`, `DirectLink`, `googleDrive`, `WebDav`, or `StreamRelay`. |
 | `pattern`                  | string | If non-empty, must be valid **regex**: for normal nodes it matches the decrypted Emby file path; for `StreamRelay` it matches the **HTTP** request path. If empty, matching falls back to `path` or a catch-all (see code). |
 | `base_url`, `port`, `path` | strings| Upstream base URI parts (see template). |
 | `priority`                 | i32    | Ordering where applicable (e.g. StreamRelay nodes). |
-| `proxy_mode`               | string | `redirect`, `proxy`, or `accel_redirect` (`WebDav` only) — how responses are delivered to clients. |
+| `proxy_mode`               | string | `redirect`, `proxy`, or `accel_redirect` (`WebDav` and `googleDrive`) — how responses are delivered to clients. |
 | `client_speed_limit_kbs`   | u64    | Per-device speed limit (0 = unlimited). |
 | `client_burst_speed_kbs`   | u64    | Burst allowance for the limiter. |
 
@@ -327,6 +327,23 @@ Optional `[BackendNode.WebDav]`:
 `accel_redirect` is intended for Nginx `X-Accel-Redirect` deployments. It is
 validated at startup and is only allowed on `WebDav` nodes. When enabled,
 `node_uuid` must be unique across all `WebDav + accel_redirect` nodes.
+
+### `googleDrive`
+
+Requires `[BackendNode.GoogleDrive]`:
+
+| Field | Description |
+|-------|-------------|
+| `node_uuid` | Required. Stable ID used for token/cache keys; must be unique across `googleDrive` nodes. |
+| `drive_id` | Preferred shared drive ID. Takes precedence over `drive_name`. |
+| `drive_name` | Shared drive name fallback when `drive_id` is absent. |
+| `access_token` | Cached OAuth access token. Can be refreshed and written back by the app later. |
+| `refresh_token` | Required OAuth refresh token used to renew `access_token`. |
+
+`drive_id` and `drive_name` may both be empty. In that case, runtime will infer the
+shared drive name from the first path segment after path rewrite. `proxy_mode=redirect`
+is supported but may expose OAuth bearer tokens to clients, so it should be used only
+when that leakage risk is acceptable.
 
 ### `StreamRelay`
 

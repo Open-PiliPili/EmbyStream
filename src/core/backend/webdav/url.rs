@@ -182,6 +182,7 @@ mod tests {
             disk: None,
             open_list: None,
             direct_link: None,
+            google_drive: None,
             webdav: None,
         }
     }

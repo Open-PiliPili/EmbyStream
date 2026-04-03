@@ -256,6 +256,7 @@ mod tests {
             disk: None,
             open_list: None,
             direct_link: None,
+            google_drive: None,
             webdav: None,
         };
         assert_eq!(cache_key(&node), "n1|https://example.com");
@@ -295,6 +296,7 @@ mod tests {
             disk: None,
             open_list: None,
             direct_link: None,
+            google_drive: None,
             webdav: None,
         }
     }

@@ -3,7 +3,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    direct::types::DirectLink, disk::types::Disk, openlist::types::OpenList,
+    direct::types::DirectLink, disk::types::Disk,
+    google_drive::GoogleDriveConfig, openlist::types::OpenList,
     webdav::WebDavConfig,
 };
 use crate::{
@@ -59,6 +60,8 @@ pub struct BackendNode {
     pub open_list: Option<OpenList>,
     #[serde(rename = "DirectLink")]
     pub direct_link: Option<DirectLink>,
+    #[serde(rename = "GoogleDrive")]
+    pub google_drive: Option<GoogleDriveConfig>,
     #[serde(rename = "WebDav")]
     pub webdav: Option<WebDavConfig>,
 }
@@ -107,4 +110,5 @@ pub enum BackendConfig {
     Disk(Disk),
     OpenList(OpenList),
     DirectLink(DirectLink),
+    GoogleDrive(GoogleDriveConfig),
 }

@@ -13,7 +13,8 @@ use crate::{
     config::{
         backend::{
             Backend, BackendNode, direct::DirectLink, disk::Disk,
-            openlist::OpenList, webdav::WebDavConfig,
+            google_drive::GoogleDriveConfig, openlist::OpenList,
+            webdav::WebDavConfig,
         },
         core::{finish_raw_config, parse_raw_config_str},
         frontend::Frontend,
@@ -1232,6 +1233,7 @@ fn backend_type_labels() -> Vec<String> {
         tr("wizard.option.backend_type.disk"),
         tr("wizard.option.backend_type.openlist"),
         tr("wizard.option.backend_type.direct_link"),
+        tr("wizard.option.backend_type.google_drive"),
         tr("wizard.option.backend_type.webdav_long"),
         tr("wizard.option.backend_type.stream_relay"),
     ]
@@ -1283,8 +1285,9 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
         0 => tr("wizard.value.backend_type.disk"),
         1 => tr("wizard.value.backend_type.openlist"),
         2 => tr("wizard.value.backend_type.direct_link"),
-        3 => BACKEND_TYPE.to_string(),
-        4 => STREAM_RELAY_BACKEND_TYPE.to_string(),
+        3 => tr("wizard.value.backend_type.google_drive"),
+        4 => BACKEND_TYPE.to_string(),
+        5 => STREAM_RELAY_BACKEND_TYPE.to_string(),
         _ => tr("wizard.value.backend_type.disk"),
     };
     print_field_value_line(&backend_type);
@@ -1394,130 +1397,188 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
     let anti_reverse_proxy =
         prompt_anti_reverse(tr("wizard.label.anti_reverse_proxy"))?;
 
-    let (disk, open_list, direct_link, webdav) = match backend_type.as_str() {
-        "Disk" => {
-            intro(
-                tr("wizard.field.description"),
-                tr("wizard.prompt.node_description_note"),
-                None,
-                Some(tr("wizard.example.disk.description").as_str()),
-            );
-            let description: String = wiz_input_string(None, true)?;
-            (Some(Disk { description }), None, None, None)
-        }
-        "OpenList" => {
-            intro(
-                tr("wizard.field.base_url"),
-                tr("wizard.prompt.alist_base_url"),
-                None,
-                Some(tr("wizard.example.url.local_emby").as_str()),
-            );
-            let b: String = wiz_input_string(None, false)?;
-            intro(
-                tr("wizard.field.port"),
-                tr("wizard.prompt.alist_port_if_missing"),
-                None,
-                Some("5244"),
-            );
-            let p: String = wiz_input_string(None, true)?;
-            intro(
-                tr("wizard.field.token"),
-                tr("wizard.prompt.alist_api_token"),
-                None,
-                None,
-            );
-            let tok: String = wiz_input_string(None, false)?;
-            (
-                None,
-                Some(OpenList {
-                    base_url: b,
-                    port: p,
-                    token: tok,
-                }),
-                None,
-                None,
-            )
-        }
-        "DirectLink" => {
-            intro(
-                tr("wizard.field.user_agent"),
-                tr("wizard.prompt.direct_link_fetch_ua"),
-                None,
-                Some(tr("wizard.example.user_agent.mozilla").as_str()),
-            );
-            let ua: String = wiz_input_string(None, false)?;
-            (None, None, Some(DirectLink { user_agent: ua }), None)
-        }
-        t if t.eq_ignore_ascii_case(BACKEND_TYPE) => {
-            print_subsection_title(tr("wizard.section.backend_node_webdav"));
-            intro(
-                tr("wizard.field.url_mode"),
-                tr("wizard.hint.webdav_url_mode_values"),
-                Some("path_join"),
-                None,
-            );
-            let url_mode: String =
-                input_text_w_echo(Some("path_join".into()), false)?;
-            intro(
-                tr("wizard.field.node_uuid"),
-                tr("wizard.prompt.webdav_node_uuid"),
-                None,
-                Some("webdav_node_a"),
-            );
-            let node_uuid: String = input_text_w_echo(None, true)?;
-            intro(
-                tr("wizard.field.query_param"),
-                tr("wizard.prompt.webdav_query_param_key"),
-                Some("path"),
-                None,
-            );
-            let query_param: String =
-                input_text_w_echo(Some("path".into()), false)?;
-            intro(
-                tr("wizard.field.url_template"),
-                tr("wizard.prompt.webdav_url_template"),
-                None,
-                None,
-            );
-            let url_template: String = input_text_w_echo(None, true)?;
-            intro(
-                tr("wizard.field.username"),
-                tr("wizard.prompt.optional_http_basic_user"),
-                None,
-                None,
-            );
-            let username: String = input_text_w_echo(None, true)?;
-            intro(
-                tr("wizard.field.password"),
-                tr("wizard.prompt.optional_http_basic_password"),
-                None,
-                None,
-            );
-            let password: String = input_secret_w_echo(true)?;
-            intro(
-                tr("wizard.field.user_agent"),
-                tr("wizard.prompt.optional_custom_user_agent"),
-                None,
-                None,
-            );
-            let user_agent: String = input_text_w_echo(None, true)?;
-            (
-                None,
-                None,
-                None,
-                Some(WebDavConfig {
-                    url_mode,
-                    node_uuid,
-                    query_param,
-                    url_template,
-                    username,
-                    password,
-                    user_agent,
-                }),
-            )
-        }
-        _ => (None, None, None, None),
-    };
+    let (disk, open_list, direct_link, google_drive, webdav) =
+        match backend_type.as_str() {
+            "Disk" => {
+                intro(
+                    tr("wizard.field.description"),
+                    tr("wizard.prompt.node_description_note"),
+                    None,
+                    Some(tr("wizard.example.disk.description").as_str()),
+                );
+                let description: String = wiz_input_string(None, true)?;
+                (Some(Disk { description }), None, None, None, None)
+            }
+            "OpenList" => {
+                intro(
+                    tr("wizard.field.base_url"),
+                    tr("wizard.prompt.alist_base_url"),
+                    None,
+                    Some(tr("wizard.example.url.local_emby").as_str()),
+                );
+                let b: String = wiz_input_string(None, false)?;
+                intro(
+                    tr("wizard.field.port"),
+                    tr("wizard.prompt.alist_port_if_missing"),
+                    None,
+                    Some("5244"),
+                );
+                let p: String = wiz_input_string(None, true)?;
+                intro(
+                    tr("wizard.field.token"),
+                    tr("wizard.prompt.alist_api_token"),
+                    None,
+                    None,
+                );
+                let tok: String = wiz_input_string(None, false)?;
+                (
+                    None,
+                    Some(OpenList {
+                        base_url: b,
+                        port: p,
+                        token: tok,
+                    }),
+                    None,
+                    None,
+                    None,
+                )
+            }
+            "DirectLink" => {
+                intro(
+                    tr("wizard.field.user_agent"),
+                    tr("wizard.prompt.direct_link_fetch_ua"),
+                    None,
+                    Some(tr("wizard.example.user_agent.mozilla").as_str()),
+                );
+                let ua: String = wiz_input_string(None, false)?;
+                (None, None, Some(DirectLink { user_agent: ua }), None, None)
+            }
+            "googleDrive" => {
+                print_subsection_title(tr(
+                    "wizard.section.backend_node_google_drive",
+                ));
+                intro(
+                    tr("wizard.field.node_uuid"),
+                    tr("wizard.prompt.google_drive_node_uuid"),
+                    None,
+                    Some("google_drive_node_a"),
+                );
+                let node_uuid: String = input_text_w_echo(None, false)?;
+                intro(
+                    tr("wizard.field.drive_id"),
+                    tr("wizard.prompt.google_drive_drive_id"),
+                    None,
+                    None,
+                );
+                let drive_id: String = input_text_w_echo(None, true)?;
+                intro(
+                    tr("wizard.field.drive_name"),
+                    tr("wizard.prompt.google_drive_drive_name"),
+                    None,
+                    Some("SharedMedia"),
+                );
+                let drive_name: String = input_text_w_echo(None, true)?;
+                intro(
+                    tr("wizard.field.access_token"),
+                    tr("wizard.prompt.google_drive_access_token"),
+                    None,
+                    None,
+                );
+                let access_token: String = input_text_w_echo(None, true)?;
+                intro(
+                    tr("wizard.field.refresh_token"),
+                    tr("wizard.prompt.google_drive_refresh_token"),
+                    None,
+                    None,
+                );
+                let refresh_token: String = input_secret_w_echo(false)?;
+                (
+                    None,
+                    None,
+                    None,
+                    Some(GoogleDriveConfig {
+                        node_uuid,
+                        drive_id,
+                        drive_name,
+                        access_token,
+                        refresh_token,
+                    }),
+                    None,
+                )
+            }
+            t if t.eq_ignore_ascii_case(BACKEND_TYPE) => {
+                print_subsection_title(tr(
+                    "wizard.section.backend_node_webdav",
+                ));
+                intro(
+                    tr("wizard.field.url_mode"),
+                    tr("wizard.hint.webdav_url_mode_values"),
+                    Some("path_join"),
+                    None,
+                );
+                let url_mode: String =
+                    input_text_w_echo(Some("path_join".into()), false)?;
+                intro(
+                    tr("wizard.field.node_uuid"),
+                    tr("wizard.prompt.webdav_node_uuid"),
+                    None,
+                    Some("webdav_node_a"),
+                );
+                let node_uuid: String = input_text_w_echo(None, true)?;
+                intro(
+                    tr("wizard.field.query_param"),
+                    tr("wizard.prompt.webdav_query_param_key"),
+                    Some("path"),
+                    None,
+                );
+                let query_param: String =
+                    input_text_w_echo(Some("path".into()), false)?;
+                intro(
+                    tr("wizard.field.url_template"),
+                    tr("wizard.prompt.webdav_url_template"),
+                    None,
+                    None,
+                );
+                let url_template: String = input_text_w_echo(None, true)?;
+                intro(
+                    tr("wizard.field.username"),
+                    tr("wizard.prompt.optional_http_basic_user"),
+                    None,
+                    None,
+                );
+                let username: String = input_text_w_echo(None, true)?;
+                intro(
+                    tr("wizard.field.password"),
+                    tr("wizard.prompt.optional_http_basic_password"),
+                    None,
+                    None,
+                );
+                let password: String = input_secret_w_echo(true)?;
+                intro(
+                    tr("wizard.field.user_agent"),
+                    tr("wizard.prompt.optional_custom_user_agent"),
+                    None,
+                    None,
+                );
+                let user_agent: String = input_text_w_echo(None, true)?;
+                (
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(WebDavConfig {
+                        url_mode,
+                        node_uuid,
+                        query_param,
+                        url_template,
+                        username,
+                        password,
+                        user_agent,
+                    }),
+                )
+            }
+            _ => (None, None, None, None, None),
+        };
 
     Ok(BackendNode {
         name,
@@ -1538,6 +1599,7 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
         disk,
         open_list,
         direct_link,
+        google_drive,
         webdav,
     })
 }

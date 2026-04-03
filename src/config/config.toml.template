@@ -131,6 +131,34 @@ host = ""
 user_agent = ""
 
 [[BackendNode]]
+name = "GoogleDriveMedia"
+type = "googleDrive"
+pattern = "/gdrive/.*"
+base_url = "https://www.googleapis.com"
+port = "443"
+path = ""
+priority = 0
+proxy_mode = "proxy"
+client_speed_limit_kbs = 0
+client_burst_speed_kbs = 0
+
+[[BackendNode.PathRewrite]]
+enable = false
+pattern = "^/gdrive(/.*)$"
+replacement = "$1"
+
+[BackendNode.AntiReverseProxy]
+enable = false
+host = ""
+
+[BackendNode.GoogleDrive]
+node_uuid = "google_drive_node_a"
+drive_id = ""
+drive_name = "SharedMedia"
+access_token = "replace_with_google_access_token"
+refresh_token = "replace_with_google_refresh_token"
+
+[[BackendNode]]
 name = "RcloneWebDav"
 type = "WebDav"
 pattern = "/rclone/.*"
