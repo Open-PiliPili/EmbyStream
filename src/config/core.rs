@@ -525,3 +525,96 @@ pub fn persist_google_drive_access_token(
     })?;
     write_atomic_config(config_path, &serialized)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::persist_google_drive_access_token;
+    use crate::config::error::ConfigError;
+
+    #[test]
+    fn persist_google_drive_access_token_updates_matching_node_only() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let config_path = temp_dir.path().join("config.toml");
+        let content = r#"
+[[BackendNode]]
+name = "GD-1"
+type = "googleDrive"
+
+[BackendNode.GoogleDrive]
+node_uuid = "node-1"
+access_token = "old-token-1"
+
+[[BackendNode]]
+name = "GD-2"
+type = "googleDrive"
+
+[BackendNode.GoogleDrive]
+node_uuid = "node-2"
+access_token = "old-token-2"
+"#;
+        fs::write(&config_path, content).expect("write config");
+
+        persist_google_drive_access_token(
+            &config_path,
+            "node-2",
+            "new-token-2",
+        )
+        .expect("persist");
+
+        let persisted = fs::read_to_string(&config_path).expect("read config");
+        let parsed: toml::Value = toml::from_str(&persisted).expect("parse");
+        let nodes = parsed
+            .get("BackendNode")
+            .and_then(toml::Value::as_array)
+            .expect("backend nodes");
+
+        let first = nodes[0]
+            .get("GoogleDrive")
+            .and_then(|value| value.get("access_token"))
+            .and_then(toml::Value::as_str)
+            .expect("first token");
+        let second = nodes[1]
+            .get("GoogleDrive")
+            .and_then(|value| value.get("access_token"))
+            .and_then(toml::Value::as_str)
+            .expect("second token");
+
+        assert_eq!(first, "old-token-1");
+        assert_eq!(second, "new-token-2");
+    }
+
+    #[test]
+    fn persist_google_drive_access_token_errors_when_node_is_missing() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let config_path = temp_dir.path().join("config.toml");
+        let content = r#"
+[[BackendNode]]
+name = "GD-1"
+type = "googleDrive"
+
+[BackendNode.GoogleDrive]
+node_uuid = "node-1"
+access_token = "old-token-1"
+"#;
+        fs::write(&config_path, content).expect("write config");
+
+        let error = persist_google_drive_access_token(
+            &config_path,
+            "missing-node",
+            "new-token",
+        )
+        .expect_err("missing node should fail");
+
+        match error {
+            ConfigError::MissingConfig(message) => {
+                assert!(
+                    message.contains("missing-node"),
+                    "unexpected message: {message}"
+                );
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+}

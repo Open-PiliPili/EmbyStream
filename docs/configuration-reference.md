@@ -348,6 +348,59 @@ shared drive name from the first path segment after path rewrite. `proxy_mode=re
 is supported but may expose OAuth bearer tokens to clients, so it should be used only
 when that leakage risk is acceptable.
 
+Recommended delivery modes for `googleDrive`:
+
+- `proxy`: safest default. The server keeps the OAuth bearer token and fetches Google Drive on behalf of the client.
+- `accel_redirect`: recommended when you already deploy behind Nginx and want to offload the large body transfer there.
+- `redirect`: supported, but the response includes `Authorization: Bearer ...` so clients or intermediate proxies may see the token.
+
+Example `googleDrive` node:
+
+```toml
+[[BackendNode]]
+name = "GoogleDriveMedia"
+type = "googleDrive"
+pattern = "^/mnt/media/.*"
+proxy_mode = "accel_redirect"
+
+[BackendNode.GoogleDrive]
+node_uuid = "google-drive-media"
+client_id = "your-google-oauth-client-id"
+client_secret = "your-google-oauth-client-secret"
+drive_name = "pilipili"
+access_token = ""
+refresh_token = "your-google-refresh-token"
+```
+
+Example Nginx wiring for `googleDrive + accel_redirect`:
+
+```nginx
+location /stream {
+    proxy_pass http://127.0.0.1:60001;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+
+location ~ ^/_origin/google-drive/([^/]+)/([^/]+)$ {
+    internal;
+
+    set $google_node_uuid $1;
+    set $google_file_id $2;
+
+    proxy_pass https://www.googleapis.com/drive/v3/files/$google_file_id?alt=media&supportsAllDrives=true&acknowledgeAbuse=true;
+    proxy_set_header Authorization $upstream_http_x_embystream_upstream_authorization;
+    proxy_set_header Host www.googleapis.com;
+    proxy_ssl_server_name on;
+}
+```
+
+Notes for the Nginx example:
+
+- EmbyStream responds with `X-Accel-Redirect: /_origin/google-drive/<node_uuid>/<file_id>`.
+- EmbyStream also responds with `x-embystream-upstream-authorization: Bearer ...`.
+- The internal Nginx location must copy that internal-use header into the upstream `Authorization` header, otherwise Google Drive will reject the media request.
+- `redirect` mode skips this internal hop entirely and therefore carries the highest bearer-token exposure risk.
+
 ### `StreamRelay`
 
 Redirects matching GET requests to another backend URL **without** decrypting the `sign` parameter — useful for chaining gateways.

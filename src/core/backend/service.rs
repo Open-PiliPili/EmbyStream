@@ -920,14 +920,95 @@ impl AppStreamService {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Instant};
 
     use dashmap::DashMap;
-    use hyper::Uri;
+    use hyper::{HeaderMap, Uri, header};
     use tokio::sync::Mutex as TokioMutex;
 
     use super::AppStreamService;
-    use crate::AppState;
+    use crate::{
+        AppState,
+        config::{
+            backend::{BackendNode, GoogleDriveConfig},
+            core::{finish_raw_config, parse_raw_config_str},
+        },
+        core::{
+            backend::google_drive_auth, request::Request as AppStreamRequest,
+        },
+    };
+
+    const MIN_FRONTEND_CONFIG: &str = r#"
+[Log]
+level = "info"
+prefix = ""
+root_path = "./logs"
+
+[General]
+memory_mode = "middle"
+stream_mode = "frontend"
+encipher_key = "1234567890123456"
+encipher_iv = "1234567890123456"
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "tok"
+
+[UserAgent]
+mode = "allow"
+allow_ua = []
+deny_ua = []
+
+[Fallback]
+
+[Frontend]
+listen_port = 60001
+
+[Frontend.AntiReverseProxy]
+enable = false
+host = ""
+"#;
+
+    async fn test_state() -> AppState {
+        let raw = parse_raw_config_str(MIN_FRONTEND_CONFIG).expect("parse");
+        let config =
+            finish_raw_config("test.toml".into(), raw).expect("finish");
+        AppState::new(config).await
+    }
+
+    fn google_drive_node() -> BackendNode {
+        BackendNode {
+            name: "GoogleDrive".to_string(),
+            backend_type: "googleDrive".to_string(),
+            pattern: String::new(),
+            pattern_regex: None,
+            base_url: String::new(),
+            port: String::new(),
+            path: String::new(),
+            priority: 0,
+            proxy_mode: "redirect".to_string(),
+            client_speed_limit_kbs: 0,
+            client_burst_speed_kbs: 0,
+            path_rewrites: vec![],
+            anti_reverse_proxy: Default::default(),
+            path_rewriter_cache: vec![],
+            uuid: "node-uuid".to_string(),
+            disk: None,
+            open_list: None,
+            direct_link: None,
+            google_drive: Some(GoogleDriveConfig {
+                node_uuid: "gd-node".to_string(),
+                client_id: "client-id".to_string(),
+                client_secret: "client-secret".to_string(),
+                drive_id: String::new(),
+                drive_name: "pilipili".to_string(),
+                access_token: "access-token".to_string(),
+                refresh_token: "refresh-token".to_string(),
+            }),
+            webdav: None,
+        }
+    }
 
     #[test]
     fn open_list_cache_key_is_structured() {
@@ -979,6 +1060,94 @@ mod tests {
         let lock2 = AppState::request_lock(&locks, "key2");
 
         assert!(!Arc::ptr_eq(&lock1, &lock2));
+    }
+
+    #[test]
+    fn google_drive_file_id_cache_key_is_structured() {
+        let key = AppStreamService::google_drive_file_id_cache_key(
+            "Node-01",
+            "/mnt/media/pilipili/Show/Episode01.mkv",
+        );
+
+        assert!(key.starts_with(
+            "backend:google-drive:file-id:node:node-01:path_hash:"
+        ));
+    }
+
+    #[test]
+    fn build_google_drive_accel_redirect_info_carries_internal_auth_header() {
+        let mut auth_headers = HeaderMap::new();
+        auth_headers.insert(
+            header::AUTHORIZATION,
+            "Bearer access-token".parse().expect("auth header"),
+        );
+
+        let info = AppStreamService::build_google_drive_accel_redirect_info(
+            "gd-node",
+            "file-id-123",
+            &auth_headers,
+        )
+        .expect("accel redirect info");
+
+        assert_eq!(
+            info.internal_path,
+            "/_origin/google-drive/gd-node/file%2Did%2D123"
+        );
+        assert_eq!(
+            info.internal_headers
+                .get(google_drive_auth::accel_header_name())
+                .and_then(|value| value.to_str().ok()),
+            Some("Bearer access-token")
+        );
+        assert!(info.internal_headers.get(header::AUTHORIZATION).is_none());
+    }
+
+    #[tokio::test]
+    async fn build_redirect_info_injects_google_drive_auth_and_strips_host() {
+        let state = Arc::new(test_state().await);
+        let service = AppStreamService::new(state);
+        let node = google_drive_node();
+
+        let mut request_headers = HeaderMap::new();
+        request_headers.insert(
+            header::HOST,
+            "gateway.local".parse().expect("host header"),
+        );
+        request_headers
+            .insert(header::RANGE, "bytes=0-1".parse().expect("range header"));
+
+        let request = AppStreamRequest::new(
+            Uri::from_static("/stream"),
+            request_headers,
+            Instant::now(),
+            Some(node),
+        );
+
+        let mut extra_headers = HeaderMap::new();
+        extra_headers.insert(
+            header::AUTHORIZATION,
+            "Bearer access-token".parse().expect("auth header"),
+        );
+
+        let redirect_info = service
+            .build_redirect_info(
+                "https://www.googleapis.com/drive/v3/files/file-id?alt=media"
+                    .parse()
+                    .expect("redirect target"),
+                &request,
+                Some(extra_headers),
+            )
+            .await
+            .expect("redirect info");
+
+        assert!(redirect_info.final_headers.get(header::HOST).is_none());
+        assert_eq!(
+            redirect_info
+                .final_headers
+                .get(header::AUTHORIZATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("Bearer access-token")
+        );
     }
 }
 
