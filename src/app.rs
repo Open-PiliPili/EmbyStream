@@ -6,7 +6,7 @@ use tokio::sync::{Mutex as TokioMutex, OnceCell, RwLock as TokioRwLock};
 use crate::{
     INIT_LOGGER_DOMAIN,
     cache::{GeneralCache, RateLimiterCache},
-    client::{ClientBuilder, EmbyClient, OpenListClient},
+    client::{ClientBuilder, EmbyClient, GoogleDriveClient, OpenListClient},
     config::core::Config,
     core::backend::{constants::DISK_BACKEND_TYPE, upstream_proxy, webdav},
     info_log,
@@ -30,6 +30,7 @@ pub struct AppState {
     local_metadata_cache: OnceCell<GeneralCache>,
     api_response_cache: OnceCell<GeneralCache>,
     emby_client: OnceCell<Arc<EmbyClient>>,
+    google_drive_client: OnceCell<Arc<GoogleDriveClient>>,
     open_list_client: OnceCell<Arc<OpenListClient>>,
     rate_limiter_cache: OnceCell<DashMap<String, RateLimiterCache>>,
     pub(crate) api_request_locks: DashMap<String, Arc<TokioMutex<()>>>,
@@ -57,6 +58,7 @@ impl AppState {
             local_metadata_cache: OnceCell::new(),
             api_response_cache: OnceCell::new(),
             emby_client: OnceCell::new(),
+            google_drive_client: OnceCell::new(),
             open_list_client: OnceCell::new(),
             rate_limiter_cache: OnceCell::new(),
             api_request_locks: DashMap::new(),
@@ -204,6 +206,14 @@ impl AppState {
         self.open_list_client
             .get_or_init(|| async move {
                 Arc::new(ClientBuilder::<OpenListClient>::new().build())
+            })
+            .await
+    }
+
+    pub async fn get_google_drive_client(&self) -> &Arc<GoogleDriveClient> {
+        self.google_drive_client
+            .get_or_init(|| async move {
+                Arc::new(ClientBuilder::<GoogleDriveClient>::new().build())
             })
             .await
     }

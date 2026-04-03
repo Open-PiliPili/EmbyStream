@@ -23,6 +23,7 @@ pub mod util;
 pub use api::{EmbyAPI, OpenListAPI, PhotoMessage, TelegramAPI, TextMessage};
 pub use app::*;
 pub use cache::{FileMetadata, GeneralCache};
+pub use client::GoogleDriveClient;
 pub use client::{ClientBuilder, EmbyClient, OpenListClient, TelegramClient};
 pub use core::*;
 pub use crypto::*;
