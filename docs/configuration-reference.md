@@ -348,6 +348,12 @@ shared drive name from the first path segment after path rewrite. `proxy_mode=re
 is supported but may expose OAuth bearer tokens to clients, so it should be used only
 when that leakage risk is acceptable.
 
+When at least one `googleDrive` node is configured, EmbyStream also starts a
+background token pre-refresh task. It runs every 45 minutes, reuses the same
+single-flight refresh lock as request-triggered refresh, and only reduces the
+chance of users hitting the 1-hour Google access-token expiry window. If
+Google refresh fails, the normal request-triggered fallback path still applies.
+
 Recommended delivery modes for `googleDrive`:
 
 - `proxy`: safest default. The server keeps the OAuth bearer token and fetches Google Drive on behalf of the client.

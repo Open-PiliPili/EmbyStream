@@ -12,7 +12,7 @@ use embystream::{
 use embystream::{
     auth::google::{GoogleAuthArgs, run_google_auth},
     backend::{
-        service::AppStreamService, stream::StreamMiddleware,
+        google_drive_auth, service::AppStreamService, stream::StreamMiddleware,
         stream_relay::StreamRelayMiddleware,
     },
     cli::{AuthSubcommand, Cli, Commands, RunArgs},
@@ -86,6 +86,7 @@ async fn run_app(
     let app_state = setup_cache(&config).await;
 
     setup_rate_limiters(&app_state).await;
+    setup_google_drive_refresh(&app_state).await;
 
     let mode = {
         let config_guard = app_state.get_config().await;
@@ -238,6 +239,32 @@ fn setup_crypto_provider() -> Result<(), Box<dyn Error + Send + Sync>> {
 async fn setup_rate_limiters(app_state: &Arc<AppState>) {
     app_state.init_rate_limiters().await;
     info_log!(INIT_LOGGER_DOMAIN, "Rate limiter refill task started.");
+}
+
+async fn setup_google_drive_refresh(app_state: &Arc<AppState>) {
+    let google_drive_node_count = {
+        let config = app_state.get_config().await;
+        config
+            .backend_nodes
+            .iter()
+            .filter(|node| google_drive_auth::is_google_drive_node(node))
+            .count()
+    };
+
+    if google_drive_node_count == 0 {
+        debug_log!(
+            INIT_LOGGER_DOMAIN,
+            "Skipping googleDrive periodic refresh task - no googleDrive nodes"
+        );
+        return;
+    }
+
+    google_drive_auth::start_periodic_refresh_task(app_state.clone());
+    info_log!(
+        INIT_LOGGER_DOMAIN,
+        "googleDrive periodic refresh task started (interval: 45 minutes, nodes: {})",
+        google_drive_node_count
+    );
 }
 
 async fn setup_frontend_gateway(
