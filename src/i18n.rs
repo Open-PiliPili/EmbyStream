@@ -13,20 +13,29 @@ static EN_MAP: Lazy<HashMap<String, String>> = Lazy::new(load_en);
 static ZH_MAP: Lazy<HashMap<String, String>> = Lazy::new(load_zh);
 
 fn load_en() -> HashMap<String, String> {
-    let v: Value = serde_json::from_str(include_str!("../locales/en.json"))
-        .expect("locales/en.json must be valid JSON");
-    json_object_to_map(v)
+    parse_locale_map(include_str!("../locales/en.json"), "locales/en.json")
 }
 
 fn load_zh() -> HashMap<String, String> {
-    let v: Value = serde_json::from_str(include_str!("../locales/zh.json"))
-        .expect("locales/zh.json must be valid JSON");
-    json_object_to_map(v)
+    parse_locale_map(include_str!("../locales/zh.json"), "locales/zh.json")
 }
 
-fn json_object_to_map(v: Value) -> HashMap<String, String> {
-    let o = v.as_object().expect("locale root must be a JSON object");
-    o.iter()
+fn parse_locale_map(raw: &str, source: &str) -> HashMap<String, String> {
+    let parsed: Value = match serde_json::from_str(raw) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Failed to parse {source}: {error}");
+            return HashMap::new();
+        }
+    };
+
+    let Some(object) = parsed.as_object() else {
+        eprintln!("Failed to load {source}: locale root must be a JSON object");
+        return HashMap::new();
+    };
+
+    object
+        .iter()
         .map(|(k, v)| {
             let s = match v {
                 Value::String(s) => s.clone(),

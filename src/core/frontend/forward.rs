@@ -20,8 +20,8 @@ use crate::{
     },
 };
 
-static NORMAL_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(concat!(
+static NORMAL_STREAM_REGEX: Lazy<Option<Regex>> = Lazy::new(|| {
+    compile_static_regex(concat!(
         r"(?i)^/(?:emby/)?videos/", // 1. Path prefix
         r"([a-zA-Z0-9_-]+)",        // 2. Item ID capture
         r"(?:",                     // 3. Start path alternatives
@@ -30,11 +30,10 @@ static NORMAL_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
         r"|/[a-zA-Z0-9_-]+\.m3u8",  // 6. Direct m3u8 path
         r")$"                       // 7. Close group
     ))
-    .expect("Invalid regex pattern")
 });
 
-static HLS_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(concat!(
+static HLS_STREAM_REGEX: Lazy<Option<Regex>> = Lazy::new(|| {
+    compile_static_regex(concat!(
         r"(?i)^/(?:emby/)?videos/", // 1. Path prefix
         r"([a-zA-Z0-9_-]+)",        // 2. Item ID capture
         r"/hls\d*/",                // 3. HLS path prefix
@@ -42,8 +41,17 @@ static HLS_STREAM_REGEX: Lazy<Regex> = Lazy::new(|| {
         r"(?:/\d+)?",               // 5. Optional HLS sequence
         r"\.(?:ts|m3u8)$"           // 6. HLS extensions
     ))
-    .expect("Invalid regex pattern")
 });
+
+fn compile_static_regex(pattern: &str) -> Option<Regex> {
+    match Regex::new(pattern) {
+        Ok(regex) => Some(regex),
+        Err(error) => {
+            eprintln!("Failed to compile forward regex '{pattern}': {error}");
+            None
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct ForwardMiddleware {
@@ -56,12 +64,16 @@ impl ForwardMiddleware {
     }
 
     fn get_item_id(&self, path: &str) -> Option<String> {
-        if let Some(caps) = NORMAL_STREAM_REGEX.captures(path) {
+        if let Some(caps) = NORMAL_STREAM_REGEX
+            .as_ref()
+            .and_then(|regex| regex.captures(path))
+        {
             return caps.get(1).map(|m| m.as_str().to_owned());
         }
 
         HLS_STREAM_REGEX
-            .captures(path)
+            .as_ref()
+            .and_then(|regex| regex.captures(path))
             .and_then(|caps| caps.get(1))
             .map(|m| m.as_str().to_owned())
     }

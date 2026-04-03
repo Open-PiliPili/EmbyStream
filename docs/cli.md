@@ -1,6 +1,7 @@
 # CLI usage
 
-The binary name is `embystream`. All subcommands support `--help`.
+The binary name is `embystream`.
+All subcommands support `--help`.
 
 ## Global behavior
 
@@ -8,7 +9,8 @@ The binary name is `embystream`. All subcommands support `--help`.
 embystream [COMMAND]
 ```
 
-- **`embystream` (no subcommand)** — exits without starting servers. Always invoke **`run`** to start gateways.
+- **`embystream` (no subcommand)**:
+  exits without starting servers. Always invoke **`run`** to start gateways.
 - **`embystream --version`** — print version.
 - **`embystream --help`** — list commands.
 
@@ -19,13 +21,16 @@ embystream [COMMAND]
 | `en` (default) | English `--help` text and English prompts in `embystream config …`. |
 | `zh` | Simplified Chinese `--help` (top-level descriptions) and Chinese prompts in the configuration wizard. |
 
-Put `--lang` before `--help` if you want localized help, e.g. `embystream --lang zh --help` or `embystream --lang zh config template --help`.
+Put `--lang` before `--help` if you want localized help, e.g.
+`embystream --lang zh --help` or
+`embystream --lang zh config template --help`.
 
 ---
 
 ## `embystream run`
 
-Starts the configured HTTP(S) gateways according to `[General].stream_mode`:
+Starts the configured HTTP(S) gateways according to
+`[General].stream_mode`:
 
 | Mode       | What starts |
 |------------|-------------|
@@ -84,7 +89,8 @@ embystream auth google \
   --no-browser
 ```
 
-This still requires completing authorization in a browser that can finish the installed-app redirect flow.
+This still requires completing authorization in a browser that can finish
+the installed-app redirect flow.
 
 ---
 
@@ -94,7 +100,8 @@ Interactive configuration assistant (English prompts).
 
 ### `embystream config show`
 
-Scans the **current working directory** for valid TOML configs, lets you pick one, and prints it with secrets masked unless you confirm.
+Scans the **current working directory** for valid TOML configs, lets you
+pick one, and prints it with secrets masked unless you confirm.
 
 ```bash
 cd /path/to/configs
@@ -103,7 +110,9 @@ embystream config show
 
 ### `embystream config template`
 
-Walks through `stream_mode` and related choices, then writes a starter `config.toml` via a temporary file and **atomic rename** (safer on live systems).
+Walks through `stream_mode` and related choices, then writes a starter
+`config.toml` via a temporary file and **atomic rename**.
+This is safer on live systems.
 
 ```bash
 cd ~/embystream

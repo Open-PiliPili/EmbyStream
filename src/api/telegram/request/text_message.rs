@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::network::NetworkTask;
 
@@ -39,16 +39,22 @@ impl TextMessage {
     /// - `parse_mode: "MarkdownV2"`
     /// - `chat_id` from parameter
     pub fn to_json_value(&self, chat_id: String) -> Value {
-        let mut value = serde_json::to_value(self)
-            .expect("Failed to serialize TextMessage");
+        let mut object = Map::with_capacity(4);
+        object.insert("text".to_string(), Value::String(self.text.clone()));
+        object.insert(
+            "parse_mode".to_string(),
+            Value::String("MarkdownV2".to_string()),
+        );
+        object.insert("chat_id".to_string(), Value::String(chat_id));
 
-        if let Some(obj) = value.as_object_mut() {
-            obj.entry("parse_mode")
-                .or_insert_with(|| "MarkdownV2".into());
-            obj.entry("chat_id").or_insert_with(|| chat_id.into());
+        if let Some(reply_markup) = &self.reply_markup {
+            object.insert(
+                "reply_markup".to_string(),
+                Value::String(reply_markup.clone()),
+            );
         }
 
-        value
+        Value::Object(object)
     }
 
     /// Converts the message into a network task ready for sending.

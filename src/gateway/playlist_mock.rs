@@ -10,27 +10,38 @@ use super::{
 };
 use crate::{PLAYLIST_MOCK_LOGGER_DOMAIN, debug_log, warn_log};
 
-static PLAYLISTS_ANY: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^/(?:emby/)?Playlists(?:/|$)").expect("Invalid regex")
+static PLAYLISTS_ANY: Lazy<Option<Regex>> =
+    Lazy::new(|| compile_static_regex(r"(?i)^/(?:emby/)?Playlists(?:/|$)"));
+
+static PLAYLISTS_BASE: Lazy<Option<Regex>> =
+    Lazy::new(|| compile_static_regex(r"(?i)^/(?:emby/)?Playlists$"));
+
+static PLAYLISTS_ITEMS: Lazy<Option<Regex>> =
+    Lazy::new(|| compile_static_regex(r"(?i)^/(?:emby/)?Playlists/\w+/Items$"));
+
+static PLAYLISTS_ITEM_SINGLE: Lazy<Option<Regex>> = Lazy::new(|| {
+    compile_static_regex(r"(?i)^/(?:emby/)?Playlists/\w+/Items/\w+$")
 });
 
-static PLAYLISTS_BASE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^/(?:emby/)?Playlists$").expect("Invalid regex")
+static PLAYLISTS_ITEM_MOVE: Lazy<Option<Regex>> = Lazy::new(|| {
+    compile_static_regex(r"(?i)^/(?:emby/)?Playlists/\w+/Items/\w+/Move/\w+$")
 });
 
-static PLAYLISTS_ITEMS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^/(?:emby/)?Playlists/\w+/Items$").expect("Invalid regex")
-});
+fn compile_static_regex(pattern: &str) -> Option<Regex> {
+    match Regex::new(pattern) {
+        Ok(regex) => Some(regex),
+        Err(error) => {
+            eprintln!("Failed to compile playlist regex '{pattern}': {error}");
+            None
+        }
+    }
+}
 
-static PLAYLISTS_ITEM_SINGLE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^/(?:emby/)?Playlists/\w+/Items/\w+$")
-        .expect("Invalid regex")
-});
-
-static PLAYLISTS_ITEM_MOVE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^/(?:emby/)?Playlists/\w+/Items/\w+/Move/\w+$")
-        .expect("Invalid regex")
-});
+fn matches_regex(regex: &Lazy<Option<Regex>>, path: &str) -> bool {
+    regex
+        .as_ref()
+        .is_some_and(|compiled| compiled.is_match(path))
+}
 
 #[derive(Clone)]
 pub struct PlaylistMockMiddleware;
@@ -72,7 +83,7 @@ impl PlaylistMockMiddleware {
         let method = &ctx.method;
 
         // POST /Playlists → create playlist
-        if *method == Method::POST && PLAYLISTS_BASE.is_match(path) {
+        if *method == Method::POST && matches_regex(&PLAYLISTS_BASE, path) {
             return Some(ResponseBuilder::with_json(
                 StatusCode::OK,
                 r#"{"Id":"1000000000"}"#,
@@ -80,17 +91,19 @@ impl PlaylistMockMiddleware {
         }
 
         // POST /Playlists/{id}/Items → add items
-        if *method == Method::POST && PLAYLISTS_ITEMS.is_match(path) {
+        if *method == Method::POST && matches_regex(&PLAYLISTS_ITEMS, path) {
             return Some(ResponseBuilder::with_json(StatusCode::OK, ""));
         }
 
         // DELETE /Playlists/{id}/Items/{itemId} → remove item
-        if *method == Method::DELETE && PLAYLISTS_ITEM_SINGLE.is_match(path) {
+        if *method == Method::DELETE
+            && matches_regex(&PLAYLISTS_ITEM_SINGLE, path)
+        {
             return Some(ResponseBuilder::with_json(StatusCode::OK, ""));
         }
 
         // GET /Playlists/{id}/Items → list items
-        if *method == Method::GET && PLAYLISTS_ITEMS.is_match(path) {
+        if *method == Method::GET && matches_regex(&PLAYLISTS_ITEMS, path) {
             return Some(ResponseBuilder::with_json(
                 StatusCode::OK,
                 r#"{"Items":[],"TotalRecordCount":0}"#,
@@ -98,11 +111,12 @@ impl PlaylistMockMiddleware {
         }
 
         // POST /Playlists/{id}/Items/{itemId}/Move/{target} → move item
-        if *method == Method::POST && PLAYLISTS_ITEM_MOVE.is_match(path) {
+        if *method == Method::POST && matches_regex(&PLAYLISTS_ITEM_MOVE, path)
+        {
             return Some(ResponseBuilder::with_json(StatusCode::OK, ""));
         }
 
-        if PLAYLISTS_ANY.is_match(path) {
+        if matches_regex(&PLAYLISTS_ANY, path) {
             warn_log!(
                 PLAYLIST_MOCK_LOGGER_DOMAIN,
                 "Unmatched playlist request: {} {} → 403",

@@ -74,7 +74,10 @@ impl Emby {
             clean_url.to_string()
         };
 
-        uri_str.parse().expect("Failed to parse backend URI")
+        uri_str.parse().unwrap_or_else(|error| {
+            eprintln!("Failed to parse Emby URI '{uri_str}': {error}");
+            Uri::from_static("/")
+        })
     }
 }
 

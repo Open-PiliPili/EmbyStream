@@ -144,3 +144,37 @@ user_agent = ""
 # query params allowed):
 # url_mode = "url_template"
 # url_template = "http://127.0.0.1:60005/dav/item?path={file_path}&sort=desc"
+
+# googleDrive: shared-drive media via Google Drive API. `drive_id` takes
+# precedence over `drive_name`; if both are empty, the first rewritten path
+# segment is used as the shared-drive name. `proxy_mode=redirect` sends the
+# bearer token to clients, so prefer `proxy` or `accel_redirect`.
+[[BackendNode]]
+name = "GoogleDriveMedia"
+type = "googleDrive"
+pattern = "/gdrive/.*"
+base_url = "https://www.googleapis.com"
+port = "443"
+path = ""
+priority = 0
+proxy_mode = "accel_redirect"
+client_speed_limit_kbs = 0
+client_burst_speed_kbs = 0
+
+[[BackendNode.PathRewrite]]
+enable = false
+pattern = "^/gdrive(/.*)$"
+replacement = "$1"
+
+[BackendNode.AntiReverseProxy]
+enable = false
+host = ""
+
+[BackendNode.GoogleDrive]
+node_uuid = "google_drive_node_a"
+client_id = "replace_with_google_client_id"
+client_secret = "replace_with_google_client_secret"
+drive_id = ""
+drive_name = "SharedMedia"
+access_token = "replace_with_google_access_token"
+refresh_token = "replace_with_google_refresh_token"

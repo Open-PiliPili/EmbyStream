@@ -54,7 +54,8 @@ impl InstalledFlowDelegate for CliInstalledFlowDelegate {
                 match webbrowser::open(url) {
                     Ok(_) => {
                         println!(
-                            "Browser launch requested. If nothing opens, use the URL above manually."
+                            "Browser launch requested. If nothing opens, \
+                             use the URL above manually."
                         );
                     }
                     Err(err) => {
@@ -66,7 +67,8 @@ impl InstalledFlowDelegate for CliInstalledFlowDelegate {
                 }
             } else {
                 println!(
-                    "Browser auto-open disabled. Copy the URL into a browser manually."
+                    "Browser auto-open disabled. Copy the URL into a browser \
+                     manually."
                 );
             }
 

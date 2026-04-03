@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use time::UtcOffset;
+use time::macros::format_description;
 
 use tracing_subscriber::{
     EnvFilter, Registry, fmt, layer::SubscriberExt, util::SubscriberInitExt,
@@ -57,10 +58,10 @@ impl LoggerBuilder {
     }
 
     pub fn build(self) {
-        let timer_fmt = time::format_description::parse(
-            "[year]-[month padding:zero]-[day padding:zero] [hour]:[minute]:[second].[subsecond digits:6]",
-        )
-            .expect("Failed to parse time format");
+        let timer_fmt = format_description!(
+            "[year]-[month padding:zero]-[day padding:zero] \
+             [hour]:[minute]:[second].[subsecond digits:6]"
+        );
         let time_offset =
             UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC);
         let timer = fmt::time::OffsetTime::new(time_offset, timer_fmt);
