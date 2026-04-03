@@ -1,5 +1,10 @@
 {
   "cli.about": "Emby 流媒体代理：按 TOML 配置运行前端、后端或双网关",
+  "cli.auth.about": "外部服务的 OAuth 辅助命令",
+  "cli.auth.google.about": "启动 Google OAuth 已安装应用授权流程",
+  "cli.auth.google.arg.client_id": "Google OAuth client ID",
+  "cli.auth.google.arg.client_secret": "Google OAuth client secret",
+  "cli.auth.google.arg.no_browser": "不要自动打开浏览器，仅打印授权链接",
   "cli.arg.lang": "界面语言：en（默认，英文）或 zh（简体中文）；影响配置向导与 --help",
   "cli.config.about": "交互式编辑/生成 TOML 配置（提示语随 --lang 切换）",
   "cli.config.show.about": "列出当前目录下合法配置并查看其一（默认遮蔽密钥）",

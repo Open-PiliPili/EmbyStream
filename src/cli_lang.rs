@@ -50,6 +50,23 @@ pub fn localize_cli_command(cmd: &mut Command, lang: UiLang) {
             });
     }
 
+    if let Some(auth) = cmd.find_subcommand_mut("auth") {
+        *auth = std::mem::take(auth).about(lookup(lang, "cli.auth.about"));
+        if let Some(google) = auth.find_subcommand_mut("google") {
+            *google = std::mem::take(google)
+                .about(lookup(lang, "cli.auth.google.about"))
+                .mut_arg("client_id", |a| {
+                    a.help(lookup(lang, "cli.auth.google.arg.client_id"))
+                })
+                .mut_arg("client_secret", |a| {
+                    a.help(lookup(lang, "cli.auth.google.arg.client_secret"))
+                })
+                .mut_arg("no_browser", |a| {
+                    a.help(lookup(lang, "cli.auth.google.arg.no_browser"))
+                });
+        }
+    }
+
     if let Some(cfg) = cmd.find_subcommand_mut("config") {
         *cfg = std::mem::take(cfg).about(lookup(lang, "cli.config.about"));
         if let Some(show) = cfg.find_subcommand_mut("show") {

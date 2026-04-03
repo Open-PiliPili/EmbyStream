@@ -1,5 +1,10 @@
 {
   "cli.about": "Emby streaming proxy: run frontend, backend, or dual gateways from TOML config.",
+  "cli.auth.about": "OAuth helper commands for external providers.",
+  "cli.auth.google.about": "Start Google OAuth installed-flow authentication.",
+  "cli.auth.google.arg.client_id": "Google OAuth client ID.",
+  "cli.auth.google.arg.client_secret": "Google OAuth client secret.",
+  "cli.auth.google.arg.no_browser": "Do not try to open a browser automatically; print the authorization URL only.",
   "cli.arg.lang": "UI language: en (default) or zh (Simplified Chinese); affects config wizard and --help.",
   "cli.config.about": "Interactive TOML configuration wizard (prompt language follows `--lang`).",
   "cli.config.show.about": "List valid TOML configs here and print one (mask secrets unless you confirm).",

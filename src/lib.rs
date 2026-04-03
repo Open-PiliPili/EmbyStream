@@ -1,5 +1,6 @@
 pub mod api;
 pub mod app;
+pub mod auth;
 pub mod cache;
 pub mod cli;
 pub mod cli_lang;

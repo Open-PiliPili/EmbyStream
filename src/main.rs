@@ -10,11 +10,12 @@ use embystream::{
     i18n::lookup, info_log,
 };
 use embystream::{
+    auth::google::{GoogleAuthArgs, run_google_auth},
     backend::{
         service::AppStreamService, stream::StreamMiddleware,
         stream_relay::StreamRelayMiddleware,
     },
-    cli::{Cli, Commands, RunArgs},
+    cli::{AuthSubcommand, Cli, Commands, RunArgs},
     cli_lang::{detect_lang_from_env_early, localize_cli_command},
     cli_wizard,
     config::{core::Config, general::StreamMode},
@@ -43,6 +44,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Some(Commands::Run(run_args)) => {
             run_app(&run_args).await?;
         }
+        Some(Commands::Auth(auth_args)) => match auth_args.sub {
+            AuthSubcommand::Google(args) => {
+                run_google_auth(&GoogleAuthArgs {
+                    client_id: args.client_id,
+                    client_secret: args.client_secret,
+                    no_browser: args.no_browser,
+                })
+                .await?;
+            }
+        },
         Some(Commands::Config(ref cfg_args)) => {
             if let Err(e) = cli_wizard::run(cfg_args, cli.lang) {
                 let prefix = lookup(cli.lang, "error.wizard_prefix");

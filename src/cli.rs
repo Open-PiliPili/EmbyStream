@@ -60,8 +60,35 @@ pub struct Cli {
 pub enum Commands {
     /// Start HTTP gateways (default when no subcommand: use `run` explicitly).
     Run(RunArgs),
+    /// OAuth helper commands for external providers.
+    Auth(AuthArgs),
     /// Interactive TOML configuration wizard (prompt language follows `--lang`).
     Config(ConfigArgs),
+}
+
+#[derive(Parser, Debug)]
+pub struct AuthArgs {
+    #[command(subcommand)]
+    pub sub: AuthSubcommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AuthSubcommand {
+    /// Start Google OAuth installed-flow authentication.
+    Google(GoogleAuthCliArgs),
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct GoogleAuthCliArgs {
+    /// Google OAuth client ID.
+    #[arg(long = "client-id", value_name = "CLIENT_ID")]
+    pub client_id: String,
+    /// Google OAuth client secret.
+    #[arg(long = "secret", value_name = "CLIENT_SECRET")]
+    pub client_secret: String,
+    /// Do not try to open a browser automatically; print the authorization URL only.
+    #[arg(long = "no-browser")]
+    pub no_browser: bool,
 }
 
 #[derive(Parser, Debug)]

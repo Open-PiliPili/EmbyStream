@@ -58,6 +58,36 @@ embystream run -c ./config.toml \
 
 ---
 
+## `embystream auth google`
+
+Starts a Google OAuth installed-app flow for Drive readonly access.
+
+```bash
+embystream auth google \
+  --client-id YOUR_CLIENT_ID \
+  --secret YOUR_CLIENT_SECRET
+```
+
+Behavior:
+
+- Prints the authorization URL every time.
+- Tries to open a browser by default.
+- Spins up a localhost callback for the installed-app redirect flow.
+- Prints `access_token`, `refresh_token`, and `expires_at` after success.
+
+Use `--no-browser` on headless hosts:
+
+```bash
+embystream auth google \
+  --client-id YOUR_CLIENT_ID \
+  --secret YOUR_CLIENT_SECRET \
+  --no-browser
+```
+
+This still requires completing authorization in a browser that can finish the installed-app redirect flow.
+
+---
+
 ## `embystream config`
 
 Interactive configuration assistant (English prompts).
