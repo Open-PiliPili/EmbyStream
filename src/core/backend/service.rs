@@ -1,6 +1,7 @@
 use std::{borrow::Cow, path::PathBuf, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
+use form_urlencoded::Serializer;
 use hyper::{HeaderMap, StatusCode, Uri, header};
 use tokio::sync::Mutex as TokioMutex;
 
@@ -637,20 +638,26 @@ impl AppStreamService {
             return Err(AppStreamError::InvalidUri);
         }
 
-        let mut internal_headers = HeaderMap::new();
-        if let Some(value) = auth_headers.get(header::AUTHORIZATION).cloned() {
-            internal_headers
-                .insert(google_drive_auth::accel_header_name().clone(), value);
+        let mut internal_path = format!(
+            "{}/{}/{}",
+            google_drive::ACCEL_REDIRECT_PREFIX,
+            node_uuid,
+            encoded_file_id
+        );
+        if let Some(auth_value) = auth_headers
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+        {
+            let query = Serializer::new(String::new())
+                .append_pair("token", auth_value)
+                .finish();
+            internal_path.push('?');
+            internal_path.push_str(&query);
         }
 
         Ok(AccelRedirectInfo {
-            internal_path: format!(
-                "{}/{}/{}",
-                google_drive::ACCEL_REDIRECT_PREFIX,
-                node_uuid,
-                encoded_file_id
-            ),
-            internal_headers,
+            internal_path,
+            internal_headers: HeaderMap::new(),
         })
     }
 
@@ -933,9 +940,7 @@ mod tests {
             backend::{BackendNode, GoogleDriveConfig},
             core::{finish_raw_config, parse_raw_config_str},
         },
-        core::{
-            backend::google_drive_auth, request::Request as AppStreamRequest,
-        },
+        core::request::Request as AppStreamRequest,
     };
 
     const MIN_FRONTEND_CONFIG: &str = r#"
@@ -1075,7 +1080,7 @@ host = ""
     }
 
     #[test]
-    fn build_google_drive_accel_redirect_info_carries_internal_auth_header() {
+    fn build_google_drive_accel_redirect_info_embeds_auth_in_query() {
         let mut auth_headers = HeaderMap::new();
         auth_headers.insert(
             header::AUTHORIZATION,
@@ -1091,15 +1096,11 @@ host = ""
 
         assert_eq!(
             info.internal_path,
-            "/_origin/google-drive/gd-node/file%2Did%2D123"
-        );
-        assert_eq!(
-            info.internal_headers
-                .get(google_drive_auth::accel_header_name())
-                .and_then(|value| value.to_str().ok()),
-            Some("Bearer access-token")
+            "/_origin/google-drive/gd-node/file%2Did%2D123?\
+token=Bearer+access-token"
         );
         assert!(info.internal_headers.get(header::AUTHORIZATION).is_none());
+        assert!(info.internal_headers.is_empty());
     }
 
     #[tokio::test]

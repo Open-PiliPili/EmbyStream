@@ -69,10 +69,6 @@ pub fn extra_headers_from_auth_line(
     Ok(map)
 }
 
-pub fn accel_header_name() -> header::HeaderName {
-    header::HeaderName::from_static("x-embystream-upstream-authorization")
-}
-
 fn collect_refreshable_google_drive_nodes(
     nodes: &[BackendNode],
 ) -> Vec<BackendNode> {

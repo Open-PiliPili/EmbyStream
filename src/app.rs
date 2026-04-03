@@ -17,6 +17,7 @@ use crate::{
 // a workaround for missing Range headers.
 const PROBLEMATIC_CLIENTS: &[&str] =
     &["yamby", "hills", "embytolocalplayer", "Emby/"];
+const GOOGLE_DRIVE_FILE_ID_CACHE_TTL_SECS: u64 = 20 * 60;
 
 pub struct AppState {
     pub(crate) config: TokioRwLock<Config>,
@@ -207,7 +208,9 @@ impl AppState {
 
     pub async fn get_google_drive_file_id_cache(&self) -> &GeneralCache {
         self.google_drive_file_id_cache
-            .get_or_init(|| async move { GeneralCache::new(4096, 60 * 60 * 6) })
+            .get_or_init(|| async move {
+                GeneralCache::new(4096, GOOGLE_DRIVE_FILE_ID_CACHE_TTL_SECS)
+            })
             .await
     }
 

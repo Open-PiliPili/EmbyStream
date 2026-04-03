@@ -398,7 +398,7 @@ location ~ ^/_origin/google-drive/([^/]+)/([^/]+)$ {
     set $google_file_id $2;
     set $google_drive_query "alt=media&supportsAllDrives=true&acknowledgeAbuse=true";
     proxy_pass https://www.googleapis.com/drive/v3/files/$google_file_id?$google_drive_query;
-    proxy_set_header Authorization $upstream_http_x_embystream_upstream_authorization;
+    proxy_set_header Authorization $arg_token;
     proxy_set_header Host www.googleapis.com;
     proxy_ssl_server_name on;
 }
@@ -406,10 +406,10 @@ location ~ ^/_origin/google-drive/([^/]+)/([^/]+)$ {
 
 Notes for the Nginx example:
 
-- EmbyStream responds with `X-Accel-Redirect: /_origin/google-drive/<node_uuid>/<file_id>`.
-- EmbyStream also responds with `x-embystream-upstream-authorization: Bearer ...`.
-- The internal Nginx location must copy that internal-use header into the
-  upstream `Authorization` header, otherwise Google Drive will reject the
+- EmbyStream responds with
+  `X-Accel-Redirect: /_origin/google-drive/<node_uuid>/<file_id>?token=Bearer%20...`.
+- The internal Nginx location must copy the internal-use query parameter into
+  the upstream `Authorization` header, otherwise Google Drive will reject the
   media request.
 - `redirect` mode skips this internal hop entirely and therefore carries the
   highest bearer-token exposure risk.
