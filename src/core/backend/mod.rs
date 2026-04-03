@@ -1,4 +1,5 @@
 pub mod constants;
+pub mod google_drive;
 pub mod local_streamer;
 pub mod proxy_mode;
 pub mod read_stream;
