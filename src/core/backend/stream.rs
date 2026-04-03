@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hyper::{
-    HeaderMap, Method, Response, StatusCode, Uri, body::Incoming, header,
-};
+use hyper::{Method, Response, StatusCode, Uri, body::Incoming, header};
 
 use super::{result::Result as AppStreamResult, service::StreamService};
 use crate::core::backend::webdav::ACCEL_REDIRECT_HEADER;
@@ -269,7 +267,7 @@ impl Middleware for StreamMiddleware {
                         )
                     }
                     AppStreamResult::AccelRedirect(accel_redirect_info) => {
-                        let mut headers = HeaderMap::new();
+                        let mut headers = accel_redirect_info.internal_headers;
                         if let Ok(value) =
                             accel_redirect_info.internal_path.parse()
                         {

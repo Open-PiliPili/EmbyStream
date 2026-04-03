@@ -19,7 +19,7 @@ const PROBLEMATIC_CLIENTS: &[&str] =
     &["yamby", "hills", "embytolocalplayer", "Emby/"];
 
 pub struct AppState {
-    config: TokioRwLock<Config>,
+    pub(crate) config: TokioRwLock<Config>,
     frontend_path_rewrite_cache: OnceCell<Vec<PathRewriter>>,
     problematic_clients_cache: OnceCell<Vec<String>>,
     encrypt_cache: OnceCell<GeneralCache>,
@@ -29,6 +29,7 @@ pub struct AppState {
     open_list_cache: OnceCell<GeneralCache>,
     local_metadata_cache: OnceCell<GeneralCache>,
     api_response_cache: OnceCell<GeneralCache>,
+    google_drive_file_id_cache: OnceCell<GeneralCache>,
     emby_client: OnceCell<Arc<EmbyClient>>,
     google_drive_client: OnceCell<Arc<GoogleDriveClient>>,
     open_list_client: OnceCell<Arc<OpenListClient>>,
@@ -40,6 +41,11 @@ pub struct AppState {
     pub(crate) strm_request_locks: DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) local_metadata_request_locks:
         DashMap<String, Arc<TokioMutex<()>>>,
+    pub(crate) google_drive_file_id_request_locks:
+        DashMap<String, Arc<TokioMutex<()>>>,
+    pub(crate) google_drive_access_token_cache: DashMap<String, String>,
+    pub(crate) google_drive_refresh_locks: DashMap<String, Arc<TokioMutex<()>>>,
+    pub(crate) config_write_lock: TokioMutex<()>,
     pub(crate) webdav_auth_cache: DashMap<String, String>,
     pub(crate) webdav_auth_probe_locks: DashMap<String, Arc<TokioMutex<()>>>,
 }
@@ -57,6 +63,7 @@ impl AppState {
             open_list_cache: OnceCell::new(),
             local_metadata_cache: OnceCell::new(),
             api_response_cache: OnceCell::new(),
+            google_drive_file_id_cache: OnceCell::new(),
             emby_client: OnceCell::new(),
             google_drive_client: OnceCell::new(),
             open_list_client: OnceCell::new(),
@@ -66,6 +73,10 @@ impl AppState {
             playback_info_request_locks: DashMap::new(),
             strm_request_locks: DashMap::new(),
             local_metadata_request_locks: DashMap::new(),
+            google_drive_file_id_request_locks: DashMap::new(),
+            google_drive_access_token_cache: DashMap::new(),
+            google_drive_refresh_locks: DashMap::new(),
+            config_write_lock: TokioMutex::new(()),
             webdav_auth_cache: DashMap::new(),
             webdav_auth_probe_locks: DashMap::new(),
         }
@@ -191,6 +202,12 @@ impl AppState {
                     self.get_api_cache_settings().await;
                 GeneralCache::new(max_capacity, default_ttl)
             })
+            .await
+    }
+
+    pub async fn get_google_drive_file_id_cache(&self) -> &GeneralCache {
+        self.google_drive_file_id_cache
+            .get_or_init(|| async move { GeneralCache::new(4096, 60 * 60 * 6) })
             .await
     }
 

@@ -6,6 +6,12 @@ pub struct GoogleDriveConfig {
     /// Stable node identifier used for token/cache keys.
     #[serde(default)]
     pub node_uuid: String,
+    /// OAuth client ID used when refreshing access tokens.
+    #[serde(default)]
+    pub client_id: String,
+    /// OAuth client secret used when refreshing access tokens.
+    #[serde(default)]
+    pub client_secret: String,
     /// Preferred shared drive ID; takes precedence over `drive_name`.
     #[serde(default)]
     pub drive_id: String,

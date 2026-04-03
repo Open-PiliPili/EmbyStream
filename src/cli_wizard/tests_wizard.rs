@@ -260,6 +260,8 @@ priority = 0
 proxy_mode = "proxy"
 
 [BackendNode.GoogleDrive]
+client_id = "cid"
+client_secret = "csecret"
 refresh_token = "refresh"
 "#;
 
@@ -314,6 +316,8 @@ proxy_mode = "proxy"
 
 [BackendNode.GoogleDrive]
 node_uuid = "google_drive_a"
+client_id = "cid"
+client_secret = "csecret"
 "#;
 
     let raw: RawConfig = parse_raw_config_str(toml).expect("fixture TOML");
@@ -367,6 +371,8 @@ proxy_mode = "proxy"
 
 [BackendNode.GoogleDrive]
 node_uuid = "dup_google_drive"
+client_id = "cid"
+client_secret = "csecret"
 refresh_token = "refresh-a"
 
 [[BackendNode]]
@@ -381,6 +387,8 @@ proxy_mode = "redirect"
 
 [BackendNode.GoogleDrive]
 node_uuid = "dup_google_drive"
+client_id = "cid"
+client_secret = "csecret"
 refresh_token = "refresh-b"
 "#;
 

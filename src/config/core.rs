@@ -9,6 +9,7 @@ use directories::BaseDirs;
 use libc;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 use super::{
@@ -271,18 +272,21 @@ fn validate_webdav_accel_redirect_nodes(
     for node in backend_nodes {
         let is_webdav =
             node.backend_type.eq_ignore_ascii_case(WEBDAV_BACKEND_TYPE);
+        let is_google_drive = node
+            .backend_type
+            .eq_ignore_ascii_case(GOOGLE_DRIVE_BACKEND_TYPE);
         let is_accel_redirect = node
             .proxy_mode
             .eq_ignore_ascii_case(PROXY_MODE_ACCEL_REDIRECT);
 
-        if is_accel_redirect && !is_webdav {
+        if is_accel_redirect && !is_webdav && !is_google_drive {
             return Err(ConfigError::InvalidValue(format!(
-                "proxy_mode '{}' is only supported for WebDav nodes (node '{}')",
+                "proxy_mode '{}' is only supported for WebDav/googleDrive nodes (node '{}')",
                 PROXY_MODE_ACCEL_REDIRECT, node.name
             )));
         }
 
-        if !is_accel_redirect {
+        if !is_accel_redirect || !is_webdav {
             continue;
         }
 
@@ -345,6 +349,20 @@ fn validate_google_drive_nodes(
         if node_uuid.is_empty() {
             return Err(ConfigError::MissingConfig(format!(
                 "BackendNode.GoogleDrive.node_uuid for node '{}'",
+                node.name
+            )));
+        }
+
+        if cfg.client_id.trim().is_empty() {
+            return Err(ConfigError::MissingConfig(format!(
+                "BackendNode.GoogleDrive.client_id for node '{}'",
+                node.name
+            )));
+        }
+
+        if cfg.client_secret.trim().is_empty() {
+            return Err(ConfigError::MissingConfig(format!(
+                "BackendNode.GoogleDrive.client_secret for node '{}'",
                 node.name
             )));
         }
@@ -441,4 +459,69 @@ pub fn finish_raw_config(
         http2: raw_config.http2.unwrap_or_default(),
         fallback: raw_config.fallback,
     })
+}
+
+fn write_atomic_config(dest: &Path, contents: &str) -> Result<(), ConfigError> {
+    let dest_dir = dest
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(dest_dir)?;
+
+    let mut tmp = NamedTempFile::new_in(dest_dir)?;
+    use std::io::Write as _;
+    tmp.write_all(contents.as_bytes())?;
+    tmp.as_file_mut().sync_all()?;
+    tmp.persist(dest).map_err(|e| ConfigError::Io(e.error))?;
+    Ok(())
+}
+
+pub fn persist_google_drive_access_token(
+    config_path: &Path,
+    node_uuid: &str,
+    access_token: &str,
+) -> Result<(), ConfigError> {
+    let content = fs::read_to_string(config_path)?;
+    let mut doc: toml::Value = toml::from_str(&content)?;
+    let backend_nodes = doc
+        .get_mut("BackendNode")
+        .and_then(toml::Value::as_array_mut)
+        .ok_or_else(|| ConfigError::MissingConfig("BackendNode".to_string()))?;
+
+    let mut matched = false;
+    for node in backend_nodes {
+        let Some(google_drive) = node
+            .get_mut("GoogleDrive")
+            .and_then(toml::Value::as_table_mut)
+        else {
+            continue;
+        };
+        let current_uuid = google_drive
+            .get("node_uuid")
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default();
+        if current_uuid != node_uuid {
+            continue;
+        }
+        google_drive.insert(
+            "access_token".to_string(),
+            toml::Value::String(access_token.to_string()),
+        );
+        matched = true;
+        break;
+    }
+
+    if !matched {
+        return Err(ConfigError::MissingConfig(format!(
+            "BackendNode.GoogleDrive.node_uuid '{}'",
+            node_uuid
+        )));
+    }
+
+    let serialized = toml::to_string_pretty(&doc).map_err(|error| {
+        ConfigError::Io(IoError::other(format!(
+            "serialize config after googleDrive token update: {error}"
+        )))
+    })?;
+    write_atomic_config(config_path, &serialized)
 }

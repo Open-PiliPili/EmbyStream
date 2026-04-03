@@ -1486,6 +1486,20 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
                 );
                 let access_token: String = input_text_w_echo(None, true)?;
                 intro(
+                    tr("wizard.field.client_id"),
+                    tr("wizard.prompt.google_drive_client_id"),
+                    None,
+                    None,
+                );
+                let client_id: String = input_text_w_echo(None, true)?;
+                intro(
+                    tr("wizard.field.client_secret"),
+                    tr("wizard.prompt.google_drive_client_secret"),
+                    None,
+                    None,
+                );
+                let client_secret: String = input_secret_w_echo(false)?;
+                intro(
                     tr("wizard.field.refresh_token"),
                     tr("wizard.prompt.google_drive_refresh_token"),
                     None,
@@ -1498,6 +1512,8 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
                     None,
                     Some(GoogleDriveConfig {
                         node_uuid,
+                        client_id,
+                        client_secret,
                         drive_id,
                         drive_name,
                         access_token,

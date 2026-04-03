@@ -14,9 +14,9 @@ pub(crate) enum Source {
     Remote {
         uri: Uri,
         mode: ProxyMode,
+        extra_upstream_headers: Option<hyper::HeaderMap>,
     },
-    WebDavAccelRedirect {
-        node_uuid: String,
-        file_path: String,
+    AccelRedirect {
+        info: crate::core::redirect_info::AccelRedirectInfo,
     },
 }

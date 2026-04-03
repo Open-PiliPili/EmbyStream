@@ -341,6 +341,8 @@ fn google_drive_example_node() -> BackendNode {
         direct_link: None,
         google_drive: Some(GoogleDriveConfig {
             node_uuid: "google_drive_node_a".into(),
+            client_id: "replace_with_google_client_id".into(),
+            client_secret: "replace_with_google_client_secret".into(),
             drive_name: "SharedMedia".into(),
             access_token: "replace_with_google_access_token".into(),
             refresh_token: "replace_with_google_refresh_token".into(),

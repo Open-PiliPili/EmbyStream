@@ -325,8 +325,9 @@ Optional `[BackendNode.WebDav]`:
 | `user_agent`   | Custom UA for WebDAV HTTP calls. |
 
 `accel_redirect` is intended for Nginx `X-Accel-Redirect` deployments. It is
-validated at startup and is only allowed on `WebDav` nodes. When enabled,
-`node_uuid` must be unique across all `WebDav + accel_redirect` nodes.
+validated at startup and is only allowed on `WebDav` or `googleDrive` nodes.
+When enabled, `node_uuid` must be unique across all `WebDav + accel_redirect`
+nodes.
 
 ### `googleDrive`
 
@@ -335,6 +336,8 @@ Requires `[BackendNode.GoogleDrive]`:
 | Field | Description |
 |-------|-------------|
 | `node_uuid` | Required. Stable ID used for token/cache keys; must be unique across `googleDrive` nodes. |
+| `client_id` | Required OAuth client ID used when refreshing `access_token`. |
+| `client_secret` | Required OAuth client secret used when refreshing `access_token`. |
 | `drive_id` | Preferred shared drive ID. Takes precedence over `drive_name`. |
 | `drive_name` | Shared drive name fallback when `drive_id` is absent. |
 | `access_token` | Cached OAuth access token. Can be refreshed and written back by the app later. |

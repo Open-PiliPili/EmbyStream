@@ -7,8 +7,8 @@ use hyper::{
 };
 
 use super::{
-    response::Response, result::Result as AppStreamResult, upstream_proxy,
-    webdav::BACKEND_TYPE as WEBDAV_BACKEND_TYPE, webdav_auth,
+    google_drive_auth, response::Response, result::Result as AppStreamResult,
+    upstream_proxy, webdav::BACKEND_TYPE as WEBDAV_BACKEND_TYPE, webdav_auth,
 };
 use crate::{
     AppState, REMOTE_STREAMER_LOGGER_DOMAIN, config::backend::BackendNode,
@@ -31,6 +31,10 @@ pub struct RemoteStreamParams<'a> {
 
 fn is_webdav_node(node: &BackendNode) -> bool {
     node.backend_type.eq_ignore_ascii_case(WEBDAV_BACKEND_TYPE)
+}
+
+fn is_google_drive_node(node: &BackendNode) -> bool {
+    google_drive_auth::is_google_drive_node(node)
 }
 
 fn webdav_needs_auth_retry(node: &BackendNode, status: StatusCode) -> bool {
@@ -99,7 +103,7 @@ impl RemoteStreamer {
         })?;
 
         let upstream_resp = Self::maybe_retry_webdav_401(
-            state,
+            state.clone(),
             node,
             upstream_resp,
             url,
@@ -120,6 +124,13 @@ impl RemoteStreamer {
             let _ = drain_incoming(body).await;
             if status == StatusCode::UNAUTHORIZED && is_webdav_node(node) {
                 return Err(StatusCode::UNAUTHORIZED);
+            }
+            if is_google_drive_node(node) {
+                google_drive_auth::trigger_refresh_if_needed(
+                    state.clone(),
+                    node.clone(),
+                );
+                return Err(StatusCode::SERVICE_UNAVAILABLE);
             }
             return Err(StatusCode::BAD_GATEWAY);
         }

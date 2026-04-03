@@ -9,4 +9,5 @@ pub struct RedirectInfo {
 #[derive(Clone, Debug)]
 pub struct AccelRedirectInfo {
     pub internal_path: String,
+    pub internal_headers: HeaderMap,
 }

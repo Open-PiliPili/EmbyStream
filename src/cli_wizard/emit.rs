@@ -142,6 +142,8 @@ fn skip_webdav_query_param(s: &str) -> bool {
 
 fn should_omit_google_drive_table(g: &GoogleDriveConfig) -> bool {
     g.node_uuid.trim().is_empty()
+        && g.client_id.trim().is_empty()
+        && g.client_secret.trim().is_empty()
         && g.drive_id.trim().is_empty()
         && g.drive_name.trim().is_empty()
         && g.access_token.trim().is_empty()
@@ -152,6 +154,10 @@ fn should_omit_google_drive_table(g: &GoogleDriveConfig) -> bool {
 struct EmitGoogleDrive {
     #[serde(skip_serializing_if = "str::is_empty")]
     node_uuid: String,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    client_id: String,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    client_secret: String,
     #[serde(skip_serializing_if = "str::is_empty")]
     drive_id: String,
     #[serde(skip_serializing_if = "str::is_empty")]
@@ -168,6 +174,8 @@ fn map_google_drive_emit(g: &GoogleDriveConfig) -> Option<EmitGoogleDrive> {
     }
     Some(EmitGoogleDrive {
         node_uuid: g.node_uuid.clone(),
+        client_id: g.client_id.clone(),
+        client_secret: g.client_secret.clone(),
         drive_id: g.drive_id.clone(),
         drive_name: g.drive_name.clone(),
         access_token: g.access_token.clone(),

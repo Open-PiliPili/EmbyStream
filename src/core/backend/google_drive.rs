@@ -1,5 +1,8 @@
 use crate::config::backend::GoogleDriveConfig;
 
+pub const BACKEND_TYPE: &str = "googleDrive";
+pub const ACCEL_REDIRECT_PREFIX: &str = "/_origin/google-drive";
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DriveLookup {
     DriveId(String),

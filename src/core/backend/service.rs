@@ -1,7 +1,7 @@
 use std::{borrow::Cow, path::PathBuf, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
-use hyper::{StatusCode, Uri, header};
+use hyper::{HeaderMap, StatusCode, Uri, header};
 use tokio::sync::Mutex as TokioMutex;
 
 use super::{
@@ -9,13 +9,14 @@ use super::{
         DISK_BACKEND_TYPE, STREAM_RELAY_BACKEND_TYPE,
         backend_base_url_is_empty, backend_base_url_is_local_host,
     },
+    google_drive, google_drive_auth,
     local_streamer::LocalStreamer,
     proxy_mode::ProxyMode,
     remote_streamer::{RemoteStreamParams, RemoteStreamer},
     result::Result as AppStreamResult,
     session_id::generate_stream_session_id,
     source::Source,
-    webdav, webdav_auth,
+    upstream_proxy, webdav, webdav_auth,
 };
 use crate::backend::types::ClientInfo;
 use crate::config::backend::BackendNode;
@@ -129,10 +130,10 @@ impl AppStreamService {
             let path_str = Uri::to_path_or_url_string(&uri);
             if proxy_mode == ProxyMode::AccelRedirect {
                 let node_uuid = Self::webdav_accel_redirect_node_uuid(node)?;
-                Ok(Source::WebDavAccelRedirect {
-                    node_uuid,
-                    file_path: path_str,
-                })
+                let info = Self::build_webdav_accel_redirect_info(
+                    &node_uuid, &path_str,
+                )?;
+                Ok(Source::AccelRedirect { info })
             } else {
                 let upstream = webdav::build_upstream_uri(
                     node,
@@ -148,13 +149,35 @@ impl AppStreamService {
                 Ok(Source::Remote {
                     uri: upstream,
                     mode: proxy_mode,
+                    extra_upstream_headers: None,
                 })
             }
+        } else if node
+            .backend_type
+            .eq_ignore_ascii_case(google_drive::BACKEND_TYPE)
+            && Uri::is_local(&uri)
+        {
+            let raw_path = Uri::to_path_or_url_string(&uri);
+            let resolved = self
+                .resolve_google_drive_remote(node, &raw_path, proxy_mode)
+                .await
+                .map_err(|error| {
+                    error_log!(
+                        STREAM_LOGGER_DOMAIN,
+                        "google_drive_route_failed node={} path={} error={}",
+                        node.name,
+                        raw_path,
+                        error
+                    );
+                    AppStreamError::InvalidUri
+                })?;
+            Ok(resolved)
         } else if !Uri::is_local(&uri) {
             debug_log!(STREAM_LOGGER_DOMAIN, "URI is already remote: {}", uri);
             Ok(Source::Remote {
                 uri,
                 mode: proxy_mode,
+                extra_upstream_headers: None,
             })
         } else {
             let disk =
@@ -208,6 +231,7 @@ impl AppStreamService {
                 Ok(Source::Remote {
                     uri: remote_uri,
                     mode: proxy_mode,
+                    extra_upstream_headers: None,
                 })
             } else {
                 let path = PathBuf::from(Uri::to_path_or_url_string(&uri));
@@ -530,6 +554,7 @@ impl AppStreamService {
         &self,
         url: Uri,
         request: &AppStreamRequest,
+        extra_headers: Option<HeaderMap>,
     ) -> Result<RedirectInfo, AppStreamError> {
         let mut final_headers = request.original_headers.clone();
 
@@ -570,6 +595,9 @@ impl AppStreamService {
         }
 
         final_headers.remove(header::HOST);
+        if let Some(extra_headers) = extra_headers {
+            final_headers.extend(extra_headers);
+        }
 
         Ok(RedirectInfo {
             target_url: url,
@@ -577,7 +605,7 @@ impl AppStreamService {
         })
     }
 
-    fn build_accel_redirect_info(
+    fn build_webdav_accel_redirect_info(
         node_uuid: &str,
         file_path: &str,
     ) -> Result<AccelRedirectInfo, AppStreamError> {
@@ -595,6 +623,34 @@ impl AppStreamService {
                 node_uuid,
                 encoded_path
             ),
+            internal_headers: HeaderMap::new(),
+        })
+    }
+
+    fn build_google_drive_accel_redirect_info(
+        node_uuid: &str,
+        file_id: &str,
+        auth_headers: &HeaderMap,
+    ) -> Result<AccelRedirectInfo, AppStreamError> {
+        let encoded_file_id = webdav::encode_path_segments(file_id);
+        if encoded_file_id.is_empty() {
+            return Err(AppStreamError::InvalidUri);
+        }
+
+        let mut internal_headers = HeaderMap::new();
+        if let Some(value) = auth_headers.get(header::AUTHORIZATION).cloned() {
+            internal_headers
+                .insert(google_drive_auth::accel_header_name().clone(), value);
+        }
+
+        Ok(AccelRedirectInfo {
+            internal_path: format!(
+                "{}/{}/{}",
+                google_drive::ACCEL_REDIRECT_PREFIX,
+                node_uuid,
+                encoded_file_id
+            ),
+            internal_headers,
         })
     }
 
@@ -636,6 +692,100 @@ impl AppStreamService {
 
     fn open_list_request_lock(&self, cache_key: &str) -> Arc<TokioMutex<()>> {
         AppState::request_lock(&self.state.open_list_request_locks, cache_key)
+    }
+
+    fn google_drive_file_id_cache_key(
+        node_uuid: &str,
+        raw_path: &str,
+    ) -> String {
+        let path_hash = StringUtil::hash_hex(&raw_path.trim().to_lowercase());
+        format!(
+            "backend:google-drive:file-id:node:{}:path_hash:{}",
+            node_uuid.trim().to_ascii_lowercase(),
+            path_hash
+        )
+    }
+
+    async fn resolve_google_drive_remote(
+        &self,
+        node: &BackendNode,
+        raw_path: &str,
+        proxy_mode: ProxyMode,
+    ) -> Result<Source, String> {
+        let cfg = node
+            .google_drive
+            .as_ref()
+            .ok_or_else(|| "missing googleDrive config".to_string())?;
+        let resolved_path =
+            google_drive::resolve_google_drive_path(raw_path, cfg)
+                .map_err(str::to_string)?;
+        let cache_key =
+            Self::google_drive_file_id_cache_key(&cfg.node_uuid, raw_path);
+        let file_id_cache = self.state.get_google_drive_file_id_cache().await;
+        let request_lock = AppState::request_lock(
+            &self.state.google_drive_file_id_request_locks,
+            &cache_key,
+        );
+        let guard = request_lock.lock().await;
+
+        let file_id = if let Some(cached) =
+            file_id_cache.get::<String>(&cache_key)
+        {
+            cached
+        } else {
+            let client = self.state.get_google_drive_client().await.clone();
+            let access_token = google_drive_auth::current_access_token(
+                &self.state.google_drive_access_token_cache,
+                node,
+            )
+            .ok_or_else(|| "googleDrive access_token is empty".to_string())?;
+            let resolved = client
+                .resolve_file_id_by_path(
+                    &access_token,
+                    &resolved_path.lookup,
+                    &resolved_path.relative_path,
+                )
+                .await
+                .map_err(|error| error.to_string())?;
+            file_id_cache.insert(cache_key.clone(), resolved.file_id.clone());
+            resolved.file_id
+        };
+        drop(guard);
+        AppState::cleanup_request_lock(
+            &self.state.google_drive_file_id_request_locks,
+            &cache_key,
+            &request_lock,
+        );
+
+        let auth_line = google_drive_auth::authorization_line_for_remote(
+            &self.state.google_drive_access_token_cache,
+            node,
+        )
+        .ok_or_else(|| "googleDrive access_token is empty".to_string())?;
+        let auth_headers =
+            google_drive_auth::extra_headers_from_auth_line(&auth_line)
+                .map_err(str::to_string)?;
+        let client = self.state.get_google_drive_client().await.clone();
+        let remote_uri: Uri = client
+            .build_media_url(&file_id)
+            .parse()
+            .map_err(|_| "invalid googleDrive media uri".to_string())?;
+
+        if proxy_mode == ProxyMode::AccelRedirect {
+            let info = Self::build_google_drive_accel_redirect_info(
+                &cfg.node_uuid,
+                &file_id,
+                &auth_headers,
+            )
+            .map_err(|error| error.to_string())?;
+            return Ok(Source::AccelRedirect { info });
+        }
+
+        Ok(Source::Remote {
+            uri: remote_uri,
+            mode: proxy_mode,
+            extra_upstream_headers: Some(auth_headers),
+        })
     }
 
     fn resolve_upstream_user_agent(
@@ -707,6 +857,64 @@ impl AppStreamService {
             Ok(None) => Ok(None),
             Err(()) => Err(StatusCode::UNAUTHORIZED),
         }
+    }
+
+    async fn remote_extra_headers(
+        &self,
+        node: &BackendNode,
+        uri: &Uri,
+        client_headers: &HeaderMap,
+        stream_session_id: Option<&str>,
+        source_headers: Option<HeaderMap>,
+    ) -> Result<Option<HeaderMap>, StatusCode> {
+        if source_headers.is_some() {
+            return Ok(source_headers);
+        }
+        self.webdav_proxy_auth_headers(
+            node,
+            uri,
+            client_headers,
+            stream_session_id,
+        )
+        .await
+    }
+
+    async fn probe_google_drive_redirect_target(
+        &self,
+        node: &BackendNode,
+        uri: &Uri,
+        extra_headers: Option<&HeaderMap>,
+        user_agent: &str,
+        stream_session_id: &str,
+    ) -> Result<(), StatusCode> {
+        if !google_drive_auth::is_google_drive_node(node) {
+            return Ok(());
+        }
+        let auth_value = extra_headers
+            .and_then(|headers| headers.get(header::AUTHORIZATION))
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        if auth_value.is_empty() {
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+
+        let status = upstream_proxy::probe_authorization(
+            uri.clone(),
+            auth_value,
+            user_agent,
+            Some(stream_session_id),
+        )
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+        if status.is_success() {
+            return Ok(());
+        }
+
+        google_drive_auth::trigger_refresh_if_needed(
+            self.state.clone(),
+            node.clone(),
+        );
+        Err(StatusCode::SERVICE_UNAVAILABLE)
     }
 }
 
@@ -802,7 +1010,7 @@ impl StreamService for AppStreamService {
             match &source {
                 Source::Local { .. } => "Local",
                 Source::Remote { .. } => "Remote",
-                Source::WebDavAccelRedirect { .. } => "WebDavAccelRedirect",
+                Source::AccelRedirect { .. } => "AccelRedirect",
             }
         );
         info_log!(STREAM_LOGGER_DOMAIN, "Routing stream source: {:?}", source);
@@ -835,23 +1043,32 @@ impl StreamService for AppStreamService {
                 )
                 .await
             }
-            Source::WebDavAccelRedirect {
-                node_uuid,
-                file_path,
-            } => Self::build_accel_redirect_info(&node_uuid, &file_path)
-                .map(AppStreamResult::AccelRedirect)
-                .map_err(|e| {
-                    error_log!(
-                        STREAM_LOGGER_DOMAIN,
-                        "Failed to build accel redirect info: {:?}",
-                        e
-                    );
-                    StatusCode::INTERNAL_SERVER_ERROR
-                }),
-            Source::Remote { uri, mode } => match mode {
+            Source::AccelRedirect { info } => {
+                Ok(AppStreamResult::AccelRedirect(info))
+            }
+            Source::Remote {
+                uri,
+                mode,
+                extra_upstream_headers,
+            } => match mode {
                 ProxyMode::Redirect => {
+                    let stream_session_id = generate_stream_session_id();
+                    let user_agent =
+                        Self::resolve_upstream_user_agent(node, &request);
+                    self.probe_google_drive_redirect_target(
+                        node,
+                        &uri,
+                        extra_upstream_headers.as_ref(),
+                        &user_agent,
+                        stream_session_id.as_str(),
+                    )
+                    .await?;
                     let redirect_info = self
-                        .build_redirect_info(uri, &request)
+                        .build_redirect_info(
+                            uri,
+                            &request,
+                            extra_upstream_headers,
+                        )
                         .await
                         .map_err(|e| {
                             error_log!(
@@ -875,11 +1092,12 @@ impl StreamService for AppStreamService {
                         uri
                     );
                     let extra_headers = self
-                        .webdav_proxy_auth_headers(
+                        .remote_extra_headers(
                             node,
                             &uri,
                             &request.original_headers,
                             Some(stream_session_id.as_str()),
+                            extra_upstream_headers,
                         )
                         .await?;
 
