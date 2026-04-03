@@ -49,6 +49,8 @@ Detailed behavior and every TOML field: **[Configuration reference](docs/configu
 | [User guide](docs/user-guide.md) | Deployment patterns, security notes, Docker notes, first-time setup |
 | [Configuration reference](docs/configuration-reference.md) | All config sections, scenarios, and examples (English) |
 | [CLI usage](docs/cli.md) | `run`, `config`, flags |
+| [Google OAuth Desktop App Setup](docs/google-oauth-desktop-app-setup.en.md) | Step-by-step Google Cloud Console setup for `embystream auth google` |
+| [Google OAuth Desktop App 创建教程](docs/google-oauth-desktop-app-setup.zh-CN.md) | 从 0 到 1 创建 `Desktop app` OAuth Client 的新手教程 |
 
 ## Install
 
@@ -111,6 +113,12 @@ Compose: [`template/docker/docker-compose.yaml`](template/docker/docker-compose.
 ## CLI (summary)
 
 Use **`embystream run`** to start gateways. Pass **`--lang zh`** (global) for Chinese wizard text and Chinese top-level `--help`. Details: **[CLI usage](docs/cli.md)**.
+
+If you want to use the `googleDrive` backend and need Google OAuth credentials,
+start with:
+
+- **[Google OAuth Desktop App Setup](docs/google-oauth-desktop-app-setup.en.md)**
+- **[Google OAuth Desktop App 创建教程](docs/google-oauth-desktop-app-setup.zh-CN.md)**
 
 ## License
 

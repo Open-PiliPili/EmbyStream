@@ -127,3 +127,5 @@ Use this for a first-time layout; refine paths, tokens, and `[[BackendNode]]` en
 
 - [User guide](user-guide.md)
 - [Configuration reference](configuration-reference.md)
+- [Google OAuth Desktop App Setup (EN)](google-oauth-desktop-app-setup.en.md)
+- [Google OAuth Desktop App 创建教程 (ZH-CN)](google-oauth-desktop-app-setup.zh-CN.md)

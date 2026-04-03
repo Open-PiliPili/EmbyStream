@@ -59,6 +59,12 @@ See the [README](../README.md) Docker section and [`template/docker/docker-compo
 
 Full field documentation: [Configuration reference](configuration-reference.md).
 
+If you are configuring a `googleDrive` backend for the first time, create the
+Google OAuth `Desktop app` client first:
+
+- [Google OAuth Desktop App Setup](google-oauth-desktop-app-setup.en.md)
+- [Google OAuth Desktop App 创建教程](google-oauth-desktop-app-setup.zh-CN.md)
+
 ---
 
 ## Getting help
