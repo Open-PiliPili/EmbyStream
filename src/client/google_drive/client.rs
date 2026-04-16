@@ -330,6 +330,19 @@ impl Client {
             file_id.trim()
         )
     }
+
+    pub fn build_media_url_with_token(
+        &self,
+        file_id: &str,
+        access_token: &str,
+    ) -> String {
+        format!(
+            "{}/files/{}?alt=media&supportsAllDrives=true&acknowledgeAbuse=true&access_token={}",
+            self.api_base.trim_end_matches('/'),
+            file_id.trim(),
+            access_token.trim()
+        )
+    }
 }
 
 fn normalize_non_empty_path(path: &str) -> VecDeque<&str> {
@@ -397,6 +410,19 @@ mod tests {
         assert_eq!(
             url,
             "https://www.googleapis.com/drive/v3/files/file-123?alt=media&supportsAllDrives=true&acknowledgeAbuse=true"
+        );
+    }
+
+    #[test]
+    fn build_media_url_with_token_appends_access_token() {
+        let client = Client::with_endpoints(
+            "https://www.googleapis.com/drive/v3",
+            GOOGLE_OAUTH_TOKEN_ENDPOINT,
+        );
+        let url = client.build_media_url_with_token("file-123", "ya29.token");
+        assert_eq!(
+            url,
+            "https://www.googleapis.com/drive/v3/files/file-123?alt=media&supportsAllDrives=true&acknowledgeAbuse=true&access_token=ya29.token"
         );
     }
 

@@ -935,6 +935,22 @@ impl AppStreamService {
             return Ok(Source::AccelRedirect { info });
         }
 
+        if proxy_mode == ProxyMode::Redirect {
+            let access_token = auth_line
+                .strip_prefix("Bearer ")
+                .or_else(|| auth_line.strip_prefix("bearer "))
+                .unwrap_or(&auth_line);
+            let redirect_uri: Uri = client
+                .build_media_url_with_token(&file_id, access_token)
+                .parse()
+                .map_err(|_| "invalid googleDrive redirect uri".to_string())?;
+            return Ok(Source::Remote {
+                uri: redirect_uri,
+                mode: proxy_mode,
+                extra_upstream_headers: Some(auth_headers),
+            });
+        }
+
         Ok(Source::Remote {
             uri: remote_uri,
             mode: proxy_mode,
