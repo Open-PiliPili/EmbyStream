@@ -47,6 +47,8 @@ pub struct AppState {
         DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) google_drive_token_cache: DashMap<String, OAuthToken>,
     pub(crate) google_drive_refresh_locks: DashMap<String, Arc<TokioMutex<()>>>,
+    pub(crate) google_drive_refresh_backoff_until:
+        DashMap<String, chrono::DateTime<chrono::Utc>>,
     pub(crate) webdav_auth_cache: DashMap<String, String>,
     pub(crate) webdav_auth_probe_locks: DashMap<String, Arc<TokioMutex<()>>>,
 }
@@ -77,6 +79,7 @@ impl AppState {
             google_drive_file_id_request_locks: DashMap::new(),
             google_drive_token_cache: DashMap::new(),
             google_drive_refresh_locks: DashMap::new(),
+            google_drive_refresh_backoff_until: DashMap::new(),
             webdav_auth_cache: DashMap::new(),
             webdav_auth_probe_locks: DashMap::new(),
         }

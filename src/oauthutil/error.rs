@@ -16,4 +16,12 @@ pub enum TokenSourceError {
     StoreWrite { node: String, error: String },
     #[error("googleDrive token refresh failed for node '{node}': {error}")]
     Refresh { node: String, error: String },
+    #[error(
+        "googleDrive token refresh backed off for node '{node}' for {retry_after_secs}s: {reason}"
+    )]
+    RefreshBackoff {
+        node: String,
+        retry_after_secs: i64,
+        reason: String,
+    },
 }
