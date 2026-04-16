@@ -3,7 +3,7 @@ use std::{borrow::Cow, path::PathBuf, sync::Arc, time::Instant};
 use async_trait::async_trait;
 use chrono::Duration;
 use hyper::{HeaderMap, StatusCode, Uri, header};
-use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+
 use tokio::sync::Mutex as TokioMutex;
 
 use super::{
@@ -700,12 +700,13 @@ impl AppStreamService {
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok())
         {
+            let token = auth_value
+                .strip_prefix("Bearer ")
+                .or_else(|| auth_value.strip_prefix("bearer "))
+                .unwrap_or(auth_value);
             internal_path.push('?');
             internal_path.push_str("token=");
-            internal_path.push_str(
-                &utf8_percent_encode(auth_value, NON_ALPHANUMERIC)
-                    .to_string(),
-            );
+            internal_path.push_str(token);
         }
 
         debug_log!(
@@ -1346,7 +1347,7 @@ refresh_token = "refresh-token"
         assert_eq!(
             info.internal_path,
             "/_origin/google-drive/gd-node/file%2Did%2D123?\
-token=Bearer%20access%2Dtoken"
+token=access-token"
         );
         assert!(info.internal_headers.get(header::AUTHORIZATION).is_none());
         assert!(info.internal_headers.is_empty());

@@ -404,7 +404,7 @@ location ~ ^/_origin/google-drive/([^/]+)/([^/]+)$ {
     set $google_file_id $2;
     set $google_drive_query "alt=media&supportsAllDrives=true&acknowledgeAbuse=true";
     proxy_pass https://www.googleapis.com/drive/v3/files/$google_file_id?$google_drive_query;
-    proxy_set_header Authorization $arg_token;
+    proxy_set_header Authorization "Bearer $arg_token";
     proxy_set_header Host www.googleapis.com;
     proxy_ssl_server_name on;
 }
