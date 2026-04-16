@@ -162,6 +162,11 @@ embystream auth google \
 
 认证成功后，把得到的值写到你的 `googleDrive` 节点里。
 
+至少要保留 `client_id`、`client_secret` 和 `refresh_token`。
+`access_token` 只是当前缓存快照，后续运行时可能会被 EmbyStream
+自动刷新并回写。较新的配置里也可能会出现 `token` blob，其中包含
+`access_token`、`refresh_token`、`token_type` 和 `expiry`。
+
 典型示例：
 
 ```toml

@@ -162,6 +162,11 @@ Important:
 After successful authorization, copy the values into your `googleDrive`
 backend node.
 
+At minimum, keep `client_id`, `client_secret`, and `refresh_token`.
+`access_token` is only a cache snapshot and may be rewritten by EmbyStream
+later. Newer configs may also persist a `token` blob that includes
+`access_token`, `refresh_token`, `token_type`, and `expiry`.
+
 Typical fields:
 
 ```toml

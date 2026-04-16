@@ -254,7 +254,8 @@ async fn setup_google_drive_refresh(app_state: &Arc<AppState>) {
     if google_drive_node_count == 0 {
         debug_log!(
             INIT_LOGGER_DOMAIN,
-            "Skipping googleDrive periodic refresh task - no googleDrive nodes"
+            "Skipping googleDrive token prewarm/prerefresh tasks - no \
+             googleDrive nodes"
         );
         return;
     }

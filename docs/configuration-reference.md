@@ -342,17 +342,23 @@ Requires `[BackendNode.GoogleDrive]`:
 | `drive_name` | Shared drive name fallback when `drive_id` is absent. |
 | `access_token` | Cached OAuth access token. Can be refreshed and written back by the app later. |
 | `refresh_token` | Required OAuth refresh token used to renew `access_token`. |
+| `token` | Preferred persisted OAuth token blob. When present, EmbyStream reads `access_token`, `refresh_token`, `token_type`, and `expiry` from it. |
 
 `drive_id` and `drive_name` may both be empty. In that case, runtime will infer the
 shared drive name from the first path segment after path rewrite. `proxy_mode=redirect`
 is supported but may expose OAuth bearer tokens to clients, so it should be used only
 when that leakage risk is acceptable.
 
-When at least one `googleDrive` node is configured, EmbyStream also starts a
-background token pre-refresh task. It runs every 45 minutes, reuses the same
-single-flight refresh lock as request-triggered refresh, and only reduces the
-chance of users hitting the 1-hour Google access-token expiry window. If
-Google refresh fails, the normal request-triggered fallback path still applies.
+When at least one `googleDrive` node is configured, EmbyStream also starts:
+
+- a startup prewarm pass
+- an expiry-driven background pre-refresh scheduler
+
+The scheduler reuses the same request-time token source and single-flight
+refresh path as normal traffic. It reads persisted expiry, refreshes only when
+the remaining lifetime falls below the internal lead window, and is only an
+optimization. Request-time token acquisition remains the correctness guarantee
+for sparse traffic, restart recovery, and refresh failures.
 
 Recommended delivery modes for `googleDrive`:
 
