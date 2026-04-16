@@ -20,7 +20,7 @@ use crate::{
         response::{BoxBodyType, ResponseBuilder},
     },
     sign::SignParams,
-    util::UriExt,
+    util::{Privacy, UriExt},
 };
 
 const PLAYBACK_SESSION_ID_QUERY_KEY: &str = "session_id";
@@ -268,6 +268,13 @@ impl Middleware for StreamMiddleware {
                     }
                     AppStreamResult::AccelRedirect(accel_redirect_info) => {
                         let mut headers = accel_redirect_info.internal_headers;
+                        debug_log!(
+                            REMOTE_STREAMER_LOGGER_DOMAIN,
+                            "google_drive_accel_redirect_emit internal_path={}",
+                            Privacy::sanitize_google_drive_internal_path_for_log(
+                                &accel_redirect_info.internal_path
+                            )
+                        );
                         if let Ok(value) =
                             accel_redirect_info.internal_path.parse()
                         {

@@ -31,7 +31,7 @@ use crate::{
     },
     sign::SignParams,
     system::SystemInfo,
-    util::{StringUtil, UriExt},
+    util::{Privacy, StringUtil, UriExt},
 };
 
 /// Trait for handling streaming requests
@@ -655,6 +655,22 @@ impl AppStreamService {
             internal_path.push_str(&query);
         }
 
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "google_drive_accel_redirect_built \
+             node_uuid={} file_id={} internal_path={} authorization={}",
+            node_uuid,
+            file_id,
+            Privacy::sanitize_google_drive_internal_path_for_log(
+                &internal_path
+            ),
+            auth_headers
+                .get(header::AUTHORIZATION)
+                .and_then(|value| value.to_str().ok())
+                .map(Privacy::mask_google_drive_token)
+                .unwrap_or_else(|| "<missing>".to_string())
+        );
+
         Ok(AccelRedirectInfo {
             internal_path,
             internal_headers: HeaderMap::new(),
@@ -777,6 +793,22 @@ impl AppStreamService {
             .build_media_url(&file_id)
             .parse()
             .map_err(|_| "invalid googleDrive media uri".to_string())?;
+
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "google_drive_remote_resolved \
+             node={} proxy_mode={:?} raw_path={} resolved_lookup={:?} \
+             resolved_relative_path={} file_id={} remote_uri={} \
+             authorization={}",
+            node.name,
+            proxy_mode,
+            raw_path,
+            resolved_path.lookup,
+            resolved_path.relative_path,
+            file_id,
+            remote_uri,
+            Privacy::mask_google_drive_token(&auth_line)
+        );
 
         if proxy_mode == ProxyMode::AccelRedirect {
             let info = Self::build_google_drive_accel_redirect_info(
