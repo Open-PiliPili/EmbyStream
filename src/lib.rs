@@ -17,6 +17,7 @@ pub mod i18n;
 pub mod logger;
 pub mod macros;
 pub mod network;
+pub mod oauthutil;
 pub mod system;
 pub mod util;
 

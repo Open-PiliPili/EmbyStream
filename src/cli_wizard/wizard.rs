@@ -1518,6 +1518,7 @@ fn prompt_one_backend_node() -> Result<BackendNode> {
                         drive_name,
                         access_token,
                         refresh_token,
+                        token: None,
                     }),
                     None,
                 )

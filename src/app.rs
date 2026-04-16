@@ -10,6 +10,7 @@ use crate::{
     config::core::Config,
     core::backend::{constants::DISK_BACKEND_TYPE, upstream_proxy, webdav},
     info_log,
+    oauthutil::OAuthToken,
     util::path_rewriter::PathRewriter,
 };
 
@@ -44,9 +45,8 @@ pub struct AppState {
         DashMap<String, Arc<TokioMutex<()>>>,
     pub(crate) google_drive_file_id_request_locks:
         DashMap<String, Arc<TokioMutex<()>>>,
-    pub(crate) google_drive_access_token_cache: DashMap<String, String>,
+    pub(crate) google_drive_token_cache: DashMap<String, OAuthToken>,
     pub(crate) google_drive_refresh_locks: DashMap<String, Arc<TokioMutex<()>>>,
-    pub(crate) config_write_lock: TokioMutex<()>,
     pub(crate) webdav_auth_cache: DashMap<String, String>,
     pub(crate) webdav_auth_probe_locks: DashMap<String, Arc<TokioMutex<()>>>,
 }
@@ -75,9 +75,8 @@ impl AppState {
             strm_request_locks: DashMap::new(),
             local_metadata_request_locks: DashMap::new(),
             google_drive_file_id_request_locks: DashMap::new(),
-            google_drive_access_token_cache: DashMap::new(),
+            google_drive_token_cache: DashMap::new(),
             google_drive_refresh_locks: DashMap::new(),
-            config_write_lock: TokioMutex::new(()),
             webdav_auth_cache: DashMap::new(),
             webdav_auth_probe_locks: DashMap::new(),
         }

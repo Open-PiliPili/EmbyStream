@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use chrono::Duration;
 use http_body_util::BodyExt;
 use hyper::{
     HeaderMap, Response as HyperResponse, StatusCode, Uri, body::Incoming,
@@ -106,6 +107,16 @@ impl RemoteStreamer {
             state.clone(),
             node,
             upstream_resp,
+            url.clone(),
+            client_headers,
+            &user_agent,
+            stream_session_id.as_str(),
+        )
+        .await?;
+        let upstream_resp = Self::maybe_retry_google_drive_401(
+            state.clone(),
+            node,
+            upstream_resp,
             url,
             client_headers,
             &user_agent,
@@ -126,10 +137,6 @@ impl RemoteStreamer {
                 return Err(StatusCode::UNAUTHORIZED);
             }
             if is_google_drive_node(node) {
-                google_drive_auth::trigger_refresh_if_needed(
-                    state.clone(),
-                    node.clone(),
-                );
                 return Err(StatusCode::SERVICE_UNAVAILABLE);
             }
             return Err(StatusCode::BAD_GATEWAY);
@@ -232,6 +239,79 @@ impl RemoteStreamer {
             error_log!(
                 REMOTE_STREAMER_LOGGER_DOMAIN,
                 "Upstream retry failed: {}",
+                e
+            );
+            StatusCode::BAD_GATEWAY
+        })
+    }
+
+    async fn maybe_retry_google_drive_401(
+        state: Arc<AppState>,
+        node: &BackendNode,
+        upstream_resp: HyperResponse<Incoming>,
+        url: Uri,
+        headers: &HeaderMap,
+        user_agent: &str,
+        stream_session_id: &str,
+    ) -> Result<HyperResponse<Incoming>, StatusCode> {
+        if upstream_resp.status() != StatusCode::UNAUTHORIZED
+            || !is_google_drive_node(node)
+        {
+            return Ok(upstream_resp);
+        }
+
+        let (_, body) = upstream_resp.into_parts();
+        drain_incoming(body).await.map_err(|e| {
+            error_log!(
+                REMOTE_STREAMER_LOGGER_DOMAIN,
+                "Drain googleDrive upstream body: {}",
+                e
+            );
+            StatusCode::BAD_GATEWAY
+        })?;
+
+        info_log!(
+            REMOTE_STREAMER_LOGGER_DOMAIN,
+            "google_drive_upstream_401_retry node={} uri_hint={}{}",
+            node.name,
+            upstream_proxy::upstream_uri_hint(&url),
+            upstream_proxy::stream_session_log_suffix(Some(stream_session_id)),
+        );
+
+        google_drive_auth::invalidate(&state, node);
+        let auth_line = google_drive_auth::authorization_line_for_remote(
+            state.clone(),
+            node.clone(),
+            "proxy_retry_401",
+            Duration::seconds(google_drive_auth::PROXY_MIN_VALID_SECS),
+        )
+        .await
+        .map_err(|error| {
+            google_drive_auth::log_token_error("proxy_retry_401", node, &error);
+            StatusCode::SERVICE_UNAVAILABLE
+        })?;
+        let refreshed =
+            google_drive_auth::extra_headers_from_auth_line(&auth_line)
+                .map_err(|_| {
+                    error_log!(
+                        REMOTE_STREAMER_LOGGER_DOMAIN,
+                        "Invalid googleDrive auth header after refresh"
+                    );
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+
+        upstream_proxy::forward_get(
+            url,
+            headers,
+            user_agent,
+            Some(&refreshed),
+            Some(stream_session_id),
+        )
+        .await
+        .map_err(|e| {
+            error_log!(
+                REMOTE_STREAMER_LOGGER_DOMAIN,
+                "googleDrive upstream retry failed: {}",
                 e
             );
             StatusCode::BAD_GATEWAY

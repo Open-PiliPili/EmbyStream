@@ -259,11 +259,13 @@ async fn setup_google_drive_refresh(app_state: &Arc<AppState>) {
         return;
     }
 
-    google_drive_auth::start_periodic_refresh_task(app_state.clone());
+    tokio::spawn(google_drive_auth::prewarm_google_drive_tokens(
+        app_state.clone(),
+    ));
     info_log!(
         INIT_LOGGER_DOMAIN,
-        "googleDrive periodic refresh task started \
-         (interval: 45 minutes, nodes: {})",
+        "googleDrive request-time token source enabled \
+         (startup prewarm scheduled, nodes: {})",
         google_drive_node_count
     );
 }

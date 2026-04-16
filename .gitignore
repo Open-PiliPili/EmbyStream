@@ -38,6 +38,7 @@ logs/
 config/
 !src/config/
 !template/config/
+proposal/
 .cursor/
 .claude/
 doc/

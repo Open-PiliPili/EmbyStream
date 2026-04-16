@@ -32,6 +32,7 @@ use crate::{
         STREAM_RELAY_BACKEND_TYPE, backend_base_url_is_empty,
         backend_base_url_is_local_host,
     },
+    oauthutil::OAuthToken,
     util::path_rewriter::PathRewriter,
 };
 
@@ -381,7 +382,7 @@ fn validate_google_drive_nodes(
             )));
         }
 
-        if cfg.refresh_token.trim().is_empty() {
+        if cfg.effective_refresh_token().is_none() {
             return Err(ConfigError::MissingConfig(format!(
                 "BackendNode.GoogleDrive.refresh_token for node '{}'",
                 node.name
@@ -476,10 +477,41 @@ fn write_atomic_config(dest: &Path, contents: &str) -> Result<(), ConfigError> {
     Ok(())
 }
 
-pub fn persist_google_drive_access_token(
+pub fn read_google_drive_token(
     config_path: &Path,
     node_uuid: &str,
-    access_token: &str,
+) -> Result<Option<OAuthToken>, ConfigError> {
+    let content = fs::read_to_string(config_path)?;
+    let doc: toml::Value = toml::from_str(&content)?;
+    let backend_nodes = doc
+        .get("BackendNode")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| ConfigError::MissingConfig("BackendNode".to_string()))?;
+
+    for node in backend_nodes {
+        let Some(google_drive) =
+            node.get("GoogleDrive").and_then(toml::Value::as_table)
+        else {
+            continue;
+        };
+        let current_uuid = google_drive
+            .get("node_uuid")
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default();
+        if current_uuid != node_uuid {
+            continue;
+        }
+
+        return parse_google_drive_token_table(google_drive).map(Some);
+    }
+
+    Ok(None)
+}
+
+pub fn persist_google_drive_token(
+    config_path: &Path,
+    node_uuid: &str,
+    token: &OAuthToken,
 ) -> Result<(), ConfigError> {
     let content = fs::read_to_string(config_path)?;
     let mut doc: toml::Value = toml::from_str(&content)?;
@@ -505,8 +537,14 @@ pub fn persist_google_drive_access_token(
         }
         google_drive.insert(
             "access_token".to_string(),
-            toml::Value::String(access_token.to_string()),
+            toml::Value::String(token.access_token.clone()),
         );
+        google_drive.insert(
+            "refresh_token".to_string(),
+            toml::Value::String(token.refresh_token.clone()),
+        );
+        google_drive
+            .insert("token".to_string(), oauth_token_to_toml_value(token)?);
         matched = true;
         break;
     }
@@ -526,15 +564,55 @@ pub fn persist_google_drive_access_token(
     write_atomic_config(config_path, &serialized)
 }
 
+fn parse_google_drive_token_table(
+    google_drive: &toml::map::Map<String, toml::Value>,
+) -> Result<OAuthToken, ConfigError> {
+    if let Some(value) = google_drive.get("token") {
+        return value.clone().try_into().map_err(|error| {
+            ConfigError::Io(IoError::other(format!(
+                "parse googleDrive token blob: {error}"
+            )))
+        });
+    }
+
+    Ok(OAuthToken {
+        access_token: google_drive
+            .get("access_token")
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        refresh_token: google_drive
+            .get("refresh_token")
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        token_type: "Bearer".to_string(),
+        expiry: None,
+    })
+}
+
+fn oauth_token_to_toml_value(
+    token: &OAuthToken,
+) -> Result<toml::Value, ConfigError> {
+    toml::Value::try_from(token).map_err(|error| {
+        ConfigError::Io(IoError::other(format!(
+            "serialize googleDrive token blob: {error}"
+        )))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
 
-    use super::persist_google_drive_access_token;
+    use chrono::{TimeZone, Utc};
+
+    use super::{persist_google_drive_token, read_google_drive_token};
     use crate::config::error::ConfigError;
+    use crate::oauthutil::OAuthToken;
 
     #[test]
-    fn persist_google_drive_access_token_updates_matching_node_only() {
+    fn persist_google_drive_token_updates_matching_node_only() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let config_path = temp_dir.path().join("config.toml");
         let content = r#"
@@ -556,10 +634,19 @@ access_token = "old-token-2"
 "#;
         fs::write(&config_path, content).expect("write config");
 
-        persist_google_drive_access_token(
+        let expiry = Utc
+            .with_ymd_and_hms(2026, 4, 16, 12, 0, 0)
+            .single()
+            .expect("valid timestamp");
+        persist_google_drive_token(
             &config_path,
             "node-2",
-            "new-token-2",
+            &OAuthToken {
+                access_token: "new-token-2".to_string(),
+                refresh_token: "refresh-token-2".to_string(),
+                token_type: "Bearer".to_string(),
+                expiry: Some(expiry),
+            },
         )
         .expect("persist");
 
@@ -580,13 +667,22 @@ access_token = "old-token-2"
             .and_then(|value| value.get("access_token"))
             .and_then(toml::Value::as_str)
             .expect("second token");
+        let second_blob = nodes[1]
+            .get("GoogleDrive")
+            .and_then(|value| value.get("token"))
+            .cloned()
+            .expect("second blob");
+        let second_blob: OAuthToken =
+            second_blob.try_into().expect("token blob");
 
         assert_eq!(first, "old-token-1");
         assert_eq!(second, "new-token-2");
+        assert_eq!(second_blob.refresh_token, "refresh-token-2");
+        assert_eq!(second_blob.expiry, Some(expiry));
     }
 
     #[test]
-    fn persist_google_drive_access_token_errors_when_node_is_missing() {
+    fn persist_google_drive_token_errors_when_node_is_missing() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let config_path = temp_dir.path().join("config.toml");
         let content = r#"
@@ -600,10 +696,10 @@ access_token = "old-token-1"
 "#;
         fs::write(&config_path, content).expect("write config");
 
-        let error = persist_google_drive_access_token(
+        let error = persist_google_drive_token(
             &config_path,
             "missing-node",
-            "new-token",
+            &OAuthToken::default(),
         )
         .expect_err("missing node should fail");
 
@@ -616,5 +712,57 @@ access_token = "old-token-1"
             }
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[test]
+    fn read_google_drive_token_supports_legacy_fields() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let config_path = temp_dir.path().join("config.toml");
+        let content = r#"
+[[BackendNode]]
+name = "GD-1"
+type = "googleDrive"
+
+[BackendNode.GoogleDrive]
+node_uuid = "node-1"
+access_token = "old-token-1"
+refresh_token = "refresh-1"
+"#;
+        fs::write(&config_path, content).expect("write config");
+
+        let token = read_google_drive_token(&config_path, "node-1")
+            .expect("read token")
+            .expect("token");
+
+        assert_eq!(token.access_token, "old-token-1");
+        assert_eq!(token.refresh_token, "refresh-1");
+        assert_eq!(token.expiry, None);
+    }
+
+    #[test]
+    fn read_google_drive_token_prefers_token_blob() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let config_path = temp_dir.path().join("config.toml");
+        let content = r#"
+[[BackendNode]]
+name = "GD-1"
+type = "googleDrive"
+
+[BackendNode.GoogleDrive]
+node_uuid = "node-1"
+access_token = "old-token-1"
+refresh_token = "refresh-1"
+token = { access_token = "blob-access", refresh_token = "blob-refresh",
+          token_type = "Bearer", expiry = 2026-04-16T12:00:00Z }
+"#;
+        fs::write(&config_path, content).expect("write config");
+
+        let token = read_google_drive_token(&config_path, "node-1")
+            .expect("read token")
+            .expect("token");
+
+        assert_eq!(token.access_token, "blob-access");
+        assert_eq!(token.refresh_token, "blob-refresh");
+        assert_eq!(token.token_type, "Bearer");
     }
 }

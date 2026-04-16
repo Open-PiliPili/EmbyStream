@@ -1,61 +1,32 @@
 use std::sync::Arc;
 
+use chrono::Duration;
 use dashmap::DashMap;
 use hyper::{HeaderMap, header};
 use tokio::sync::Mutex as AsyncMutex;
-use tokio::time::{Duration, interval};
 
 use crate::{
     AppState,
     config::backend::{BackendNode, GoogleDriveConfig},
-    config::core::persist_google_drive_access_token,
     debug_log, error_log, info_log,
+    oauthutil::{
+        GoogleDriveTokenSource, OAuthToken, TokenRequest, TokenSourceError,
+    },
 };
 
 use super::google_drive::BACKEND_TYPE as GOOGLE_DRIVE_BACKEND_TYPE;
 
 const GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN: &str = "GOOGLE-DRIVE-AUTH";
-const PERIODIC_REFRESH_INTERVAL_SECS: u64 = 45 * 60;
+
+pub const LOOKUP_MIN_VALID_SECS: i64 = 60;
+pub const PROXY_MIN_VALID_SECS: i64 = 120;
+pub const ACCEL_REDIRECT_MIN_VALID_SECS: i64 = 600;
 
 pub type GoogleDriveRefreshLocks = DashMap<String, Arc<AsyncMutex<()>>>;
-
-fn cache_key(node_uuid: &str) -> String {
-    format!(
-        "google-drive-token:{}",
-        node_uuid.trim().to_ascii_lowercase()
-    )
-}
 
 pub fn is_google_drive_node(node: &BackendNode) -> bool {
     node.backend_type
         .eq_ignore_ascii_case(GOOGLE_DRIVE_BACKEND_TYPE)
-}
-
-pub fn current_access_token(
-    cache: &DashMap<String, String>,
-    node: &BackendNode,
-) -> Option<String> {
-    let cfg = node.google_drive.as_ref()?;
-    let key = cache_key(&cfg.node_uuid);
-    if let Some(token) = cache.get(&key) {
-        let token = token.value().trim();
-        if !token.is_empty() {
-            return Some(token.to_string());
-        }
-    }
-    let token = cfg.access_token.trim();
-    if token.is_empty() {
-        None
-    } else {
-        Some(token.to_string())
-    }
-}
-
-pub fn authorization_line_for_remote(
-    cache: &DashMap<String, String>,
-    node: &BackendNode,
-) -> Option<String> {
-    current_access_token(cache, node).map(|token| format!("Bearer {token}"))
 }
 
 pub fn extra_headers_from_auth_line(
@@ -69,6 +40,56 @@ pub fn extra_headers_from_auth_line(
     Ok(map)
 }
 
+pub async fn token_for_request(
+    state: Arc<AppState>,
+    node: BackendNode,
+    reason: &'static str,
+    min_valid_for: Duration,
+) -> Result<OAuthToken, TokenSourceError> {
+    let snapshot = GoogleDriveTokenSource::new(state, node)
+        .token(TokenRequest::new(reason, min_valid_for))
+        .await?;
+
+    debug_log!(
+        GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
+        "google_drive_token_selected reason={} source={}",
+        reason,
+        snapshot.source
+    );
+
+    Ok(snapshot.token)
+}
+
+pub async fn authorization_line_for_remote(
+    state: Arc<AppState>,
+    node: BackendNode,
+    reason: &'static str,
+    min_valid_for: Duration,
+) -> Result<String, TokenSourceError> {
+    let token =
+        token_for_request(state, node.clone(), reason, min_valid_for).await?;
+    token.authorization_header_value().ok_or_else(|| {
+        TokenSourceError::MissingAccessToken {
+            node: node.name.clone(),
+        }
+    })
+}
+
+pub async fn force_refresh(
+    state: Arc<AppState>,
+    node: BackendNode,
+    reason: &'static str,
+) -> Result<OAuthToken, TokenSourceError> {
+    GoogleDriveTokenSource::new(state, node)
+        .token(TokenRequest::force_refresh(reason))
+        .await
+        .map(|snapshot| snapshot.token)
+}
+
+pub fn invalidate(state: &Arc<AppState>, node: &BackendNode) {
+    GoogleDriveTokenSource::new(state.clone(), node.clone()).invalidate();
+}
+
 fn collect_refreshable_google_drive_nodes(
     nodes: &[BackendNode],
 ) -> Vec<BackendNode> {
@@ -79,9 +100,7 @@ fn collect_refreshable_google_drive_nodes(
             if cfg.node_uuid.trim().is_empty() {
                 return None;
             }
-            if cfg.refresh_token.trim().is_empty() {
-                return None;
-            }
+            cfg.effective_refresh_token()?;
             Some(node.clone())
         })
         .collect()
@@ -94,7 +113,43 @@ fn google_drive_config(node: &BackendNode) -> Option<&GoogleDriveConfig> {
     node.google_drive.as_ref()
 }
 
-async fn refresh_all_google_drive_nodes(state: Arc<AppState>) {
+pub fn log_token_error(
+    reason: &str,
+    node: &BackendNode,
+    error: &TokenSourceError,
+) {
+    error_log!(
+        GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
+        "google_drive_token_error node={} reason={} error={}",
+        node.name,
+        reason,
+        error
+    );
+}
+
+pub fn trigger_refresh_if_needed(state: Arc<AppState>, node: BackendNode) {
+    tokio::spawn(async move {
+        match force_refresh(state, node.clone(), "background_refresh").await {
+            Ok(_) => {
+                info_log!(
+                    GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
+                    "google_drive_background_refresh_succeeded node={}",
+                    node.name
+                );
+            }
+            Err(error) => {
+                debug_log!(
+                    GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
+                    "google_drive_background_refresh_skipped node={} error={}",
+                    node.name,
+                    error
+                );
+            }
+        }
+    });
+}
+
+pub async fn prewarm_google_drive_tokens(state: Arc<AppState>) {
     let nodes = {
         let config = state.get_config().await;
         collect_refreshable_google_drive_nodes(&config.backend_nodes)
@@ -103,146 +158,43 @@ async fn refresh_all_google_drive_nodes(state: Arc<AppState>) {
     if nodes.is_empty() {
         debug_log!(
             GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
-            "google_drive_periodic_refresh_skip reason=no_nodes"
+            "google_drive_prewarm_skip reason=no_nodes"
         );
         return;
     }
 
     info_log!(
         GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
-        "google_drive_periodic_refresh_tick nodes={}",
+        "google_drive_prewarm_start nodes={}",
         nodes.len()
     );
 
     for node in nodes {
-        trigger_refresh_if_needed(state.clone(), node);
-    }
-}
-
-pub fn start_periodic_refresh_task(state: Arc<AppState>) {
-    tokio::spawn(async move {
-        let mut ticker =
-            interval(Duration::from_secs(PERIODIC_REFRESH_INTERVAL_SECS));
-        ticker.tick().await;
-
-        loop {
-            ticker.tick().await;
-            refresh_all_google_drive_nodes(state.clone()).await;
-        }
-    });
-}
-
-pub async fn refresh_access_token_now(
-    state: Arc<AppState>,
-    node: &BackendNode,
-) -> Result<String, ()> {
-    let Some(cfg) = node.google_drive.as_ref() else {
-        return Err(());
-    };
-    let node_uuid = cfg.node_uuid.trim();
-    if node_uuid.is_empty() {
-        return Err(());
-    }
-
-    let key = cache_key(node_uuid);
-    let lock = state
-        .google_drive_refresh_locks
-        .entry(key.clone())
-        .or_insert_with(|| Arc::new(AsyncMutex::new(())))
-        .clone();
-    let _guard = lock.lock().await;
-
-    let client = state.get_google_drive_client().await.clone();
-    let refreshed = client
-        .refresh_access_token(
-            &cfg.client_id,
-            &cfg.client_secret,
-            &cfg.refresh_token,
+        let result = token_for_request(
+            state.clone(),
+            node.clone(),
+            "startup_prewarm",
+            Duration::seconds(PROXY_MIN_VALID_SECS),
         )
-        .await
-        .map_err(|error| {
-            error_log!(
+        .await;
+        if let Err(error) = result {
+            debug_log!(
                 GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
-                "google_drive_refresh_failed node={} error={}",
-                node.name,
-                error
-            );
-        })?;
-
-    state
-        .google_drive_access_token_cache
-        .insert(key, refreshed.access_token.clone());
-
-    {
-        let mut config = state.config.write().await;
-        for backend_node in &mut config.backend_nodes {
-            let Some(google_drive) = backend_node.google_drive.as_mut() else {
-                continue;
-            };
-            if google_drive.node_uuid.trim() != node_uuid {
-                continue;
-            }
-            google_drive.access_token = refreshed.access_token.clone();
-            break;
-        }
-        let _config_write_guard = state.config_write_lock.lock().await;
-        if let Err(error) = persist_google_drive_access_token(
-            &config.path,
-            node_uuid,
-            &refreshed.access_token,
-        ) {
-            error_log!(
-                GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
-                "google_drive_refresh_persist_failed node={} error={}",
+                "google_drive_prewarm_failed node={} error={}",
                 node.name,
                 error
             );
         }
     }
-
-    info_log!(
-        GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
-        "google_drive_refresh_succeeded node={}",
-        node.name
-    );
-    Ok(refreshed.access_token)
-}
-
-pub fn trigger_refresh_if_needed(state: Arc<AppState>, node: BackendNode) {
-    let Some(cfg) = node.google_drive.as_ref() else {
-        return;
-    };
-    let node_uuid = cfg.node_uuid.trim();
-    if node_uuid.is_empty() {
-        return;
-    }
-
-    let key = cache_key(node_uuid);
-    let lock = state
-        .google_drive_refresh_locks
-        .entry(key)
-        .or_insert_with(|| Arc::new(AsyncMutex::new(())))
-        .clone();
-
-    let Ok(refresh_guard) = lock.try_lock_owned() else {
-        debug_log!(
-            GOOGLE_DRIVE_AUTH_LOGGER_DOMAIN,
-            "google_drive_refresh_skip node={} reason=refresh_already_running",
-            node.name
-        );
-        return;
-    };
-
-    tokio::spawn(async move {
-        let _refresh_guard = refresh_guard;
-        let _ = refresh_access_token_now(state, &node).await;
-    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::collect_refreshable_google_drive_nodes;
-    use crate::config::backend::{BackendNode, GoogleDriveConfig};
+    use crate::{
+        config::backend::{BackendNode, GoogleDriveConfig},
+        oauthutil::OAuthToken,
+    };
 
     fn google_drive_node(
         name: &str,
@@ -276,6 +228,7 @@ mod tests {
                 drive_name: String::new(),
                 access_token: String::new(),
                 refresh_token: refresh_token.to_string(),
+                token: None,
             }),
             webdav: None,
         }
@@ -284,10 +237,21 @@ mod tests {
     #[test]
     fn collect_refreshable_google_drive_nodes_only_keeps_valid_google_drive_nodes()
      {
+        let mut token_only_refresh =
+            google_drive_node("google-token", "n2", "");
+        if let Some(google_drive) = token_only_refresh.google_drive.as_mut() {
+            google_drive.token = Some(OAuthToken {
+                access_token: String::new(),
+                refresh_token: "refresh-from-blob".to_string(),
+                token_type: "Bearer".to_string(),
+                expiry: None,
+            });
+        }
         let nodes = vec![
             google_drive_node("google-1", "node-1", "refresh-1"),
             google_drive_node("google-missing-uuid", "", "refresh-2"),
             google_drive_node("google-missing-refresh", "node-3", ""),
+            token_only_refresh,
             BackendNode {
                 name: "disk-1".to_string(),
                 backend_type: "disk".to_string(),
@@ -314,7 +278,8 @@ mod tests {
 
         let refreshable = collect_refreshable_google_drive_nodes(&nodes);
 
-        assert_eq!(refreshable.len(), 1);
+        assert_eq!(refreshable.len(), 2);
         assert_eq!(refreshable[0].name, "google-1");
+        assert_eq!(refreshable[1].name, "google-token");
     }
 }

@@ -1,6 +1,7 @@
 use std::{borrow::Cow, path::PathBuf, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
+use chrono::Duration;
 use form_urlencoded::Serializer;
 use hyper::{HeaderMap, StatusCode, Uri, header};
 use tokio::sync::Mutex as TokioMutex;
@@ -20,6 +21,7 @@ use super::{
     upstream_proxy, webdav, webdav_auth,
 };
 use crate::backend::types::ClientInfo;
+use crate::client::google_drive::GoogleDriveApiError;
 use crate::config::backend::BackendNode;
 use crate::core::redirect_info::{AccelRedirectInfo, RedirectInfo};
 use crate::{
@@ -729,6 +731,74 @@ impl AppStreamService {
         )
     }
 
+    async fn resolve_google_drive_file_id_with_retry(
+        &self,
+        node: &BackendNode,
+        resolved_path: &google_drive::ResolvedGoogleDrivePath,
+    ) -> Result<String, String> {
+        let client = self.state.get_google_drive_client().await.clone();
+        let access_token = google_drive_auth::token_for_request(
+            self.state.clone(),
+            node.clone(),
+            "resolve_file_id",
+            Duration::seconds(google_drive_auth::LOOKUP_MIN_VALID_SECS),
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+
+        let attempt = client
+            .resolve_file_id_by_path(
+                &access_token.access_token,
+                &resolved_path.lookup,
+                &resolved_path.relative_path,
+            )
+            .await;
+        match attempt {
+            Ok(resolved) => Ok(resolved.file_id),
+            Err(GoogleDriveApiError::ApiStatus { status: 401, .. }) => {
+                google_drive_auth::invalidate(&self.state, node);
+                let refreshed = google_drive_auth::token_for_request(
+                    self.state.clone(),
+                    node.clone(),
+                    "resolve_file_id_retry_401",
+                    Duration::seconds(google_drive_auth::LOOKUP_MIN_VALID_SECS),
+                )
+                .await
+                .map_err(|error| error.to_string())?;
+                client
+                    .resolve_file_id_by_path(
+                        &refreshed.access_token,
+                        &resolved_path.lookup,
+                        &resolved_path.relative_path,
+                    )
+                    .await
+                    .map(|resolved| resolved.file_id)
+                    .map_err(|error| error.to_string())
+            }
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
+    async fn google_drive_auth_headers(
+        &self,
+        node: &BackendNode,
+        reason: &'static str,
+        min_valid_for: Duration,
+    ) -> Result<(String, HeaderMap), String> {
+        let auth_line = google_drive_auth::authorization_line_for_remote(
+            self.state.clone(),
+            node.clone(),
+            reason,
+            min_valid_for,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+        let auth_headers =
+            google_drive_auth::extra_headers_from_auth_line(&auth_line)
+                .map_err(str::to_string)?;
+        Ok((auth_line, auth_headers))
+    }
+
     async fn resolve_google_drive_remote(
         &self,
         node: &BackendNode,
@@ -756,22 +826,11 @@ impl AppStreamService {
         {
             cached
         } else {
-            let client = self.state.get_google_drive_client().await.clone();
-            let access_token = google_drive_auth::current_access_token(
-                &self.state.google_drive_access_token_cache,
-                node,
-            )
-            .ok_or_else(|| "googleDrive access_token is empty".to_string())?;
-            let resolved = client
-                .resolve_file_id_by_path(
-                    &access_token,
-                    &resolved_path.lookup,
-                    &resolved_path.relative_path,
-                )
-                .await
-                .map_err(|error| error.to_string())?;
-            file_id_cache.insert(cache_key.clone(), resolved.file_id.clone());
-            resolved.file_id
+            let resolved = self
+                .resolve_google_drive_file_id_with_retry(node, &resolved_path)
+                .await?;
+            file_id_cache.insert(cache_key.clone(), resolved.clone());
+            resolved
         };
         drop(guard);
         AppState::cleanup_request_lock(
@@ -780,14 +839,18 @@ impl AppStreamService {
             &request_lock,
         );
 
-        let auth_line = google_drive_auth::authorization_line_for_remote(
-            &self.state.google_drive_access_token_cache,
-            node,
-        )
-        .ok_or_else(|| "googleDrive access_token is empty".to_string())?;
-        let auth_headers =
-            google_drive_auth::extra_headers_from_auth_line(&auth_line)
-                .map_err(str::to_string)?;
+        let min_valid_for = if proxy_mode == ProxyMode::AccelRedirect {
+            Duration::seconds(google_drive_auth::ACCEL_REDIRECT_MIN_VALID_SECS)
+        } else {
+            Duration::seconds(google_drive_auth::PROXY_MIN_VALID_SECS)
+        };
+        let (auth_line, auth_headers) = self
+            .google_drive_auth_headers(
+                node,
+                "build_remote_source",
+                min_valid_for,
+            )
+            .await?;
         let client = self.state.get_google_drive_client().await.clone();
         let remote_uri: Uri = client
             .build_media_url(&file_id)
@@ -949,10 +1012,29 @@ impl AppStreamService {
             return Ok(());
         }
 
-        google_drive_auth::trigger_refresh_if_needed(
-            self.state.clone(),
-            node.clone(),
-        );
+        if status == StatusCode::UNAUTHORIZED {
+            google_drive_auth::invalidate(&self.state, node);
+            let auth_line = google_drive_auth::authorization_line_for_remote(
+                self.state.clone(),
+                node.clone(),
+                "probe_redirect_retry_401",
+                Duration::seconds(google_drive_auth::PROXY_MIN_VALID_SECS),
+            )
+            .await
+            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+            let retry_status = upstream_proxy::probe_authorization(
+                uri.clone(),
+                &auth_line,
+                user_agent,
+                Some(stream_session_id),
+            )
+            .await
+            .map_err(|_| StatusCode::BAD_GATEWAY)?;
+            if retry_status.is_success() {
+                return Ok(());
+            }
+        }
+
         Err(StatusCode::SERVICE_UNAVAILABLE)
     }
 }
@@ -1042,6 +1124,7 @@ host = ""
                 drive_name: "pilipili".to_string(),
                 access_token: "access-token".to_string(),
                 refresh_token: "refresh-token".to_string(),
+                token: None,
             }),
             webdav: None,
         }
