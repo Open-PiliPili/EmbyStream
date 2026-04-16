@@ -119,6 +119,14 @@ impl Client {
         Self::with_endpoints(GOOGLE_DRIVE_API_BASE, GOOGLE_OAUTH_TOKEN_ENDPOINT)
     }
 
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        api_base: &str,
+        oauth_token_endpoint: &str,
+    ) -> Self {
+        Self::with_endpoints(api_base, oauth_token_endpoint)
+    }
+
     fn with_endpoints(api_base: &str, oauth_token_endpoint: &str) -> Self {
         let http = HttpClient::builder()
             .use_rustls_tls()

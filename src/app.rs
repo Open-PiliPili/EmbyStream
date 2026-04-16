@@ -240,6 +240,14 @@ impl AppState {
             .await
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_google_drive_client_for_test(
+        &self,
+        client: Arc<GoogleDriveClient>,
+    ) {
+        let _ = self.google_drive_client.set(client);
+    }
+
     pub async fn get_rate_limiter_cache(
         &self,
         node_uuid: &str,

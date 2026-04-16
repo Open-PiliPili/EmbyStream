@@ -19,6 +19,8 @@ pub mod macros;
 pub mod network;
 pub mod oauthutil;
 pub mod system;
+#[cfg(test)]
+pub mod test_support;
 pub mod util;
 
 pub use api::{EmbyAPI, OpenListAPI, PhotoMessage, TelegramAPI, TextMessage};

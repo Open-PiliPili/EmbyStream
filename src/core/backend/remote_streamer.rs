@@ -318,3 +318,216 @@ impl RemoteStreamer {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        path::PathBuf,
+        sync::{Arc, Once},
+    };
+
+    use hyper::{HeaderMap, StatusCode, Uri, header};
+    use rustls::crypto::aws_lc_rs;
+
+    use super::{RemoteStreamParams, RemoteStreamer};
+    use crate::{
+        AppState,
+        client::GoogleDriveClient,
+        config::{
+            backend::{BackendNode, GoogleDriveConfig},
+            core::{finish_raw_config, parse_raw_config_str},
+        },
+        core::backend::result::Result as AppStreamResult,
+        oauthutil::OAuthToken,
+        test_support::{
+            HttpMockHandler, http_response, spawn_http_mock_server,
+        },
+    };
+
+    const MIN_FRONTEND_CONFIG: &str = r#"
+[Log]
+level = "info"
+prefix = ""
+root_path = "./logs"
+
+[General]
+memory_mode = "middle"
+stream_mode = "frontend"
+encipher_key = "1234567890123456"
+encipher_iv = "1234567890123456"
+
+[Emby]
+url = "http://127.0.0.1"
+port = "8096"
+token = "tok"
+
+[UserAgent]
+mode = "allow"
+allow_ua = []
+deny_ua = []
+
+[Fallback]
+
+[Frontend]
+listen_port = 60001
+
+[Frontend.AntiReverseProxy]
+enable = false
+host = ""
+"#;
+
+    static RUSTLS_CRYPTO_INIT: Once = Once::new();
+
+    fn ensure_rustls_crypto_provider() {
+        RUSTLS_CRYPTO_INIT.call_once(|| {
+            let _ = aws_lc_rs::default_provider().install_default();
+        });
+    }
+
+    fn google_drive_node() -> BackendNode {
+        BackendNode {
+            name: "GoogleDrive".to_string(),
+            backend_type: "googleDrive".to_string(),
+            pattern: String::new(),
+            pattern_regex: None,
+            base_url: String::new(),
+            port: String::new(),
+            path: String::new(),
+            priority: 0,
+            proxy_mode: "proxy".to_string(),
+            client_speed_limit_kbs: 0,
+            client_burst_speed_kbs: 0,
+            path_rewrites: vec![],
+            anti_reverse_proxy: Default::default(),
+            path_rewriter_cache: vec![],
+            uuid: "node-uuid".to_string(),
+            disk: None,
+            open_list: None,
+            direct_link: None,
+            google_drive: Some(GoogleDriveConfig {
+                node_uuid: "gd-node".to_string(),
+                client_id: "client-id".to_string(),
+                client_secret: "client-secret".to_string(),
+                drive_id: "drive-id".to_string(),
+                drive_name: "pilipili".to_string(),
+                access_token: "access-token".to_string(),
+                refresh_token: "refresh-token".to_string(),
+                token: Some(OAuthToken {
+                    access_token: "access-token".to_string(),
+                    refresh_token: "refresh-token".to_string(),
+                    token_type: "Bearer".to_string(),
+                    expiry: Some(
+                        chrono::Utc::now() + chrono::Duration::hours(1),
+                    ),
+                }),
+            }),
+            webdav: None,
+        }
+    }
+
+    async fn test_state_with_node(
+        path: PathBuf,
+        node: BackendNode,
+    ) -> Arc<AppState> {
+        let raw = parse_raw_config_str(MIN_FRONTEND_CONFIG).expect("parse");
+        let mut config = finish_raw_config(path, raw).expect("finish");
+        config.backend_nodes = vec![node];
+        Arc::new(AppState::new(config).await)
+    }
+
+    fn google_drive_client_for_test(base: &str) -> Arc<GoogleDriveClient> {
+        Arc::new(GoogleDriveClient::new_for_test(
+            &format!("{base}/drive/v3"),
+            &format!("{base}/token"),
+        ))
+    }
+
+    #[tokio::test]
+    async fn stream_retries_google_drive_proxy_after_401() {
+        ensure_rustls_crypto_provider();
+        let dir = tempfile::tempdir().expect("temp dir");
+        let config_path = dir.path().join("config.toml");
+        let config = r#"
+[[BackendNode]]
+name = "GoogleDrive"
+type = "googleDrive"
+
+[BackendNode.GoogleDrive]
+node_uuid = "gd-node"
+client_id = "client-id"
+client_secret = "client-secret"
+drive_id = "drive-id"
+access_token = "access-token"
+refresh_token = "refresh-token"
+"#;
+        std::fs::write(&config_path, config).expect("write config");
+
+        let handlers: Vec<HttpMockHandler> = vec![
+            Box::new(move |request| {
+                Box::pin(async move {
+                    assert!(request.starts_with("GET /media HTTP/1.1"));
+                    assert!(
+                        request.contains("authorization: Bearer access-token")
+                    );
+                    http_response(401, "text/plain", "")
+                })
+            }),
+            Box::new(move |request| {
+                Box::pin(async move {
+                    assert!(request.starts_with("POST /token HTTP/1.1"));
+                    http_response(
+                        200,
+                        "application/json",
+                        r#"{"access_token":"refreshed-token","token_type":"Bearer","expires_in":3600}"#,
+                    )
+                })
+            }),
+            Box::new(move |request| {
+                Box::pin(async move {
+                    assert!(request.starts_with("GET /media HTTP/1.1"));
+                    assert!(
+                        request
+                            .contains("authorization: Bearer refreshed-token")
+                    );
+                    http_response(206, "video/mp4", "ok")
+                })
+            }),
+        ];
+        let base = spawn_http_mock_server(handlers).await;
+        let node = google_drive_node();
+        let state = test_state_with_node(config_path, node.clone()).await;
+        state.set_google_drive_client_for_test(google_drive_client_for_test(
+            &base,
+        ));
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::RANGE, "bytes=0-1".parse().expect("range"));
+        let result = RemoteStreamer::stream(RemoteStreamParams {
+            state,
+            url: Uri::try_from(format!("{base}/media")).expect("uri"),
+            user_agent: "UnitTest/1.0".to_string(),
+            client_headers: &headers,
+            extra_upstream_headers: Some({
+                let mut extra = HeaderMap::new();
+                extra.insert(
+                    header::AUTHORIZATION,
+                    "Bearer access-token".parse().expect("authorization"),
+                );
+                extra
+            }),
+            client: None,
+            client_ip: None,
+            node: &node,
+            stream_session_id: "session-1".to_string(),
+        })
+        .await
+        .expect("stream result");
+
+        match result {
+            AppStreamResult::Stream(response) => {
+                assert_eq!(response.status, StatusCode::PARTIAL_CONTENT);
+            }
+            _ => panic!("unexpected non-stream result"),
+        }
+    }
+}

@@ -1041,20 +1041,34 @@ impl AppStreamService {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Instant};
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::Instant,
+    };
 
     use dashmap::DashMap;
     use hyper::{HeaderMap, Uri, header};
+    use rustls::crypto::aws_lc_rs;
+    use std::sync::Once;
     use tokio::sync::Mutex as TokioMutex;
 
     use super::AppStreamService;
     use crate::{
         AppState,
+        client::GoogleDriveClient,
         config::{
             backend::{BackendNode, GoogleDriveConfig},
             core::{finish_raw_config, parse_raw_config_str},
         },
+        core::backend::google_drive::{DriveLookup, ResolvedGoogleDrivePath},
         core::request::Request as AppStreamRequest,
+        oauthutil::OAuthToken,
+        test_support::{
+            HttpMockHandler, http_response, spawn_http_mock_server,
+        },
     };
 
     const MIN_FRONTEND_CONFIG: &str = r#"
@@ -1089,11 +1103,55 @@ enable = false
 host = ""
 "#;
 
+    static RUSTLS_CRYPTO_INIT: Once = Once::new();
+
+    fn ensure_rustls_crypto_provider() {
+        RUSTLS_CRYPTO_INIT.call_once(|| {
+            let _ = aws_lc_rs::default_provider().install_default();
+        });
+    }
+
     async fn test_state() -> AppState {
         let raw = parse_raw_config_str(MIN_FRONTEND_CONFIG).expect("parse");
         let config =
             finish_raw_config("test.toml".into(), raw).expect("finish");
         AppState::new(config).await
+    }
+
+    async fn test_state_with_google_node(node: BackendNode) -> Arc<AppState> {
+        let dir = std::env::temp_dir()
+            .join(format!("embystream-service-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let config_path = dir.join("config.toml");
+        let content = r#"
+[[BackendNode]]
+name = "GoogleDrive"
+type = "googleDrive"
+
+[BackendNode.GoogleDrive]
+node_uuid = "gd-node"
+client_id = "client-id"
+client_secret = "client-secret"
+drive_id = "drive-123"
+access_token = "access-token"
+refresh_token = "refresh-token"
+"#;
+        std::fs::write(&config_path, content).expect("write config");
+
+        let raw = parse_raw_config_str(MIN_FRONTEND_CONFIG).expect("parse");
+        let mut config = finish_raw_config(config_path, raw).expect("finish");
+        config.backend_nodes = vec![node];
+        Arc::new(AppState::new(config).await)
+    }
+
+    fn google_drive_client_for_test(
+        api_base: &str,
+        oauth_base: &str,
+    ) -> Arc<GoogleDriveClient> {
+        Arc::new(GoogleDriveClient::new_for_test(
+            &format!("{api_base}/drive/v3"),
+            &format!("{oauth_base}/token"),
+        ))
     }
 
     fn google_drive_node() -> BackendNode {
@@ -1124,7 +1182,14 @@ host = ""
                 drive_name: "pilipili".to_string(),
                 access_token: "access-token".to_string(),
                 refresh_token: "refresh-token".to_string(),
-                token: None,
+                token: Some(OAuthToken {
+                    access_token: "access-token".to_string(),
+                    refresh_token: "refresh-token".to_string(),
+                    token_type: "Bearer".to_string(),
+                    expiry: Some(
+                        chrono::Utc::now() + chrono::Duration::hours(1),
+                    ),
+                }),
             }),
             webdav: None,
         }
@@ -1264,6 +1329,146 @@ token=Bearer+access-token"
                 .and_then(|value| value.to_str().ok()),
             Some("Bearer access-token")
         );
+    }
+
+    #[tokio::test]
+    async fn resolve_google_drive_file_id_with_retry_refreshes_after_401() {
+        ensure_rustls_crypto_provider();
+        let hit = Arc::new(AtomicUsize::new(0));
+        let api_handlers: Vec<HttpMockHandler> =
+            vec![
+                {
+                    let hit = hit.clone();
+                    Box::new(move |_request| {
+                        let hit = hit.clone();
+                        Box::pin(async move {
+                            assert_eq!(hit.fetch_add(1, Ordering::SeqCst), 0);
+                            http_response(401, "application/json", "{}")
+                        })
+                    })
+                },
+                {
+                    let hit = hit.clone();
+                    Box::new(move |request| {
+                        let hit = hit.clone();
+                        Box::pin(async move {
+                            assert_eq!(hit.fetch_add(1, Ordering::SeqCst), 1);
+                            assert!(request.contains(
+                                "authorization: Bearer refreshed-token"
+                            ));
+                            http_response(
+                                200,
+                                "application/json",
+                                r#"{"files":[{"id":"file-123"}]}"#,
+                            )
+                        })
+                    })
+                },
+            ];
+        let token_handlers: Vec<HttpMockHandler> = vec![Box::new(
+            move |request| {
+                Box::pin(async move {
+                    assert!(request.starts_with("POST /token HTTP/1.1"));
+                    http_response(
+                        200,
+                        "application/json",
+                        r#"{"access_token":"refreshed-token","token_type":"Bearer","expires_in":3600}"#,
+                    )
+                })
+            },
+        )];
+        let api_base = spawn_http_mock_server(api_handlers).await;
+        let token_base = spawn_http_mock_server(token_handlers).await;
+        let node = google_drive_node();
+        let state = test_state_with_google_node(node.clone()).await;
+        state.set_google_drive_client_for_test(google_drive_client_for_test(
+            &api_base,
+            &token_base,
+        ));
+        let service = AppStreamService::new(state.clone());
+        let resolved = ResolvedGoogleDrivePath {
+            lookup: DriveLookup::DriveId("drive-123".to_string()),
+            drive_name: "pilipili".to_string(),
+            logical_path: "/test.mkv".to_string(),
+            relative_path: "/test.mkv".to_string(),
+        };
+
+        let file_id = service
+            .resolve_google_drive_file_id_with_retry(&node, &resolved)
+            .await
+            .expect("file id");
+
+        assert_eq!(file_id, "file-123");
+        let config = state.get_config().await;
+        let token = config.backend_nodes[0]
+            .google_drive
+            .as_ref()
+            .and_then(|cfg| cfg.token.as_ref())
+            .expect("updated token");
+        assert_eq!(token.access_token, "refreshed-token");
+    }
+
+    #[tokio::test]
+    async fn probe_google_drive_redirect_target_retries_after_401() {
+        ensure_rustls_crypto_provider();
+        let media_handlers: Vec<HttpMockHandler> = vec![
+            Box::new(move |request| {
+                Box::pin(async move {
+                    assert!(request.starts_with("HEAD /media HTTP/1.1"));
+                    assert!(
+                        request.contains("authorization: Bearer access-token")
+                    );
+                    http_response(401, "text/plain", "")
+                })
+            }),
+            Box::new(move |request| {
+                Box::pin(async move {
+                    assert!(request.starts_with("HEAD /media HTTP/1.1"));
+                    assert!(
+                        request.contains("authorization: Bearer probe-token")
+                    );
+                    http_response(200, "text/plain", "")
+                })
+            }),
+        ];
+        let token_handlers: Vec<HttpMockHandler> = vec![Box::new(
+            move |request| {
+                Box::pin(async move {
+                    assert!(request.starts_with("POST /token HTTP/1.1"));
+                    http_response(
+                        200,
+                        "application/json",
+                        r#"{"access_token":"probe-token","token_type":"Bearer","expires_in":3600}"#,
+                    )
+                })
+            },
+        )];
+        let media_base = spawn_http_mock_server(media_handlers).await;
+        let token_base = spawn_http_mock_server(token_handlers).await;
+        let node = google_drive_node();
+        let state = test_state_with_google_node(node.clone()).await;
+        state.set_google_drive_client_for_test(google_drive_client_for_test(
+            &media_base,
+            &token_base,
+        ));
+        let service = AppStreamService::new(state);
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            "Bearer access-token".parse().expect("authorization"),
+        );
+
+        let result = service
+            .probe_google_drive_redirect_target(
+                &node,
+                &format!("{media_base}/media").parse().expect("uri"),
+                Some(&headers),
+                "UnitTest/1.0",
+                "session-1",
+            )
+            .await;
+
+        assert_eq!(result, Ok(()));
     }
 }
 
