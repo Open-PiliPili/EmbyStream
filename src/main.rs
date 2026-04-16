@@ -262,10 +262,13 @@ async fn setup_google_drive_refresh(app_state: &Arc<AppState>) {
     tokio::spawn(google_drive_auth::prewarm_google_drive_tokens(
         app_state.clone(),
     ));
+    tokio::spawn(google_drive_auth::schedule_google_drive_token_refreshes(
+        app_state.clone(),
+    ));
     info_log!(
         INIT_LOGGER_DOMAIN,
         "googleDrive request-time token source enabled \
-         (startup prewarm scheduled, nodes: {})",
+         (startup prewarm and expiry-driven prerefresh scheduled, nodes: {})",
         google_drive_node_count
     );
 }
