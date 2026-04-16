@@ -115,8 +115,10 @@ impl AppStreamService {
             .node
             .as_ref()
             .ok_or(AppStreamError::BackendNodeNotFound)?;
-        let proxy_mode =
-            node.proxy_mode.parse::<ProxyMode>().unwrap_or_default();
+        let proxy_mode = Self::parse_proxy_mode(node);
+        let is_local_uri = Uri::is_local(&uri);
+        let is_webdav_node = Self::is_webdav_node(node);
+        let is_google_drive_node = Self::is_google_drive_node(node);
 
         debug_log!(
             STREAM_LOGGER_DOMAIN,
@@ -124,12 +126,19 @@ impl AppStreamService {
             node.name,
             proxy_mode
         );
+        debug_log!(
+            STREAM_LOGGER_DOMAIN,
+            "route_node_diagnostics node={} backend_type={} proxy_mode_raw={:?} \
+             is_local_uri={} has_webdav_config={} has_google_drive_config={}",
+            node.name,
+            node.backend_type,
+            node.proxy_mode,
+            is_local_uri,
+            node.webdav.is_some(),
+            node.google_drive.is_some()
+        );
 
-        let result = if node
-            .backend_type
-            .eq_ignore_ascii_case(webdav::BACKEND_TYPE)
-            && Uri::is_local(&uri)
-        {
+        let result = if is_webdav_node && is_local_uri {
             let path_str = Uri::to_path_or_url_string(&uri);
             if proxy_mode == ProxyMode::AccelRedirect {
                 let node_uuid = Self::webdav_accel_redirect_node_uuid(node)?;
@@ -155,11 +164,7 @@ impl AppStreamService {
                     extra_upstream_headers: None,
                 })
             }
-        } else if node
-            .backend_type
-            .eq_ignore_ascii_case(google_drive::BACKEND_TYPE)
-            && Uri::is_local(&uri)
-        {
+        } else if is_google_drive_node && is_local_uri {
             let raw_path = Uri::to_path_or_url_string(&uri);
             let resolved = self
                 .resolve_google_drive_remote(node, &raw_path, proxy_mode)
@@ -175,7 +180,7 @@ impl AppStreamService {
                     AppStreamError::InvalidUri
                 })?;
             Ok(resolved)
-        } else if !Uri::is_local(&uri) {
+        } else if !is_local_uri {
             debug_log!(STREAM_LOGGER_DOMAIN, "URI is already remote: {}", uri);
             Ok(Source::Remote {
                 uri,
@@ -183,6 +188,21 @@ impl AppStreamService {
                 extra_upstream_headers: None,
             })
         } else {
+            if is_webdav_node || is_google_drive_node {
+                error_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "special_backend_local_fallback_blocked node={} backend_type={} \
+                     local_uri={} webdav_cfg={} google_drive_cfg={} uri={}",
+                    node.name,
+                    node.backend_type,
+                    is_local_uri,
+                    node.webdav.is_some(),
+                    node.google_drive.is_some(),
+                    uri
+                );
+                return Err(AppStreamError::InvalidUri);
+            }
+
             let disk =
                 node.backend_type.eq_ignore_ascii_case(DISK_BACKEND_TYPE);
             let stream_relay = node
@@ -370,6 +390,36 @@ impl AppStreamService {
         );
 
         Ok(current_uri)
+    }
+
+    fn parse_proxy_mode(node: &BackendNode) -> ProxyMode {
+        let raw = node.proxy_mode.trim();
+        match raw.parse::<ProxyMode>() {
+            Ok(mode) => mode,
+            Err(_) => {
+                warn_log!(
+                    STREAM_LOGGER_DOMAIN,
+                    "invalid_proxy_mode node={} backend_type={} raw={:?} \
+                     fallback=Proxy",
+                    node.name,
+                    node.backend_type,
+                    node.proxy_mode
+                );
+                ProxyMode::default()
+            }
+        }
+    }
+
+    fn is_webdav_node(node: &BackendNode) -> bool {
+        node.webdav.is_some()
+            || node.backend_type.eq_ignore_ascii_case(webdav::BACKEND_TYPE)
+    }
+
+    fn is_google_drive_node(node: &BackendNode) -> bool {
+        node.google_drive.is_some()
+            || node
+                .backend_type
+                .eq_ignore_ascii_case(google_drive::BACKEND_TYPE)
     }
 
     async fn fetch_remote_uri_if_openlist(
@@ -1063,12 +1113,14 @@ mod tests {
             backend::{BackendNode, GoogleDriveConfig},
             core::{finish_raw_config, parse_raw_config_str},
         },
+        core::error::Error as AppStreamError,
         core::backend::google_drive::{DriveLookup, ResolvedGoogleDrivePath},
         core::request::Request as AppStreamRequest,
         oauthutil::OAuthToken,
         test_support::{
             HttpMockHandler, http_response, spawn_http_mock_server,
         },
+        util::UriExt,
     };
 
     const MIN_FRONTEND_CONFIG: &str = r#"
@@ -1193,6 +1245,22 @@ refresh_token = "refresh-token"
             }),
             webdav: None,
         }
+    }
+
+    fn google_drive_request(node: BackendNode, sign_uri: Uri) -> AppStreamRequest {
+        let mut request = AppStreamRequest::new(
+            Uri::from_static(
+                "/stream?sign=dummy&device_id=device-1&session_id=session-1",
+            ),
+            HeaderMap::new(),
+            Instant::now(),
+            Some(node),
+        );
+        request.sign = Some(crate::core::sign::Sign::new(
+            Some(sign_uri),
+            Some(u64::MAX),
+        ));
+        request
     }
 
     #[test]
@@ -1469,6 +1537,35 @@ token=Bearer+access-token"
             .await;
 
         assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn parse_proxy_mode_trims_whitespace() {
+        let mut node = google_drive_node();
+        node.proxy_mode = "  accel_redirect  ".to_string();
+
+        let mode = AppStreamService::parse_proxy_mode(&node);
+
+        assert_eq!(mode, crate::core::backend::proxy_mode::ProxyMode::AccelRedirect);
+    }
+
+    #[tokio::test]
+    async fn route_with_sign_prefers_google_drive_config_over_local_fallback() {
+        let mut node = google_drive_node();
+        node.backend_type = "Disk".to_string();
+        node.proxy_mode = " accel_redirect ".to_string();
+
+        let state = test_state_with_google_node(node.clone()).await;
+        let service = AppStreamService::new(state);
+        let request = google_drive_request(
+            node,
+            Uri::force_from_path_or_url("/pilipili/test.mkv")
+                .expect("sign uri"),
+        );
+
+        let result = service.route_with_sign(&request).await;
+
+        assert!(matches!(result, Err(AppStreamError::InvalidUri)));
     }
 }
 
