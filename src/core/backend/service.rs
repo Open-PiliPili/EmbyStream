@@ -1131,8 +1131,8 @@ mod tests {
             backend::{BackendNode, GoogleDriveConfig},
             core::{finish_raw_config, parse_raw_config_str},
         },
-        core::error::Error as AppStreamError,
         core::backend::google_drive::{DriveLookup, ResolvedGoogleDrivePath},
+        core::error::Error as AppStreamError,
         core::request::Request as AppStreamRequest,
         oauthutil::OAuthToken,
         test_support::{
@@ -1265,7 +1265,10 @@ refresh_token = "refresh-token"
         }
     }
 
-    fn google_drive_request(node: BackendNode, sign_uri: Uri) -> AppStreamRequest {
+    fn google_drive_request(
+        node: BackendNode,
+        sign_uri: Uri,
+    ) -> AppStreamRequest {
         let mut request = AppStreamRequest::new(
             Uri::from_static(
                 "/stream?sign=dummy&device_id=device-1&session_id=session-1",
@@ -1274,10 +1277,8 @@ refresh_token = "refresh-token"
             Instant::now(),
             Some(node),
         );
-        request.sign = Some(crate::core::sign::Sign::new(
-            Some(sign_uri),
-            Some(u64::MAX),
-        ));
+        request.sign =
+            Some(crate::core::sign::Sign::new(Some(sign_uri), Some(u64::MAX)));
         request
     }
 
@@ -1564,7 +1565,10 @@ token=access-token"
 
         let mode = AppStreamService::parse_proxy_mode(&node);
 
-        assert_eq!(mode, crate::core::backend::proxy_mode::ProxyMode::AccelRedirect);
+        assert_eq!(
+            mode,
+            crate::core::backend::proxy_mode::ProxyMode::AccelRedirect
+        );
     }
 
     #[tokio::test]
