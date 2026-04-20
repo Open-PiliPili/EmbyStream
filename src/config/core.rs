@@ -514,54 +514,9 @@ pub fn persist_google_drive_token(
     token: &OAuthToken,
 ) -> Result<(), ConfigError> {
     let content = fs::read_to_string(config_path)?;
-    let mut doc: toml::Value = toml::from_str(&content)?;
-    let backend_nodes = doc
-        .get_mut("BackendNode")
-        .and_then(toml::Value::as_array_mut)
-        .ok_or_else(|| ConfigError::MissingConfig("BackendNode".to_string()))?;
-
-    let mut matched = false;
-    for node in backend_nodes {
-        let Some(google_drive) = node
-            .get_mut("GoogleDrive")
-            .and_then(toml::Value::as_table_mut)
-        else {
-            continue;
-        };
-        let current_uuid = google_drive
-            .get("node_uuid")
-            .and_then(toml::Value::as_str)
-            .unwrap_or_default();
-        if current_uuid != node_uuid {
-            continue;
-        }
-        google_drive.insert(
-            "access_token".to_string(),
-            toml::Value::String(token.access_token.clone()),
-        );
-        google_drive.insert(
-            "refresh_token".to_string(),
-            toml::Value::String(token.refresh_token.clone()),
-        );
-        google_drive
-            .insert("token".to_string(), oauth_token_to_toml_value(token)?);
-        matched = true;
-        break;
-    }
-
-    if !matched {
-        return Err(ConfigError::MissingConfig(format!(
-            "BackendNode.GoogleDrive.node_uuid '{}'",
-            node_uuid
-        )));
-    }
-
-    let serialized = toml::to_string_pretty(&doc).map_err(|error| {
-        ConfigError::Io(IoError::other(format!(
-            "serialize config after googleDrive token update: {error}"
-        )))
-    })?;
-    write_atomic_config(config_path, &serialized)
+    let updated =
+        rewrite_google_drive_token_in_raw_config(&content, node_uuid, token)?;
+    write_atomic_config(config_path, &updated)
 }
 
 fn parse_google_drive_token_table(
@@ -599,6 +554,184 @@ fn oauth_token_to_toml_value(
             "serialize googleDrive token blob: {error}"
         )))
     })
+}
+
+fn rewrite_google_drive_token_in_raw_config(
+    content: &str,
+    node_uuid: &str,
+    token: &OAuthToken,
+) -> Result<String, ConfigError> {
+    let backend_node_header = Regex::new(r"(?m)^\[\[BackendNode\]\]\s*$")
+        .expect("valid backend node regex");
+    let header_ranges: Vec<_> =
+        backend_node_header.find_iter(content).collect();
+    if header_ranges.is_empty() {
+        return Err(ConfigError::MissingConfig("BackendNode".to_string()));
+    }
+
+    for (index, header) in header_ranges.iter().enumerate() {
+        let block_start = header.start();
+        let block_end = header_ranges
+            .get(index + 1)
+            .map_or(content.len(), regex::Match::start);
+        let block = &content[block_start..block_end];
+        let Some((section_start, section_end)) =
+            find_google_drive_section_range(block)
+        else {
+            continue;
+        };
+        let section = &block[section_start..section_end];
+        if !section_matches_google_drive_uuid(section, node_uuid) {
+            continue;
+        }
+
+        let rewritten = rewrite_google_drive_section(section, token)?;
+        let absolute_start = block_start + section_start;
+        let absolute_end = block_start + section_end;
+        return Ok(format!(
+            "{}{}{}",
+            &content[..absolute_start],
+            rewritten,
+            &content[absolute_end..]
+        ));
+    }
+
+    Err(ConfigError::MissingConfig(format!(
+        "BackendNode.GoogleDrive.node_uuid '{}'",
+        node_uuid
+    )))
+}
+
+fn find_google_drive_section_range(block: &str) -> Option<(usize, usize)> {
+    let header_regex =
+        Regex::new(r"(?m)^\[[^\n]+\]\s*$").expect("valid section regex");
+    let headers: Vec<_> = header_regex.find_iter(block).collect();
+
+    for (index, header) in headers.iter().enumerate() {
+        if header.as_str().trim() != "[BackendNode.GoogleDrive]" {
+            continue;
+        }
+        let end = headers
+            .get(index + 1)
+            .map_or(block.len(), regex::Match::start);
+        return Some((header.start(), end));
+    }
+
+    None
+}
+
+fn section_matches_google_drive_uuid(section: &str, node_uuid: &str) -> bool {
+    let uuid_regex = Regex::new(r#"(?m)^\s*node_uuid\s*=\s*"([^"]*)"\s*$"#)
+        .expect("valid node uuid regex");
+    uuid_regex
+        .captures(section)
+        .and_then(|captures| captures.get(1))
+        .is_some_and(|value| value.as_str() == node_uuid)
+}
+
+fn rewrite_google_drive_section(
+    section: &str,
+    token: &OAuthToken,
+) -> Result<String, ConfigError> {
+    let mut lines: Vec<String> =
+        section.split_inclusive('\n').map(str::to_string).collect();
+    if lines.is_empty() {
+        return Ok(section.to_string());
+    }
+
+    let access_value = render_toml_string(&token.access_token);
+    let refresh_value = render_toml_string(&token.refresh_token);
+    let token_value = oauth_token_to_toml_value(token)?.to_string();
+
+    upsert_key_value_line(&mut lines, "access_token", &access_value);
+    upsert_key_value_line(&mut lines, "refresh_token", &refresh_value);
+    upsert_key_value_line(&mut lines, "token", &token_value);
+
+    Ok(lines.concat())
+}
+
+fn upsert_key_value_line(lines: &mut Vec<String>, key: &str, value: &str) {
+    if let Some((start, end)) = find_key_span(lines, key) {
+        let replacement = build_assignment_line(&lines[start], key, value);
+        lines.splice(start..end, [replacement]);
+        return;
+    }
+
+    let insert_at = insertion_index_for_missing_key(lines, key);
+    let template_index = insert_at.saturating_sub(1).min(lines.len() - 1);
+    let template = &lines[template_index];
+    let replacement = build_assignment_line(template, key, value);
+    lines.insert(insert_at, replacement);
+}
+
+fn find_key_span(lines: &[String], key: &str) -> Option<(usize, usize)> {
+    for (index, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        if !trimmed.starts_with(key) {
+            continue;
+        }
+        let rest = &trimmed[key.len()..];
+        if !rest.starts_with(char::is_whitespace) && !rest.starts_with('=') {
+            continue;
+        }
+
+        if key != "token" {
+            return Some((index, index + 1));
+        }
+
+        let mut balance = brace_delta(rest);
+        let mut end = index + 1;
+        while balance > 0 && end < lines.len() {
+            balance += brace_delta(&lines[end]);
+            end += 1;
+        }
+        return Some((index, end));
+    }
+
+    None
+}
+
+fn insertion_index_for_missing_key(lines: &[String], key: &str) -> usize {
+    let preferred_keys: &[&str] = match key {
+        "access_token" => &["access_token", "node_uuid"],
+        "refresh_token" => &["refresh_token", "access_token", "node_uuid"],
+        "token" => &["token", "refresh_token", "access_token", "node_uuid"],
+        _ => &[],
+    };
+
+    let mut best = 1usize.min(lines.len());
+    for preferred_key in preferred_keys {
+        if let Some((_, end)) = find_key_span(lines, preferred_key) {
+            best = best.max(end);
+        }
+    }
+    best.min(lines.len())
+}
+
+fn build_assignment_line(template: &str, key: &str, value: &str) -> String {
+    let indent_len = template
+        .chars()
+        .take_while(|ch| ch.is_whitespace() && *ch != '\n' && *ch != '\r')
+        .count();
+    let indent: String = template.chars().take(indent_len).collect();
+    let newline = if template.ends_with("\r\n") {
+        "\r\n"
+    } else if template.ends_with('\n') {
+        "\n"
+    } else {
+        ""
+    };
+    format!("{indent}{key} = {value}{newline}")
+}
+
+fn render_toml_string(value: &str) -> String {
+    toml::Value::String(value.to_string()).to_string()
+}
+
+fn brace_delta(input: &str) -> isize {
+    let open = input.chars().filter(|ch| *ch == '{').count() as isize;
+    let close = input.chars().filter(|ch| *ch == '}').count() as isize;
+    open - close
 }
 
 #[cfg(test)]
@@ -764,5 +897,118 @@ token = { access_token = "blob-access", refresh_token = "blob-refresh",
         assert_eq!(token.access_token, "blob-access");
         assert_eq!(token.refresh_token, "blob-refresh");
         assert_eq!(token.token_type, "Bearer");
+    }
+
+    #[test]
+    fn persist_google_drive_token_preserves_original_order_and_comments() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let config_path = temp_dir.path().join("config.toml");
+        let content = r#"[Log]
+level = "info"
+
+[General]
+memory_mode = "high"
+
+[[BackendNode]]
+name = "GD-1"
+type = "googleDrive"
+# keep this comment
+[BackendNode.GoogleDrive]
+node_uuid = "node-1"
+refresh_token = "old-refresh"
+access_token = "old-access"
+
+[Backend]
+listen_port = 60001
+"#;
+        fs::write(&config_path, content).expect("write config");
+
+        persist_google_drive_token(
+            &config_path,
+            "node-1",
+            &OAuthToken {
+                access_token: "new-access".to_string(),
+                refresh_token: "new-refresh".to_string(),
+                token_type: "Bearer".to_string(),
+                expiry: None,
+            },
+        )
+        .expect("persist");
+
+        let persisted = fs::read_to_string(&config_path).expect("read config");
+        let expected = r#"[Log]
+level = "info"
+
+[General]
+memory_mode = "high"
+
+[[BackendNode]]
+name = "GD-1"
+type = "googleDrive"
+# keep this comment
+[BackendNode.GoogleDrive]
+node_uuid = "node-1"
+refresh_token = "new-refresh"
+access_token = "new-access"
+token = { access_token = "new-access", refresh_token = "new-refresh", token_type = "Bearer" }
+
+[Backend]
+listen_port = 60001
+"#;
+
+        assert_eq!(persisted, expected);
+    }
+
+    #[test]
+    fn persist_google_drive_token_replaces_multiline_token_without_reordering()
+    {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let config_path = temp_dir.path().join("config.toml");
+        let content = r#"[[BackendNode]]
+name = "GD-1"
+type = "googleDrive"
+
+[BackendNode.GoogleDrive]
+node_uuid = "node-1"
+access_token = "old-access"
+refresh_token = "old-refresh"
+token = { access_token = "old-access", refresh_token = "old-refresh",
+          token_type = "Bearer", expiry = 2026-04-16T12:00:00Z }
+
+[[BackendNode.PathRewrite]]
+pattern = "^/mnt/media/pilipili/(.*)$"
+replacement = "/pilipili/pilipili/$1"
+"#;
+        fs::write(&config_path, content).expect("write config");
+
+        persist_google_drive_token(
+            &config_path,
+            "node-1",
+            &OAuthToken {
+                access_token: "fresh-access".to_string(),
+                refresh_token: "fresh-refresh".to_string(),
+                token_type: "Bearer".to_string(),
+                expiry: None,
+            },
+        )
+        .expect("persist");
+
+        let persisted = fs::read_to_string(&config_path).expect("read config");
+        let expected = r#"[[BackendNode]]
+name = "GD-1"
+type = "googleDrive"
+
+[BackendNode.GoogleDrive]
+node_uuid = "node-1"
+access_token = "fresh-access"
+refresh_token = "fresh-refresh"
+token = { access_token = "fresh-access", refresh_token = "fresh-refresh", token_type = "Bearer" }
+
+[[BackendNode.PathRewrite]]
+pattern = "^/mnt/media/pilipili/(.*)$"
+replacement = "/pilipili/pilipili/$1"
+"#;
+
+        assert_eq!(persisted, expected);
     }
 }
