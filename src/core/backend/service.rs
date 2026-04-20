@@ -115,7 +115,7 @@ impl AppStreamService {
             .node
             .as_ref()
             .ok_or(AppStreamError::BackendNodeNotFound)?;
-        let proxy_mode = Self::parse_proxy_mode(node);
+        let proxy_mode = Self::effective_proxy_mode(node);
         let is_local_uri = Uri::is_local(&uri);
         let is_webdav_node = Self::is_webdav_node(node);
         let is_google_drive_node = Self::is_google_drive_node(node);
@@ -408,6 +408,20 @@ impl AppStreamService {
                 ProxyMode::default()
             }
         }
+    }
+
+    fn effective_proxy_mode(node: &BackendNode) -> ProxyMode {
+        let parsed = Self::parse_proxy_mode(node);
+        if Self::is_google_drive_node(node) && parsed == ProxyMode::Redirect {
+            warn_log!(
+                STREAM_LOGGER_DOMAIN,
+                "google_drive_redirect_fallback_to_proxy node={} raw_proxy_mode={:?}",
+                node.name,
+                node.proxy_mode
+            );
+            return ProxyMode::Proxy;
+        }
+        parsed
     }
 
     fn is_webdav_node(node: &BackendNode) -> bool {
@@ -1569,6 +1583,16 @@ token=access-token"
             mode,
             crate::core::backend::proxy_mode::ProxyMode::AccelRedirect
         );
+    }
+
+    #[test]
+    fn google_drive_redirect_falls_back_to_proxy() {
+        let mut node = google_drive_node();
+        node.proxy_mode = "redirect".to_string();
+
+        let mode = AppStreamService::effective_proxy_mode(&node);
+
+        assert_eq!(mode, crate::core::backend::proxy_mode::ProxyMode::Proxy);
     }
 
     #[tokio::test]
