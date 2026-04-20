@@ -42,6 +42,7 @@ proposal/
 .cursor/
 .claude/
 doc/
+AGENTS.md
 
 # === Web UI ===
 web_data/
