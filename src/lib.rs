@@ -22,6 +22,7 @@ pub mod system;
 #[cfg(test)]
 pub mod test_support;
 pub mod util;
+pub mod web;
 
 pub use api::{EmbyAPI, OpenListAPI, PhotoMessage, TelegramAPI, TextMessage};
 pub use app::*;

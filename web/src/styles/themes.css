@@ -1,0 +1,13 @@
+html {
+  background: var(--bg-app);
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--signal-accent) 24%, transparent);
+  color: var(--text-main);
+}

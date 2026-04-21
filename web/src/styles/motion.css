@@ -1,0 +1,36 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+a,
+button,
+input,
+textarea,
+select {
+  transition:
+    border-color 180ms var(--curve-swift),
+    background-color 180ms var(--curve-swift),
+    color 180ms var(--curve-swift),
+    box-shadow 220ms var(--curve-swift),
+    transform 260ms var(--curve-buoy),
+    opacity 180ms var(--curve-swift);
+}
+
+@media (pointer: fine) {
+  button:active,
+  a:active {
+    transform: translateY(1px) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

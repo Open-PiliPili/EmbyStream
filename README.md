@@ -37,10 +37,80 @@ Architecture background: [**EmbyStream Wiki**](https://github.com/Open-PiliPili/
 - **STRM-friendly** paths, path rewrite rules, and optional **fallback** video when a file is missing.
 - **Signed / encrypted playback URLs** with expiry; **per-node** redirect vs proxy and **per-device** speed limits.
 - **User-Agent** allow/deny; **anti–reverse-proxy** host checks on the frontend (and per node where configured).
-- **Interactive config wizard:** `embystream config template` / `config show`; use **`--lang zh`** for Simplified Chinese prompts and localized `--help` (default `en`).
+- **Web-first onboarding:** browser wizard, draft restore, generated deploy artifacts, and admin-only log viewing.
+- **CLI fallback:** `embystream config template` / `config show`; use **`--lang zh`** for Simplified Chinese prompts and localized `--help` (default `en`).
 - **CORS / OPTIONS**, playlist handling, API response caching on the forward path, and **HTTP/2 TLS** for the backend via `[Http2]` or CLI overrides.
 
 Detailed behavior and every TOML field: **[Configuration reference](docs/configuration-reference.md)**.
+
+## Web Config Studio
+
+The preferred first-time setup path is now the **Web Config Studio**.
+
+It provides:
+
+- local account registration and login
+- step-by-step config editing
+- draft autosave and restore
+- generated `config.toml`, `nginx.conf`, `docker-compose.yaml`, `systemd.service`, and `pm2.config.cjs`
+- per-file preview and download
+- admin-only browser log viewing
+
+### Local development
+
+Build the frontend once:
+
+```shell
+cd web
+bun install
+bun run build
+cd ..
+```
+
+Start the web service:
+
+```shell
+cargo run -- web serve \
+  --listen 127.0.0.1:17172 \
+  --data-dir ./web_data \
+  --runtime-log-dir ./logs
+```
+
+Optional TMDB background support:
+
+```shell
+cargo run -- web serve \
+  --listen 127.0.0.1:17172 \
+  --data-dir ./web_data \
+  --runtime-log-dir ./logs \
+  --tmdb-api-key YOUR_TMDB_API_KEY
+```
+
+If `--tmdb-api-key` is absent, the login background falls back to Bing daily images.
+
+### Single-binary packaging
+
+If `web/dist` exists when Rust is built, the frontend assets are embedded at build time.
+
+Example:
+
+```shell
+cd web
+bun install
+bun run build
+cd ..
+cargo build --release
+./target/release/embystream web serve --data-dir ./web_data
+```
+
+### Docker packaging
+
+Use [`Dockerfile.web`](Dockerfile.web) to build one image that serves both the Rust API and the embedded frontend:
+
+```shell
+docker build -f Dockerfile.web -t embystream-web .
+docker run -p 17172:17172 -v ./web_data:/app/web_data embystream-web
+```
 
 ## Documentation
 
@@ -80,11 +150,13 @@ Image: [Docker Hub — openpilipili/embystream](https://hub.docker.com/r/openpil
 
 See [**GitHub Releases**](https://github.com/Open-PiliPili/EmbyStream/releases).
 
-## Run
+## CLI Gateway Run
 
-1. Start from the template [`src/config/config.toml.template`](src/config/config.toml.template) or run `embystream config template`.
-2. Adjust `[Emby]`, `[[BackendNode]]`, and ports for your layout (see [User guide](docs/user-guide.md)).
-3. Start the service:
+Use this path only when you intentionally want the legacy CLI gateway workflow instead of the Web Config Studio.
+
+1. Start from [`src/config/config.toml.template`](src/config/config.toml.template) or run `embystream config template`.
+2. Adjust `[Emby]`, `[[BackendNode]]`, and ports for your layout.
+3. Start the gateways:
 
 ```shell
 embystream run
@@ -105,8 +177,6 @@ docker run -d \
   --restart unless-stopped \
   openpilipili/embystream:latest
 ```
-
-Compose: [`template/docker/docker-compose.yaml`](template/docker/docker-compose.yaml) (update published ports if you change `listen_port`).
 
 > **Note:** Examples that set `PUID` / `PGID` / `privileged` are optional host policies; the minimal image does not map PUID/PGID internally.
 

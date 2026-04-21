@@ -47,17 +47,38 @@ Point Emby’s **external domain / streaming** settings at your **frontend** pub
 2. Publish the ports that match **`listen_port`** in that file (the stock template uses **60001** for frontend and **60002** for backend).
 3. Environment variables such as `PUID` / `PGID` in example compose files are **not** consumed by the minimal Alpine image; run the container as the user you need, or adjust file ownership on the host.
 
-See the [README](../README.md) Docker section and [`template/docker/docker-compose.yaml`](../template/docker/docker-compose.yaml).
+See the [README](../README.md) Docker section for the current web-first and CLI fallback packaging paths.
 
 ---
 
 ## First-time configuration
+
+Preferred path:
+
+1. Build the frontend with `bun run build` under [`web/`](../web/).
+2. Start **`embystream web serve`**.
+3. Register or log in.
+4. Complete the web wizard and download the generated artifacts.
+
+Fallback CLI path:
 
 1. Copy [`src/config/config.toml.template`](../src/config/config.toml.template) or run **`embystream config template`** (see [CLI](cli.md)).
 2. Set `[Emby]` and at least one **`[[BackendNode]]`** appropriate for your storage.
 3. Run **`embystream run`** and fix any validation errors (regex, missing sections for `stream_mode`).
 
 Full field documentation: [Configuration reference](configuration-reference.md).
+
+For browser backgrounds:
+
+- TMDB trending is used when `embystream web serve --tmdb-api-key ...` is configured.
+- Otherwise the login page falls back to Bing daily images.
+- Background metadata is cached for at least 6 hours.
+
+For browser log viewing:
+
+- only `admin` can access the page or API
+- runtime and audit logs are shown newest first
+- sensitive token-like values are masked before browser output
 
 If you are configuring a `googleDrive` backend for the first time, create the
 Google OAuth `Desktop app` client first:

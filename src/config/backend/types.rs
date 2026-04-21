@@ -12,6 +12,10 @@ use crate::{
     util::path_rewriter::PathRewriter,
 };
 
+fn default_check_file_existence() -> bool {
+    true
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Backend {
     pub listen_port: u16,
@@ -19,6 +23,8 @@ pub struct Backend {
     pub port: String,
     #[serde(default)]
     pub path: String,
+    #[serde(default = "default_check_file_existence")]
+    pub check_file_existence: bool,
     #[serde(default)]
     pub problematic_clients: Vec<String>,
 }
@@ -26,7 +32,7 @@ pub struct Backend {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BackendNode {
     pub name: String,
-    #[serde(rename = "type")]
+    #[serde(rename = "backend_type", alias = "type")]
     pub backend_type: String,
     #[serde(default)]
     pub pattern: String,
@@ -46,23 +52,27 @@ pub struct BackendNode {
     pub client_speed_limit_kbs: u64,
     #[serde(default)]
     pub client_burst_speed_kbs: u64,
-    #[serde(default, rename = "PathRewrite")]
+    #[serde(default, rename = "path_rewrites", alias = "PathRewrite")]
     pub path_rewrites: Vec<PathRewriteConfig>,
-    #[serde(default, rename = "AntiReverseProxy")]
+    #[serde(
+        default,
+        rename = "anti_reverse_proxy",
+        alias = "AntiReverseProxy"
+    )]
     pub anti_reverse_proxy: AntiReverseProxyConfig,
     #[serde(skip)]
     pub path_rewriter_cache: Vec<PathRewriter>,
     #[serde(skip)]
     pub uuid: String,
-    #[serde(rename = "Disk")]
+    #[serde(rename = "disk", alias = "Disk")]
     pub disk: Option<Disk>,
-    #[serde(rename = "OpenList")]
+    #[serde(rename = "open_list", alias = "OpenList")]
     pub open_list: Option<OpenList>,
-    #[serde(rename = "DirectLink")]
+    #[serde(rename = "direct_link", alias = "DirectLink")]
     pub direct_link: Option<DirectLink>,
-    #[serde(rename = "GoogleDrive")]
+    #[serde(rename = "google_drive", alias = "GoogleDrive")]
     pub google_drive: Option<GoogleDriveConfig>,
-    #[serde(rename = "WebDav")]
+    #[serde(rename = "webdav", alias = "WebDav")]
     pub webdav: Option<WebDavConfig>,
 }
 

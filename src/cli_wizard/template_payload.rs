@@ -1,5 +1,7 @@
 //! Static `RawConfig` values for `embystream config template`.
 
+use rand::{Rng, distributions::Alphanumeric};
+
 use crate::config::{
     backend::{
         Backend, BackendNode, direct::DirectLink, disk::Disk,
@@ -25,8 +27,8 @@ fn general_template(mode: StreamMode, memory_mode: &str) -> General {
     General {
         memory_mode: memory_mode.into(),
         stream_mode: mode,
-        encipher_key: "Q4eCbawEp3sCvDvx".into(),
-        encipher_iv: "a3cH2abhxnu9hGo5".into(),
+        encipher_key: generate_secret(16),
+        encipher_iv: generate_secret(16),
     }
 }
 
@@ -34,8 +36,16 @@ fn emby_template() -> Emby {
     Emby {
         url: "http://127.0.0.1".into(),
         port: "8096".into(),
-        token: "replace_with_emby_api_token".into(),
+        token: String::new(),
     }
+}
+
+fn generate_secret(length: usize) -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(length)
+        .map(char::from)
+        .collect()
 }
 
 fn user_agent_template() -> UserAgent {
@@ -88,6 +98,7 @@ fn frontend_path_rewrites_full() -> Vec<PathRewriteConfig> {
 fn frontend_section_full() -> Frontend {
     Frontend {
         listen_port: 60001,
+        check_file_existence: false,
         path_rewrites: frontend_path_rewrites_full(),
         anti_reverse_proxy: anti_rev_default(),
     }
@@ -96,6 +107,7 @@ fn frontend_section_full() -> Frontend {
 fn frontend_section_dual() -> Frontend {
     Frontend {
         listen_port: 60001,
+        check_file_existence: false,
         path_rewrites: vec![PathRewriteConfig {
             enable: false,
             pattern: "^(/.*)$".into(),
@@ -140,6 +152,7 @@ pub(crate) fn build_template_raw(mode: StreamMode) -> RawConfig {
                 base_url: "https://backend.example.com".into(),
                 port: "443".into(),
                 path: "stream".into(),
+                check_file_existence: true,
                 problematic_clients: vec![
                     "yamby".into(),
                     "hills".into(),
@@ -162,6 +175,7 @@ pub(crate) fn build_template_raw(mode: StreamMode) -> RawConfig {
                 base_url: "http://127.0.0.1".into(),
                 port: "3000".into(),
                 path: String::new(),
+                check_file_existence: true,
                 problematic_clients: vec![
                     "yamby".into(),
                     "hills".into(),
@@ -460,5 +474,17 @@ mod tests {
         let p = parse_raw_config_str(&s).expect("parse");
         finish_raw_config(std::path::PathBuf::from("t.toml"), p)
             .expect("finish");
+    }
+
+    #[test]
+    fn template_secrets_are_random_and_emby_token_is_blank() {
+        let first = build_template_raw(StreamMode::Frontend);
+        let second = build_template_raw(StreamMode::Frontend);
+
+        assert_eq!(first.general.encipher_key.len(), 16);
+        assert_eq!(first.general.encipher_iv.len(), 16);
+        assert!(first.emby.token.is_empty());
+        assert_ne!(first.general.encipher_key, second.general.encipher_key);
+        assert_ne!(first.general.encipher_iv, second.general.encipher_iv);
     }
 }

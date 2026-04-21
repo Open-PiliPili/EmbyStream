@@ -1082,6 +1082,7 @@ fn prompt_frontend_section() -> Result<Frontend> {
     let anti = prompt_anti_reverse(tr("wizard.label.anti_reverse_proxy"))?;
     Ok(Frontend {
         listen_port,
+        check_file_existence: false,
         path_rewrites,
         anti_reverse_proxy: anti,
     })
@@ -1131,6 +1132,7 @@ fn prompt_backend_section() -> Result<Backend> {
         base_url,
         port,
         path,
+        check_file_existence: true,
         problematic_clients,
     })
 }

@@ -1,4 +1,7 @@
-use std::{error::Error, fs, path::Path, process, str::FromStr, sync::Arc};
+use std::{
+    error::Error, fs, io::Error as IoError, path::Path, path::PathBuf, process,
+    str::FromStr, sync::Arc,
+};
 
 use clap::{CommandFactory, FromArgMatches};
 use figlet_rs::FIGfont;
@@ -15,10 +18,15 @@ use embystream::{
         google_drive_auth, service::AppStreamService, stream::StreamMiddleware,
         stream_relay::StreamRelayMiddleware,
     },
-    cli::{AuthSubcommand, Cli, Commands, RunArgs},
+    cli::{
+        AuthSubcommand, Cli, Commands, RunArgs, WebAdminSubcommand, WebArgs,
+    },
     cli_lang::{detect_lang_from_env_early, localize_cli_command},
     cli_wizard,
-    config::{core::Config, general::StreamMode},
+    config::{
+        core::{Config, LoadConfigOutcome},
+        general::StreamMode,
+    },
     frontend::{forward::ForwardMiddleware, service::AppForwardService},
     gateway::{
         CorsMiddleware, LoggerMiddleware, OptionsMiddleware,
@@ -30,6 +38,10 @@ use embystream::{
     },
     logger::{LogLevel, Logger, start_cleanup_task},
     system::SystemInfo,
+    web::{
+        app::{WebRuntimeConfig, serve_web_app, to_runtime_config},
+        db::Database,
+    },
 };
 
 #[tokio::main]
@@ -44,6 +56,23 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Some(Commands::Run(run_args)) => {
             run_app(&run_args).await?;
         }
+        Some(Commands::Web(WebArgs { sub })) => match sub {
+            embystream::cli::WebSubcommand::Serve(args) => {
+                serve_web_app(to_runtime_config(args)?).await?;
+            }
+            embystream::cli::WebSubcommand::Admin(args) => match args.sub {
+                WebAdminSubcommand::ResetPassword(args) => {
+                    let db = Database::new(args.data_dir);
+                    db.initialize().await?;
+                    let password =
+                        db.reset_admin_password(&args.username).await?;
+                    println!(
+                        "Administrator password reset for '{}': {}",
+                        args.username, password
+                    );
+                }
+            },
+        },
         Some(Commands::Auth(auth_args)) => match auth_args.sub {
             AuthSubcommand::Google(args) => {
                 run_google_auth(&GoogleAuthArgs {
@@ -71,19 +100,99 @@ async fn run_app(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     setup_figlet();
 
-    let config = setup_load_config(run_args);
+    match setup_load_config(run_args) {
+        Ok(LoadConfigOutcome::Loaded(config)) => {
+            let config = *config;
+            if run_args.web {
+                start_web_service(build_run_web_runtime_config(
+                    run_args,
+                    Some(&config),
+                )?);
+            }
 
-    setup_logger(&config)?;
-    setup_print_info(&config);
-
-    if let Err(e) = validate_dual_mode_ports(&config) {
-        error_log!(INIT_LOGGER_DOMAIN, "{}", e);
-        process::exit(1);
+            if let Err(error) = initialize_stream_runtime(&config).await {
+                if run_args.web {
+                    eprintln!(
+                        "Stream startup skipped because the runtime config is not ready: {}",
+                        error
+                    );
+                    if let Some(config_path) = &run_args.config {
+                        eprintln!(
+                            "Complete the configuration in the web studio, then rerun embystream run --config {} --web",
+                            config_path.display()
+                        );
+                    } else {
+                        eprintln!(
+                            "Complete the configuration in the web studio, then rerun embystream run --web"
+                        );
+                    }
+                } else {
+                    return Err(error);
+                }
+            }
+        }
+        Ok(LoadConfigOutcome::TemplateCreated(config_path)) => {
+            if run_args.web {
+                start_web_service(build_run_web_runtime_config(
+                    run_args, None,
+                )?);
+                println!(
+                    "Stream startup skipped because no config was found. A template was created at '{}'",
+                    config_path.display()
+                );
+                println!(
+                    "Finish the setup in the web studio, then rerun embystream run --config {} --web",
+                    config_path.display()
+                );
+            } else {
+                eprintln!(
+                    "A config template was created at '{}'",
+                    config_path.display()
+                );
+                eprintln!(
+                    "Please configure it and rerun embystream run --config {}",
+                    config_path.display()
+                );
+                process::exit(0);
+            }
+        }
+        Err(error) => {
+            if run_args.web {
+                start_web_service(build_run_web_runtime_config(
+                    run_args, None,
+                )?);
+                eprintln!(
+                    "Stream startup skipped because the configuration could not be loaded: {}",
+                    error
+                );
+                eprintln!(
+                    "Fix the configuration in the web studio, then rerun embystream run --web"
+                );
+            } else {
+                eprintln!("Configuration initialization failed: {}", error);
+                process::exit(1);
+            }
+        }
     }
+
+    TokioSignal::ctrl_c().await?;
+    info_log!(INIT_LOGGER_DOMAIN, "Shutting down EmbyStream...");
+
+    Ok(())
+}
+
+async fn initialize_stream_runtime(
+    config: &Config,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    setup_logger(config)?;
+    setup_print_info(config);
+
+    validate_dual_mode_ports(config)
+        .map_err(|error| IoError::other(error.to_string()))?;
 
     setup_crypto_provider()?;
 
-    let app_state = setup_cache(&config).await;
+    let app_state = setup_cache(config).await;
 
     setup_rate_limiters(&app_state).await;
     setup_google_drive_refresh(&app_state).await;
@@ -114,9 +223,6 @@ async fn run_app(
             }
         });
     }
-
-    TokioSignal::ctrl_c().await?;
-    info_log!(INIT_LOGGER_DOMAIN, "Shutting down EmbyStream...");
 
     Ok(())
 }
@@ -163,21 +269,57 @@ fn setup_print_info(config: &Config) {
     info_log!(INIT_LOGGER_DOMAIN, "User agent: {}", config.user_agent)
 }
 
-fn setup_load_config(run_args: &RunArgs) -> Config {
+fn setup_load_config(
+    run_args: &RunArgs,
+) -> Result<LoadConfigOutcome, embystream::config::error::ConfigError> {
     match Config::load_or_init(run_args) {
-        Ok(config) => {
+        Ok(LoadConfigOutcome::Loaded(config)) => {
             info_log!(INIT_LOGGER_DOMAIN, "Configuration loaded successfully.");
-            config
+            Ok(LoadConfigOutcome::Loaded(config))
         }
-        Err(e) => {
-            error_log!(
-                INIT_LOGGER_DOMAIN,
-                "Configuration initialization failed: {}",
-                e
-            );
-            process::exit(1);
+        Ok(LoadConfigOutcome::TemplateCreated(path)) => {
+            Ok(LoadConfigOutcome::TemplateCreated(path))
         }
+        Err(e) => Err(e),
     }
+}
+
+fn build_run_web_runtime_config(
+    run_args: &RunArgs,
+    config: Option<&Config>,
+) -> Result<WebRuntimeConfig, embystream::web::error::WebError> {
+    let runtime_log_dir = if run_args.web_runtime_log_dir.as_os_str().is_empty()
+    {
+        config
+            .map(|config| PathBuf::from(&config.log.root_path))
+            .unwrap_or_else(|| PathBuf::from("web-config/logs"))
+    } else {
+        run_args.web_runtime_log_dir.clone()
+    };
+
+    let stream_log_dir = config
+        .map(|config| PathBuf::from(&config.log.root_path))
+        .unwrap_or_else(|| PathBuf::from("./logs"));
+
+    to_runtime_config(embystream::cli::WebServeArgs {
+        listen: run_args.web_listen.clone(),
+        data_dir: run_args.web_data_dir.clone(),
+        tmdb_api_key: run_args.web_tmdb_api_key.clone(),
+        runtime_log_dir,
+        stream_log_dir,
+    })
+    .map(|mut runtime| {
+        runtime.main_config_path = config.map(|config| config.path.clone());
+        runtime
+    })
+}
+
+fn start_web_service(config: WebRuntimeConfig) {
+    tokio::spawn(async move {
+        if let Err(error) = serve_web_app(config).await {
+            eprintln!("Web studio failed: {}", error);
+        }
+    });
 }
 
 fn setup_logger(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {

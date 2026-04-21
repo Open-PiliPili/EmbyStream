@@ -37,7 +37,6 @@ logs/
 # === Config files ===
 config/
 !src/config/
-!template/config/
 proposal/
 .cursor/
 .claude/
@@ -46,6 +45,16 @@ AGENTS.md
 
 # === Web UI ===
 web_data/
+web/node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
+web/.eslintcache
+web/.prettier-cache
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
 
 # === i18n
 locales/_en_to_key.json

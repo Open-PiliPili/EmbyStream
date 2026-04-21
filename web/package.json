@@ -1,0 +1,44 @@
+{
+  "name": "embystream-web-config-studio",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "check": "bun run lint && bun run format:check && bun run build"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.80",
+    "@iconify-json/mdi": "^1.2.3",
+    "@iconify-json/ph": "^1.2.2",
+    "@iconify/vue": "^4.3.0",
+    "highlight.js": "^11.11.1",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.17",
+    "vue-i18n": "^9.14.1",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@tsconfig/node22": "^22.0.2",
+    "@types/node": "^24.0.3",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.5.1",
+    "globals": "^16.4.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.46.3",
+    "vite": "^7.0.4",
+    "vue-eslint-parser": "^10.2.0",
+    "vue-tsc": "^2.2.12"
+  }
+}

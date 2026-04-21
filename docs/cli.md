@@ -123,6 +123,51 @@ Use this for a first-time layout; refine paths, tokens, and `[[BackendNode]]` en
 
 ---
 
+## `embystream web`
+
+Starts the Web Config Studio or performs web admin tasks.
+
+### `embystream web serve`
+
+```bash
+embystream web serve \
+  --listen 127.0.0.1:17172 \
+  --data-dir ./web_data \
+  --runtime-log-dir ./logs
+```
+
+Options:
+
+| Option | Description |
+|--------|-------------|
+| `--listen <ADDR>` | Web service listen address. Default `127.0.0.1:17172`. |
+| `--data-dir <DIR>` | SQLite, sessions, generated artifacts, and audit-log state. Default `./web_data`. |
+| `--runtime-log-dir <DIR>` | Runtime log source for the admin log page. Default `./logs`. |
+| `--tmdb-api-key <KEY>` | Optional TMDB API key for trending login backgrounds. |
+
+Behavior:
+
+- serves the Rust JSON API
+- serves built frontend assets from `web/dist`
+- embeds frontend assets into the binary when `web/dist` exists at build time
+- falls back to Bing login backgrounds when TMDB is not configured
+
+### `embystream web admin reset-password`
+
+```bash
+embystream web admin reset-password \
+  --data-dir ./web_data \
+  --username admin
+```
+
+Behavior:
+
+- resets the target admin password
+- prints the new random password once to stdout
+- does not expose browser-based password recovery
+
+---
+
 ## Related
 
 - [User guide](user-guide.md)

@@ -63,6 +63,8 @@ pub enum Commands {
     /// Start HTTP gateways.
     /// When there is no subcommand, use `run` explicitly.
     Run(RunArgs),
+    /// Start or administrate the web configuration studio.
+    Web(WebArgs),
     /// OAuth helper commands for external providers.
     Auth(AuthArgs),
     /// Interactive TOML configuration wizard.
@@ -119,9 +121,89 @@ pub struct RunArgs {
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<PathBuf>,
 
+    /// Also start the web configuration studio alongside `run`.
+    #[arg(long)]
+    pub web: bool,
+
+    /// Listen address for the web service when `--web` is enabled.
+    #[arg(long, value_name = "ADDR", default_value = "0.0.0.0:6888")]
+    pub web_listen: String,
+
+    /// Data directory for SQLite, sessions, artifacts, and audit logs when `--web` is enabled.
+    #[arg(long, value_name = "DIR", default_value = "web-config/data")]
+    pub web_data_dir: PathBuf,
+
+    /// TMDB API key for trending login backgrounds when `--web` is enabled.
+    #[arg(long, value_name = "KEY")]
+    pub web_tmdb_api_key: Option<String>,
+
+    /// Runtime log directory for the admin log browser when `--web` is enabled.
+    #[arg(long, value_name = "DIR", default_value = "web-config/logs")]
+    pub web_runtime_log_dir: PathBuf,
+
     #[arg(long, value_name = "FILE")]
     pub ssl_cert_file: Option<PathBuf>,
 
     #[arg(long, value_name = "FILE")]
     pub ssl_key_file: Option<PathBuf>,
+}
+
+#[derive(Parser, Debug)]
+pub struct WebArgs {
+    #[command(subcommand)]
+    pub sub: WebSubcommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum WebSubcommand {
+    /// Start the web configuration studio service.
+    Serve(WebServeArgs),
+    /// Administrative operations for the web configuration studio.
+    Admin(WebAdminArgs),
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct WebServeArgs {
+    /// Listen address for the web service.
+    #[arg(long, value_name = "ADDR", default_value = "0.0.0.0:6888")]
+    pub listen: String,
+
+    /// Data directory for SQLite, sessions, artifacts, and audit logs.
+    #[arg(long, value_name = "DIR", default_value = "web-config/data")]
+    pub data_dir: PathBuf,
+
+    /// TMDB API key for trending login backgrounds.
+    #[arg(long, value_name = "KEY")]
+    pub tmdb_api_key: Option<String>,
+
+    /// Runtime log directory for the admin log browser.
+    #[arg(long, value_name = "DIR", default_value = "web-config/logs")]
+    pub runtime_log_dir: PathBuf,
+
+    /// Embystream stream log directory shown in the admin log browser.
+    #[arg(long, value_name = "DIR", default_value = "./logs")]
+    pub stream_log_dir: PathBuf,
+}
+
+#[derive(Parser, Debug)]
+pub struct WebAdminArgs {
+    #[command(subcommand)]
+    pub sub: WebAdminSubcommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum WebAdminSubcommand {
+    /// Reset an administrator password and print the new random password.
+    ResetPassword(WebAdminResetPasswordArgs),
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct WebAdminResetPasswordArgs {
+    /// Administrator username to reset.
+    #[arg(long, value_name = "NAME", default_value = "admin")]
+    pub username: String,
+
+    /// Data directory for SQLite, sessions, artifacts, and audit logs.
+    #[arg(long, value_name = "DIR", default_value = "web_data")]
+    pub data_dir: PathBuf,
 }

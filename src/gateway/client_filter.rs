@@ -19,6 +19,7 @@ use crate::{
 };
 
 const HEADER_CLIENT_KEY: &str = "Client";
+const WEB_API_PREFIXES: &[&str] = &["/api", "/api/"];
 
 #[derive(Clone)]
 pub struct ClientAgentFilterMiddleware {
@@ -42,6 +43,9 @@ impl ClientAgentFilterMiddleware {
     }
 
     fn should_filter(&self, path: &str) -> bool {
+        if is_web_api_path(path) {
+            return false;
+        }
         if self.filter_paths.is_empty() {
             return true;
         }
@@ -94,6 +98,12 @@ impl ClientAgentFilterMiddleware {
 
         config_arc.clone()
     }
+}
+
+fn is_web_api_path(path: &str) -> bool {
+    WEB_API_PREFIXES
+        .iter()
+        .any(|prefix| path == *prefix || path.starts_with(prefix))
 }
 
 #[async_trait]

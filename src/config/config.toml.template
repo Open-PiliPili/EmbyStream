@@ -1,7 +1,7 @@
 [Log]
 level = "info"
 prefix = ""
-root_path = "/mnt/stream/logs"
+root_path = "./logs"
 
 [General]
 memory_mode = "middle"
@@ -28,6 +28,7 @@ video_missing_path = ""
 
 [Frontend]
 listen_port = 60001
+check_file_existence = false
 
 [[Frontend.PathRewrite]]
 enable = false
@@ -53,6 +54,7 @@ listen_port = 60002
 base_url = "https://example.com"
 port = "443"
 path = "stream"
+check_file_existence = true
 problematic_clients = []
 
 [[BackendNode]]

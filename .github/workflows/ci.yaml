@@ -26,6 +26,9 @@ jobs:
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Check formatting
         run: cargo fmt -- --check
 
@@ -37,3 +40,19 @@ jobs:
 
       - name: Build project
         run: cargo build
+
+      - name: Install web dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - name: Lint web code
+        working-directory: web
+        run: bun run lint
+
+      - name: Check web formatting
+        working-directory: web
+        run: bun run format:check
+
+      - name: Build web project
+        working-directory: web
+        run: bun run build

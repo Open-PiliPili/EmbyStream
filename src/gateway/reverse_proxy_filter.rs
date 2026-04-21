@@ -13,6 +13,8 @@ use crate::{
     },
 };
 
+const WEB_API_PREFIXES: &[&str] = &["/api", "/api/"];
+
 #[derive(Clone)]
 pub struct ReverseProxyFilterMiddleware {
     pub config: Arc<AntiReverseProxyConfig>,
@@ -39,6 +41,10 @@ impl Middleware for ReverseProxyFilterMiddleware {
             "Starting anti reverse proxy filter middleware..."
         );
 
+        if is_web_api_path(&ctx.path) {
+            return next(ctx, body).await;
+        }
+
         let host = ctx.get_host().unwrap_or_default();
         let is_need_anti = self.config.is_need_anti(&host);
 
@@ -57,4 +63,10 @@ impl Middleware for ReverseProxyFilterMiddleware {
     fn clone_box(&self) -> Box<dyn Middleware> {
         Box::new(self.clone())
     }
+}
+
+fn is_web_api_path(path: &str) -> bool {
+    WEB_API_PREFIXES
+        .iter()
+        .any(|prefix| path == *prefix || path.starts_with(prefix))
 }

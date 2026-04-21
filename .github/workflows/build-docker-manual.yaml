@@ -70,6 +70,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile.web
           platforms: linux/amd64,linux/arm64
           push: ${{ inputs.publish }}
           tags: ${{ steps.meta.outputs.tags }}

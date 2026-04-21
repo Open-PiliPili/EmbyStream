@@ -1,0 +1,191 @@
+:root {
+  --brand-primary: #c96442;
+  --brand-secondary: #d97757;
+  --focus-ring: #b7791f;
+  --bg-app: #f5f4ed;
+  --bg-app-rgb: 245, 244, 237;
+  --bg-sidebar: rgba(250, 249, 245, 0.82);
+  --bg-surface: rgba(250, 249, 245, 0.88);
+  --bg-surface-strong: rgba(255, 255, 255, 0.96);
+  --bg-elevated: rgba(232, 230, 220, 0.72);
+  --bg-elevated-strong: rgba(232, 230, 220, 0.9);
+  --bg-active: rgba(201, 100, 66, 0.12);
+  --bg-accent: rgba(201, 100, 66, 0.1);
+  --bg-soft: rgba(232, 230, 220, 0.52);
+  --bg-code: rgba(250, 249, 245, 0.98);
+  --code-bg: #eff1f5;
+  --code-fg: #4c4f69;
+  --code-muted: #8c8fa1;
+  --code-keyword: #8839ef;
+  --code-string: #40a02b;
+  --code-number: #fe640b;
+  --code-attribute: #df8e1d;
+  --code-title: #1e66f5;
+  --code-builtins: #d20f39;
+  --code-accent: #179299;
+  --surface-highlight: rgba(255, 255, 255, 0.92);
+  --surface-warm: rgba(217, 119, 87, 0.08);
+  --border-subtle: #f0eee6;
+  --border-strong: #e8e6dc;
+  --border-accent: #e4ddd1;
+  --text-main: #141413;
+  --text-muted: #5e5d59;
+  --text-faint: #87867f;
+  --signal-accent: var(--brand-secondary);
+  --signal-blue: var(--brand-primary);
+  --signal-green: #6f8a55;
+  --signal-red: #b53333;
+  --signal-warm: var(--brand-secondary);
+  --button-primary-bg: #c96442;
+  --button-primary-hover: #b85a3a;
+  --button-secondary-bg: #e8e6dc;
+  --button-secondary-hover: #d1cfc5;
+  --button-secondary-text: #4d4c48;
+  --field-bg: #ffffff;
+  --field-border: #e8e6dc;
+  --field-border-hover: #d1cfc5;
+  --shadow-soft: 0 0 0 1px #f0eee6;
+  --shadow-medium: 0 0 0 1px #e8e6dc, 0 4px 24px rgba(0, 0, 0, 0.05);
+  --shadow-strong: inset 0 0 0 1px #c2c0b6;
+  --card-hover-shadow:
+    0 0 0 1px rgba(201, 100, 66, 0.22), 0 14px 34px rgba(0, 0, 0, 0.1);
+  --card-focus-shadow:
+    0 0 0 1px rgba(201, 100, 66, 0.26), 0 16px 38px rgba(0, 0, 0, 0.12);
+  --curve-swift: cubic-bezier(0.22, 1, 0.36, 1);
+  --curve-buoy: cubic-bezier(0.2, 0.88, 0.2, 1);
+  --curve-spring: cubic-bezier(0.18, 0.95, 0.2, 1.08);
+  --radius-xs: 10px;
+  --radius-sm: 14px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+  --font-reading-family:
+    "Source Serif 4", "Iowan Old Style", "Palatino Linotype",
+    "Source Han Sans SC", "Noto Sans SC", "PingFang SC", serif;
+  --font-display-family:
+    "Source Serif 4", "Iowan Old Style", "Palatino Linotype",
+    "Source Han Sans SC", "Noto Sans SC", "PingFang SC", serif;
+  --font-ui-family:
+    "Source Sans 3", "Avenir Next", "Source Han Sans SC", "Noto Sans SC",
+    "PingFang SC", sans-serif;
+  --font-ui-weight: 600;
+  --font-zh-weight: 600;
+  --font-en-weight: 700;
+  --font-code-weight: 600;
+  --font-form-family:
+    "Source Han Sans SC", "Noto Sans SC", "PingFang SC", "Source Sans 3",
+    "Avenir Next", sans-serif;
+  --font-mono-family:
+    "Source Code Pro", "Fira Code", "SFMono-Regular", Menlo, monospace;
+  --reading-font: var(--font-ui-family);
+  --display-font: var(--font-display-family);
+  --mono-font: var(--font-mono-family);
+  --max-content-width: 80rem;
+}
+
+[data-theme="light"] {
+  --brand-primary: #c96442;
+  --brand-secondary: #d97757;
+  --focus-ring: #b7791f;
+  --bg-app: #f5f4ed;
+  --bg-app-rgb: 245, 244, 237;
+  --bg-sidebar: rgba(250, 249, 245, 0.82);
+  --bg-surface: rgba(250, 249, 245, 0.88);
+  --bg-surface-strong: rgba(255, 255, 255, 0.96);
+  --bg-elevated: rgba(232, 230, 220, 0.72);
+  --bg-elevated-strong: rgba(232, 230, 220, 0.9);
+  --bg-active: rgba(201, 100, 66, 0.12);
+  --bg-accent: rgba(201, 100, 66, 0.1);
+  --bg-soft: rgba(232, 230, 220, 0.52);
+  --bg-code: rgba(250, 249, 245, 0.98);
+  --code-bg: #eff1f5;
+  --code-fg: #4c4f69;
+  --code-muted: #8c8fa1;
+  --code-keyword: #8839ef;
+  --code-string: #40a02b;
+  --code-number: #fe640b;
+  --code-attribute: #df8e1d;
+  --code-title: #1e66f5;
+  --code-builtins: #d20f39;
+  --code-accent: #179299;
+  --surface-highlight: rgba(255, 255, 255, 0.92);
+  --surface-warm: rgba(217, 119, 87, 0.08);
+  --border-subtle: #f0eee6;
+  --border-strong: #e8e6dc;
+  --border-accent: #e4ddd1;
+  --text-main: #141413;
+  --text-muted: #5e5d59;
+  --text-faint: #87867f;
+  --signal-accent: var(--brand-secondary);
+  --signal-blue: var(--brand-primary);
+  --signal-green: #6f8a55;
+  --signal-red: #b53333;
+  --signal-warm: var(--brand-secondary);
+  --button-secondary-bg: #e8e6dc;
+  --button-secondary-hover: #d1cfc5;
+  --button-secondary-text: #4d4c48;
+  --field-bg: #ffffff;
+  --field-border: #e8e6dc;
+  --field-border-hover: #d1cfc5;
+  --shadow-soft: 0 0 0 1px #f0eee6;
+  --shadow-medium: 0 0 0 1px #e8e6dc, 0 4px 24px rgba(0, 0, 0, 0.05);
+  --shadow-strong: inset 0 0 0 1px #c2c0b6;
+  --card-hover-shadow:
+    0 0 0 1px rgba(201, 100, 66, 0.22), 0 14px 34px rgba(0, 0, 0, 0.1);
+  --card-focus-shadow:
+    0 0 0 1px rgba(201, 100, 66, 0.26), 0 16px 38px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] {
+  --brand-primary: #c96442;
+  --brand-secondary: #d97757;
+  --focus-ring: #b7791f;
+  --bg-app: #1b1a18;
+  --bg-app-rgb: 27, 26, 24;
+  --bg-sidebar: rgba(27, 26, 24, 0.92);
+  --bg-surface: rgba(56, 55, 51, 0.88);
+  --bg-surface-strong: rgba(61, 60, 56, 0.98);
+  --bg-elevated: rgba(255, 255, 255, 0.05);
+  --bg-elevated-strong: rgba(255, 255, 255, 0.08);
+  --bg-active: rgba(201, 100, 66, 0.1);
+  --bg-accent: rgba(201, 100, 66, 0.08);
+  --bg-soft: rgba(255, 255, 255, 0.05);
+  --bg-code: rgba(27, 26, 24, 0.98);
+  --code-bg: #2a2a31;
+  --code-fg: #cdd6f4;
+  --code-muted: #9399b2;
+  --code-keyword: #cba6f7;
+  --code-string: #a6e3a1;
+  --code-number: #fab387;
+  --code-attribute: #f9e2af;
+  --code-title: #89b4fa;
+  --code-builtins: #f38ba8;
+  --code-accent: #94e2d5;
+  --surface-highlight: rgba(255, 255, 255, 0.08);
+  --surface-warm: rgba(217, 119, 87, 0.05);
+  --border-subtle: rgba(176, 174, 165, 0.22);
+  --border-strong: rgba(176, 174, 165, 0.22);
+  --border-accent: rgba(255, 255, 255, 0.18);
+  --text-main: #faf9f5;
+  --text-muted: #b0aea5;
+  --text-faint: #87867f;
+  --signal-accent: var(--brand-secondary);
+  --signal-blue: var(--brand-primary);
+  --signal-green: #92a673;
+  --signal-red: #b53333;
+  --signal-warm: var(--brand-secondary);
+  --button-secondary-bg: rgba(255, 255, 255, 0.06);
+  --button-secondary-hover: rgba(255, 255, 255, 0.08);
+  --button-secondary-text: #faf9f5;
+  --field-bg: rgba(48, 48, 46, 0.98);
+  --field-border: rgba(176, 174, 165, 0.24);
+  --field-border-hover: rgba(176, 174, 165, 0.3);
+  --shadow-soft: 0 0 0 1px rgba(176, 174, 165, 0.22);
+  --shadow-medium:
+    0 0 0 1px rgba(176, 174, 165, 0.12), 0 4px 24px rgba(0, 0, 0, 0.12);
+  --shadow-strong: inset 0 0 0 1px rgba(176, 174, 165, 0.18);
+  --card-hover-shadow:
+    0 0 0 1px rgba(217, 119, 87, 0.16), 0 16px 40px rgba(0, 0, 0, 0.32);
+  --card-focus-shadow:
+    0 0 0 1px rgba(217, 119, 87, 0.22), 0 18px 44px rgba(0, 0, 0, 0.36);
+}

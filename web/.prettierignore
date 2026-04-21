@@ -1,0 +1,11 @@
+dist
+node_modules
+coverage
+.eslintcache
+.prettier-cache
+tsconfig.tsbuildinfo
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo

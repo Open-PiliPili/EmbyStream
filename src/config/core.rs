@@ -1,8 +1,7 @@
 use std::{
     fs,
-    io::{Error as IoError, ErrorKind as IoErrorKind},
+    io::Error as IoError,
     path::{Path, PathBuf},
-    process,
 };
 
 use directories::BaseDirs;
@@ -27,7 +26,7 @@ use crate::{
     CONFIG_LOGGER_DOMAIN,
     cli::RunArgs,
     config::general::{Log, types::Emby},
-    config_error_log, config_info_log, config_warn_log,
+    config_info_log, config_warn_log,
     core::backend::constants::{
         STREAM_RELAY_BACKEND_TYPE, backend_base_url_is_empty,
         backend_base_url_is_local_host,
@@ -46,6 +45,7 @@ const SSL_KEY_FILE_NAME: &str = "ssl-key";
 const DOCKER_CONFIG_PATH: &str = "/config/embystream/config.toml";
 const TEMPLATE_CONFIG_PATH: &str = "src/config/config.toml.template";
 const ROOT_CONFIG_PATH: &str = "/root/.config/embystream";
+const EMBEDDED_TEMPLATE_CONFIG: &str = include_str!("config.toml.template");
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -63,7 +63,9 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load_or_init(args: &RunArgs) -> Result<Self, ConfigError> {
+    pub fn load_or_init(
+        args: &RunArgs,
+    ) -> Result<LoadConfigOutcome, ConfigError> {
         let config_path = match &args.config {
             Some(path) => path.clone(),
             None => Self::get_default_config_path()?.join(CONFIG_FILE_NAME),
@@ -71,7 +73,7 @@ impl Config {
 
         if !config_path.exists() {
             Self::handle_missing_config(&config_path)?;
-            process::exit(1);
+            return Ok(LoadConfigOutcome::TemplateCreated(config_path));
         }
 
         config_info_log!(
@@ -80,16 +82,7 @@ impl Config {
             config_path.display()
         );
 
-        let mut config =
-            Self::load_from_path(&config_path).unwrap_or_else(|e| {
-                config_error_log!(
-                    CONFIG_LOGGER_DOMAIN,
-                    "Failed to load or parse config file at '{}': {}",
-                    config_path.display(),
-                    e
-                );
-                process::exit(1);
-            });
+        let mut config = Self::load_from_path(&config_path)?;
 
         if let Some(cert_path) = &args.ssl_cert_file {
             config.http2.ssl_cert_file =
@@ -99,7 +92,7 @@ impl Config {
             config.http2.ssl_key_file = key_path.to_string_lossy().to_string();
         }
 
-        Ok(config)
+        Ok(LoadConfigOutcome::Loaded(Box::new(config)))
     }
 
     pub fn get_ssl_cert_path(&self) -> Option<PathBuf> {
@@ -177,21 +170,6 @@ impl Config {
     fn handle_missing_config(target_path: &Path) -> Result<(), ConfigError> {
         let template_path = Path::new(TEMPLATE_CONFIG_PATH);
 
-        if !template_path.exists() {
-            config_error_log!(
-                CONFIG_LOGGER_DOMAIN,
-                "Missing template config file at {}",
-                template_path.display()
-            );
-            return Err(ConfigError::CopyTemplate(IoError::new(
-                IoErrorKind::NotFound,
-                format!(
-                    "Template file not found at {}",
-                    template_path.display()
-                ),
-            )));
-        }
-
         if let Some(parent) = target_path.parent() {
             fs::create_dir_all(parent).map_err(|e| ConfigError::CreateDir {
                 path: parent.display().to_string(),
@@ -199,8 +177,18 @@ impl Config {
             })?;
         }
 
-        fs::copy(template_path, target_path)
-            .map_err(ConfigError::CopyTemplate)?;
+        if template_path.exists() {
+            fs::copy(template_path, target_path)
+                .map_err(ConfigError::CopyTemplate)?;
+        } else {
+            config_warn_log!(
+                CONFIG_LOGGER_DOMAIN,
+                "Template file '{}' not found on disk, using embedded template",
+                template_path.display()
+            );
+            fs::write(target_path, EMBEDDED_TEMPLATE_CONFIG)
+                .map_err(ConfigError::CopyTemplate)?;
+        }
 
         config_info_log!(
             CONFIG_LOGGER_DOMAIN,
@@ -208,12 +196,18 @@ impl Config {
             target_path.display()
         );
 
-        config_error_log!(
+        config_info_log!(
             CONFIG_LOGGER_DOMAIN,
             "Please configure the new file and restart the application"
         );
-        process::exit(0);
+        Ok(())
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum LoadConfigOutcome {
+    Loaded(Box<Config>),
+    TemplateCreated(PathBuf),
 }
 
 /// Parse TOML into `RawConfig` (wizard and tests).
