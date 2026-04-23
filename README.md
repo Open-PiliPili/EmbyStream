@@ -7,7 +7,7 @@
 </p>
 <h1 align="center">EmbyStream</h1>
 <p align="center">
-A highly customizable Emby streaming proxy (frontend / backend split), written in Rust.
+A Rust-based Emby streaming gateway with a built-in Web Config Studio.
 </p>
 <p align="center">
 <a href="https://t.me/openpilipili_chat"><img src="https://img.shields.io/badge/-Telegram_Group-red?color=blue&logo=telegram&logoColor=white" alt="Telegram"></a>
@@ -15,183 +15,117 @@ A highly customizable Emby streaming proxy (frontend / backend split), written i
 <a href="https://github.com/open-pilipili/EmbyStream"><img src="https://img.shields.io/github/languages/top/open-pilipili/EmbyStream" alt="Top Language"></a>
 <a href="https://crates.io/crates/embystream"><img src="https://img.shields.io/crates/v/embystream.svg" alt="crates.io"></a>
 <a href="https://github.com/open-pilipili/EmbyStream/blob/main/LICENSE"><img src="https://img.shields.io/github/license/open-pilipili/EmbyStream" alt="Github License"></a>
-<a href="https://github.com/Open-PiliPili/EmbyStream/actions/workflows/ci.yaml"><img src="https://github.com/Open-PiliPili/EmbyStream/actions/workflows/ci.yaml/badge.svg" alt="Linux CI"></a> <a href="https://github.com/open-pilipili/EmbyStream/wiki"><img src="https://img.shields.io/badge/-Wiki-red?color=blue&logo=github&logoColor=white" alt="Wiki"></a>
+<a href="https://github.com/Open-PiliPili/EmbyStream/actions/workflows/ci.yaml"><img src="https://github.com/Open-PiliPili/EmbyStream/actions/workflows/ci.yaml/badge.svg" alt="Linux CI"></a>
 </p>
 
-## About
+## What it does
 
-EmbyStream is a reverse proxy and stream gateway for Emby: a **frontend** gateway talks to Emby and rewrites traffic; a **backend** gateway serves or redirects media with signed, expiring links. You can run either side alone or both in **dual** mode (two ports). The stack is async Rust (Hyper / Tokio) with optional TLS on the backend listener.
+EmbyStream sits between Emby clients and storage backends.
 
-Architecture background: [**EmbyStream Wiki**](https://github.com/Open-PiliPili/EmbyStream/wiki).
+- Web-first setup with local accounts, drafts, generated deployment artifacts, and admin logs
+- `frontend`, `backend`, and `dual` gateway modes
+- Disk, OpenList, DirectLink, WebDav, Google Drive, and StreamRelay backends
+- Signed playback links, path rewrites, anti-hotlinking, and User-Agent filtering
 
-**Screenshot:**
+For architecture details and full configuration semantics, use the docs linked below.
 
-<div align="center">
- <img src="https://raw.githubusercontent.com/Open-PiliPili/EmbyStream/main/res/imgs/run_log.png"/>
-</div>
+## Quick start
 
-## Features (overview)
+Build the Web UI and start the local admin service:
 
-- **Stream modes:** `frontend`, `backend`, or `dual` (distinct ports required in dual).
-- **Storage drivers** (`[[BackendNode]].type`): **Disk**, **OpenList**, **DirectLink**, **WebDav**, plus **StreamRelay** for chaining gateways without decrypting `sign`.
-- **STRM-friendly** paths, path rewrite rules, and optional **fallback** video when a file is missing.
-- **Signed / encrypted playback URLs** with expiry; **per-node** redirect vs proxy and **per-device** speed limits.
-- **User-Agent** allow/deny; **anti–reverse-proxy** host checks on the frontend (and per node where configured).
-- **Web-first onboarding:** browser wizard, draft restore, generated deploy artifacts, and admin-only log viewing.
-- **CLI fallback:** `embystream config template` / `config show`; use **`--lang zh`** for Simplified Chinese prompts and localized `--help` (default `en`).
-- **CORS / OPTIONS**, playlist handling, API response caching on the forward path, and **HTTP/2 TLS** for the backend via `[Http2]` or CLI overrides.
-
-Detailed behavior and every TOML field: **[Configuration reference](docs/configuration-reference.md)**.
-
-## Web Config Studio
-
-The preferred first-time setup path is now the **Web Config Studio**.
-
-It provides:
-
-- local account registration and login
-- step-by-step config editing
-- draft autosave and restore
-- generated `config.toml`, `nginx.conf`, `docker-compose.yaml`, `systemd.service`, and `pm2.config.cjs`
-- per-file preview and download
-- admin-only browser log viewing
-
-### Local development
-
-Build the frontend once:
-
-```shell
+```bash
 cd web
 bun install
 bun run build
 cd ..
-```
 
-Start the web service:
-
-```shell
 cargo run -- web serve \
   --listen 127.0.0.1:17172 \
   --data-dir ./web_data \
   --runtime-log-dir ./logs
 ```
 
-Optional TMDB background support:
+Then open `http://127.0.0.1:17172`.
 
-```shell
-cargo run -- web serve \
-  --listen 127.0.0.1:17172 \
-  --data-dir ./web_data \
-  --runtime-log-dir ./logs \
-  --tmdb-api-key YOUR_TMDB_API_KEY
+The Web Config Studio is now the recommended setup path. It can:
+
+- create and manage local admin accounts
+- edit config drafts in the browser
+- generate `config.toml`, `nginx.conf`, `docker-compose.yaml`, `systemd.service`, and `pm2.config.cjs`
+- inspect admin-only logs in the browser
+
+If you set `--tmdb-api-key`, the login page uses TMDB trending backgrounds. Otherwise it falls back to Bing daily images.
+
+## Build and package
+
+Build an embedded single-binary release locally:
+
+```bash
+./scripts/build-binary.sh
 ```
 
-If `--tmdb-api-key` is absent, the login background falls back to Bing daily images.
+The script builds `web/dist`, compiles the Rust binary, and writes artifacts under `./.build/binary/release/` or `./.build/binary/debug/`.
 
-### Single-binary packaging
+Build the integrated Web image locally:
 
-If `web/dist` exists when Rust is built, the frontend assets are embedded at build time.
-
-Example:
-
-```shell
-cd web
-bun install
-bun run build
-cd ..
-cargo build --release
-./target/release/embystream web serve --data-dir ./web_data
+```bash
+./scripts/build-docker.sh --tag embystream-web:latest
 ```
 
-### Docker packaging
+By default the script writes Docker metadata and local image archives under `.build/docker/`.
 
-Use [`Dockerfile.web`](Dockerfile.web) to build one image that serves both the Rust API and the embedded frontend:
+Build the legacy CLI image instead:
 
-```shell
-docker build -f Dockerfile.web -t embystream-web .
-docker run -p 17172:17172 -v ./web_data:/app/web_data embystream-web
+```bash
+./scripts/build-docker.sh \
+  --dockerfile Dockerfile \
+  --tag embystream-cli:latest
 ```
+
+For published artifacts, see:
+
+- [GitHub Releases](https://github.com/Open-PiliPili/EmbyStream/releases)
+- [Docker Hub - openpilipili/embystream](https://hub.docker.com/r/openpilipili/embystream)
+
+## Install
+
+From crates.io:
+
+```bash
+cargo install embystream
+```
+
+From source:
+
+```bash
+git clone https://github.com/Open-PiliPili/EmbyStream.git
+cd EmbyStream
+./scripts/build-binary.sh
+```
+
+## CLI fallback
+
+The legacy CLI gateway flow is still supported when you want to manage `config.toml` directly:
+
+```bash
+embystream config template
+embystream run --config ./config.toml
+```
+
+Use `embystream --lang zh --help` for Simplified Chinese CLI help and wizard prompts.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [User guide](docs/user-guide.md) | Deployment patterns, security notes, Docker notes, first-time setup |
-| [Configuration reference](docs/configuration-reference.md) | All config sections, scenarios, and examples (English) |
-| [CLI usage](docs/cli.md) | `run`, `config`, flags |
-| [Google OAuth Desktop App Setup](docs/google-oauth-desktop-app-setup.en.md) | Step-by-step Google Cloud Console setup for `embystream auth google` |
-| [Google OAuth Desktop App 创建教程](docs/google-oauth-desktop-app-setup.zh-CN.md) | 从 0 到 1 创建 `Desktop app` OAuth Client 的新手教程 |
-
-## Install
-
-### From crates.io
-
-```shell
-cargo install embystream
-```
-
-### From source
-
-```shell
-git clone https://github.com/Open-PiliPili/EmbyStream.git
-cd EmbyStream && cargo build --release
-```
-
-Install the binary (example paths):
-
-- **Linux:** `cp ./target/release/embystream /usr/local/bin/`
-- **macOS:** `cp ./target/release/embystream /usr/local/bin/`
-
-### Docker
-
-Image: [Docker Hub — openpilipili/embystream](https://hub.docker.com/r/openpilipili/embystream). Mount your `config.toml` and publish the ports that match your config (the bundled template listens on **60001** / **60002**).
-
-### Prebuilt binaries
-
-See [**GitHub Releases**](https://github.com/Open-PiliPili/EmbyStream/releases).
-
-## CLI Gateway Run
-
-Use this path only when you intentionally want the legacy CLI gateway workflow instead of the Web Config Studio.
-
-1. Start from [`src/config/config.toml.template`](src/config/config.toml.template) or run `embystream config template`.
-2. Adjust `[Emby]`, `[[BackendNode]]`, and ports for your layout.
-3. Start the gateways:
-
-```shell
-embystream run
-embystream run --config "$HOME/.config/embystream/config.toml"
-```
-
-**Docker (example):** map host port to the **same** port as `listen_port` in your config.
-
-```shell
-docker run -d \
-  --name ${CONTAINER_NAME:-embystream} \
-  -p 60001:60001 \
-  -e TZ="Asia/Shanghai" \
-  -v ./config/config.toml:/config/embystream/config.toml \
-  --log-driver json-file \
-  --log-opt max-size=50m \
-  --log-opt max-file=3 \
-  --restart unless-stopped \
-  openpilipili/embystream:latest
-```
-
-> **Note:** Examples that set `PUID` / `PGID` / `privileged` are optional host policies; the minimal image does not map PUID/PGID internally.
-
-## CLI (summary)
-
-Use **`embystream run`** to start gateways. Pass **`--lang zh`** (global) for Chinese wizard text and Chinese top-level `--help`. Details: **[CLI usage](docs/cli.md)**.
-
-If you want to use the `googleDrive` backend and need Google OAuth credentials,
-start with:
-
-- **[Google OAuth Desktop App Setup](docs/google-oauth-desktop-app-setup.en.md)**
-- **[Google OAuth Desktop App 创建教程](docs/google-oauth-desktop-app-setup.zh-CN.md)**
+| [User guide](docs/user-guide.md) | Web-first setup flow, deployment notes, and CLI fallback |
+| [CLI usage](docs/cli.md) | `run`, `config`, `auth google`, and `web` commands |
+| [Configuration reference](docs/configuration-reference.md) | Full TOML field reference |
+| [Google OAuth Desktop App Setup](docs/google-oauth-desktop-app-setup.en.md) | Google Drive OAuth setup |
+| [Google OAuth Desktop App 创建教程](docs/google-oauth-desktop-app-setup.zh-CN.md) | Google Drive OAuth 中文教程 |
 
 ## License
 
 Copyright (c) 2025 open-pilipili.
 
-EmbyStream is licensed under the **[GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)**.
+EmbyStream is licensed under the [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html).

@@ -1,6 +1,8 @@
 # Configuration reference
 
-EmbyStream reads a single TOML file. Table names match the shipped template: [`src/config/config.toml.template`](../src/config/config.toml.template). Optional CLI overrides exist for TLS paths (see [CLI usage](cli.md)).
+EmbyStream reads a single TOML file. The Web Config Studio generates the same structure described here, so this document is the reference for both web-generated configs and hand-edited `config.toml` files.
+
+Table names match the shipped template: [`src/config/config.toml.template`](../src/config/config.toml.template). Optional CLI overrides exist for TLS paths (see [CLI usage](cli.md)).
 
 ---
 

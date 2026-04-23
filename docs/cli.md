@@ -1,7 +1,10 @@
 # CLI usage
 
 The binary name is `embystream`.
-All subcommands support `--help`.
+
+For first-time setup, the recommended entry point is still `embystream web serve` plus the browser-based Web Config Studio. The CLI configuration flow remains available for direct TOML management.
+
+---
 
 ## Global behavior
 
@@ -9,123 +12,29 @@ All subcommands support `--help`.
 embystream [COMMAND]
 ```
 
-- **`embystream` (no subcommand)**:
-  exits without starting servers. Always invoke **`run`** to start gateways.
-- **`embystream --version`** — print version.
-- **`embystream --help`** — list commands.
+- `embystream --help` prints the top-level command list.
+- `embystream --version` prints the version.
+- `embystream` without a subcommand exits without starting any service.
 
 ## Language (`--lang`)
 
 | Value | Effect |
 |-------|--------|
-| `en` (default) | English `--help` text and English prompts in `embystream config …`. |
-| `zh` | Simplified Chinese `--help` (top-level descriptions) and Chinese prompts in the configuration wizard. |
+| `en` | English help and wizard prompts. |
+| `zh` | Simplified Chinese top-level help and wizard prompts. |
 
-Put `--lang` before `--help` if you want localized help, e.g.
-`embystream --lang zh --help` or
-`embystream --lang zh config template --help`.
-
----
-
-## `embystream run`
-
-Starts the configured HTTP(S) gateways according to
-`[General].stream_mode`:
-
-| Mode       | What starts |
-|------------|-------------|
-| `frontend` | Frontend reverse proxy only (HTTP). |
-| `backend`  | Backend stream gateway only (HTTPS with `[Http2]` certs). |
-| `dual`     | Both; ports must differ. |
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `-c, --config <FILE>` | Path to `config.toml`. If omitted, uses the default discovery order (see [Configuration reference](configuration-reference.md)). |
-| `--ssl-cert-file <FILE>` | Override `[Http2].ssl_cert_file` for this process. |
-| `--ssl-key-file <FILE>` | Override `[Http2].ssl_key_file` for this process. |
-
-### Examples
+Examples:
 
 ```bash
-# Default config location
-embystream run
-
-# Custom config
-embystream run --config /etc/embystream/config.toml
-
-# Temporary TLS files (e.g. renewed certificates)
-embystream run -c ./config.toml \
-  --ssl-cert-file /run/secrets/cert.pem \
-  --ssl-key-file /run/secrets/key.pem
+embystream --lang zh --help
+embystream --lang zh config template --help
 ```
-
----
-
-## `embystream auth google`
-
-Starts a Google OAuth installed-app flow for Drive readonly access.
-
-```bash
-embystream auth google \
-  --client-id YOUR_CLIENT_ID \
-  --secret YOUR_CLIENT_SECRET
-```
-
-Behavior:
-
-- Prints the authorization URL every time.
-- Tries to open a browser by default.
-- Spins up a localhost callback for the installed-app redirect flow.
-- Prints `access_token`, `refresh_token`, and `expires_at` after success.
-
-Use `--no-browser` on headless hosts:
-
-```bash
-embystream auth google \
-  --client-id YOUR_CLIENT_ID \
-  --secret YOUR_CLIENT_SECRET \
-  --no-browser
-```
-
-This still requires completing authorization in a browser that can finish
-the installed-app redirect flow.
-
----
-
-## `embystream config`
-
-Interactive configuration assistant (English prompts).
-
-### `embystream config show`
-
-Scans the **current working directory** for valid TOML configs, lets you
-pick one, and prints it with secrets masked unless you confirm.
-
-```bash
-cd /path/to/configs
-embystream config show
-```
-
-### `embystream config template`
-
-Walks through `stream_mode` and related choices, then writes a starter
-`config.toml` via a temporary file and **atomic rename**.
-This is safer on live systems.
-
-```bash
-cd ~/embystream
-embystream config template
-```
-
-Use this for a first-time layout; refine paths, tokens, and `[[BackendNode]]` entries afterward.
 
 ---
 
 ## `embystream web`
 
-Starts the Web Config Studio or performs web admin tasks.
+Starts the Web Config Studio or performs web-admin maintenance tasks.
 
 ### `embystream web serve`
 
@@ -141,16 +50,24 @@ Options:
 | Option | Description |
 |--------|-------------|
 | `--listen <ADDR>` | Web service listen address. Default `127.0.0.1:17172`. |
-| `--data-dir <DIR>` | SQLite, sessions, generated artifacts, and audit-log state. Default `./web_data`. |
-| `--runtime-log-dir <DIR>` | Runtime log source for the admin log page. Default `./logs`. |
-| `--tmdb-api-key <KEY>` | Optional TMDB API key for trending login backgrounds. |
+| `--data-dir <DIR>` | SQLite data, sessions, generated artifacts, and audit-log state. Default `./web_data`. |
+| `--runtime-log-dir <DIR>` | Directory used for runtime log persistence and browser log replay. Default `./logs`. |
+| `--tmdb-api-key <KEY>` | Optional TMDB API key for login backgrounds. |
 
 Behavior:
 
 - serves the Rust JSON API
-- serves built frontend assets from `web/dist`
-- embeds frontend assets into the binary when `web/dist` exists at build time
+- serves frontend assets from embedded resources or `web/dist` when available
+- exposes admin-only browser logs, drafts, generated artifacts, and local account management
 - falls back to Bing login backgrounds when TMDB is not configured
+
+To build a self-contained local binary with embedded frontend assets, use:
+
+```bash
+./scripts/build-binary.sh
+```
+
+The default output root is `./.build`, with binaries written under `.build/binary/release/` or `.build/binary/debug/`.
 
 ### `embystream web admin reset-password`
 
@@ -164,7 +81,105 @@ Behavior:
 
 - resets the target admin password
 - prints the new random password once to stdout
-- does not expose browser-based password recovery
+- does not provide browser-based password recovery
+
+---
+
+## `embystream run`
+
+Starts the gateway process from a `config.toml` file.
+
+| Mode | What starts |
+|------|-------------|
+| `frontend` | Frontend reverse proxy only |
+| `backend` | Backend stream gateway only |
+| `dual` | Both frontend and backend in one process |
+
+Options:
+
+| Option | Description |
+|--------|-------------|
+| `-c, --config <FILE>` | Path to `config.toml`. |
+| `--ssl-cert-file <FILE>` | Override `[Http2].ssl_cert_file` for this process. |
+| `--ssl-key-file <FILE>` | Override `[Http2].ssl_key_file` for this process. |
+
+Examples:
+
+```bash
+embystream run
+embystream run --config /etc/embystream/config.toml
+embystream run --config ./config.toml \
+  --ssl-cert-file /run/secrets/cert.pem \
+  --ssl-key-file /run/secrets/key.pem
+```
+
+Use this path when you intentionally want the legacy CLI gateway workflow instead of the Web Config Studio.
+
+---
+
+## `embystream config`
+
+Interactive TOML-focused helpers.
+
+### `embystream config template`
+
+Creates a starter config through the terminal wizard and writes it atomically.
+
+```bash
+embystream config template
+```
+
+Use this when you want to bootstrap a config without the web admin.
+
+### `embystream config show`
+
+Scans the working directory for valid TOML configs and prints the selected one with secrets masked unless you confirm otherwise.
+
+```bash
+embystream config show
+```
+
+---
+
+## `embystream auth google`
+
+Starts a Google OAuth installed-app flow for Drive read-only access.
+
+```bash
+embystream auth google \
+  --client-id YOUR_CLIENT_ID \
+  --secret YOUR_CLIENT_SECRET
+```
+
+Behavior:
+
+- prints the authorization URL
+- opens a browser by default
+- spins up a localhost callback
+- prints `access_token`, `refresh_token`, and `expires_at` after success
+
+Use `--no-browser` on headless hosts:
+
+```bash
+embystream auth google \
+  --client-id YOUR_CLIENT_ID \
+  --secret YOUR_CLIENT_SECRET \
+  --no-browser
+```
+
+---
+
+## Build helpers
+
+These repository scripts mirror the current local packaging paths:
+
+```bash
+./scripts/build-binary.sh
+./scripts/build-docker.sh --tag embystream-web:latest
+```
+
+Use `./scripts/build-docker.sh --dockerfile Dockerfile --tag embystream-cli:latest` for the legacy CLI image.
+Docker metadata and local image archives are written under `./.build/docker/`.
 
 ---
 

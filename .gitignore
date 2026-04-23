@@ -33,6 +33,7 @@ Thumbs.db
 
 # === Log files ===
 logs/
+.build/
 
 # === Config files ===
 config/
