@@ -369,11 +369,15 @@ async fn handle_logs_socket(
             maybe_message = socket.next() => {
                 match maybe_message {
                     Some(Ok(Message::Close(_))) | None => break,
-                    Some(Ok(Message::Ping(payload))) => {
-                        if socket.send(Message::Pong(payload)).await.is_err() {
-                            break;
-                        }
+                    Some(Ok(Message::Ping(payload)))
+                        if socket
+                            .send(Message::Pong(payload.clone()))
+                            .await
+                            .is_err() =>
+                    {
+                        break;
                     }
+                    Some(Ok(Message::Ping(_))) => {}
                     Some(Err(_)) => break,
                     _ => {}
                 }
