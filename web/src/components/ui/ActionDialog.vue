@@ -46,27 +46,6 @@ const _emit = defineEmits<{
               <p class="section-label">{{ UI_LABELS.dialogEyebrow }}</p>
               <h3>{{ title }}</h3>
             </div>
-            <button
-              v-if="showClose"
-              class="action-dialog__close"
-              type="button"
-              :aria-label="cancelLabel"
-              @click="$emit('close')"
-            >
-              <svg
-                aria-hidden="true"
-                class="action-dialog__close-icon"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  d="M6 6l12 12M18 6L6 18"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-width="2"
-                />
-              </svg>
-            </button>
           </div>
 
           <div class="action-dialog__body">
@@ -129,14 +108,9 @@ const _emit = defineEmits<{
 
 .action-dialog__head {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
   align-items: start;
-}
-
-.action-dialog__head > button {
-  border-color: var(--border-strong);
-  box-shadow: none;
 }
 
 .action-dialog__head h3,
@@ -230,16 +204,4 @@ const _emit = defineEmits<{
   transform: scale(0.96);
 }
 
-.action-dialog__close {
-  min-width: 2.7rem;
-  min-height: 2.7rem;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-dialog__close-icon {
-  display: block;
-}
 </style>

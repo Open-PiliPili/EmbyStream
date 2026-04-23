@@ -286,26 +286,6 @@ function formatTimestamp(value: string) {
                   }}
                 </h3>
               </div>
-              <button
-                class="users-dialog__close"
-                type="button"
-                :aria-label="t('common.close')"
-                @click="closeDialog"
-              >
-                <svg
-                  aria-hidden="true"
-                  class="users-dialog__close-icon"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    d="M6 6l12 12M18 6L6 18"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-linecap="round"
-                    stroke-width="2"
-                  />
-                </svg>
-              </button>
             </div>
 
             <div class="users-dialog__body">
@@ -507,27 +487,9 @@ function formatTimestamp(value: string) {
 
 .users-dialog__head {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
   align-items: start;
-}
-
-.users-dialog__head > button {
-  border-color: var(--border-strong);
-  box-shadow: none;
-}
-
-.users-dialog__close {
-  min-width: 2.7rem;
-  min-height: 2.7rem;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.users-dialog__close-icon {
-  display: block;
 }
 
 .users-dialog__head h3,
