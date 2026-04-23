@@ -252,15 +252,22 @@ function closeArtifactModal() {
               <button
                 class="config-detail__overlay-close"
                 type="button"
-                :aria-label="t('common.closePreview')"
+                :aria-label="t('common.close')"
                 @click="closeArtifactModal"
               >
-                <Icon
+                <svg
                   aria-hidden="true"
                   class="config-detail__overlay-close-icon"
-                  icon="ph:x"
-                  width="18"
-                />
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M6 6l12 12M18 6L6 18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-width="2"
+                  />
+                </svg>
               </button>
             </div>
             <FilePreviewPanel

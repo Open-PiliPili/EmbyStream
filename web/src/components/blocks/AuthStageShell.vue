@@ -22,10 +22,12 @@ withDefaults(
     signals: string[];
     panelTitle: string;
     panelBody: string;
+    toastMessage?: string;
     backgroundImage?: string;
     backgroundAlt?: string;
   }>(),
   {
+    toastMessage: "",
     backgroundImage: "",
     backgroundAlt: "",
   },
@@ -33,6 +35,7 @@ withDefaults(
 
 defineEmits<{
   toggleTheme: [];
+  switch: [];
 }>();
 </script>
 
@@ -96,11 +99,47 @@ defineEmits<{
             <p class="lede">{{ body }}</p>
           </div>
 
+          <Transition name="auth-stage__toast-pop">
+            <GlassPanel
+              v-if="toastMessage"
+              class="auth-stage__toast"
+              tone="warm"
+            >
+              <svg
+                aria-hidden="true"
+                class="auth-stage__toast-icon"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  fill="none"
+                  r="9"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+                <path
+                  d="M12 8v5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-width="2"
+                />
+                <circle cx="12" cy="16.5" fill="currentColor" r="1" />
+              </svg>
+              <p>{{ toastMessage }}</p>
+            </GlassPanel>
+          </Transition>
+
           <slot />
 
-          <RouterLink class="auth-stage__switch" :to="switchTo">
+          <button
+            class="auth-stage__switch"
+            type="button"
+            @click="$emit('switch')"
+          >
             {{ switchLabel }}
-          </RouterLink>
+          </button>
         </GlassPanel>
       </div>
     </section>
@@ -284,11 +323,57 @@ defineEmits<{
   font-weight: 500;
 }
 
+.auth-stage__toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: fit-content;
+  max-width: min(100%, 28rem);
+  margin: -0.1rem 0 0.1rem;
+  padding: 0.85rem 0.95rem;
+  border-color: color-mix(
+    in srgb,
+    var(--signal-warm) 22%,
+    var(--border-subtle)
+  );
+  box-shadow: var(--shadow-medium);
+}
+
+.auth-stage__toast-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.auth-stage__toast p {
+  margin: 0;
+  color: var(--text-main);
+  line-height: 1.45;
+}
+
+.auth-stage__toast-pop-enter-active,
+.auth-stage__toast-pop-leave-active {
+  transition:
+    opacity 220ms var(--curve-swift),
+    transform 260ms var(--curve-spring);
+}
+
+.auth-stage__toast-pop-enter-from,
+.auth-stage__toast-pop-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
 .auth-stage__switch {
   width: fit-content;
+  min-height: 2.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--signal-accent);
   font-size: 0.92rem;
   font-weight: 500;
+  box-shadow: none;
 }
 
 .auth-stage__switch:hover {

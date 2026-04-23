@@ -29,6 +29,10 @@ export interface AuthResponse {
   user: SessionUser;
 }
 
+export interface RegistrationSettingsResponse {
+  registration_enabled: boolean;
+}
+
 export interface RegisterRequest {
   username: string;
   email?: string | null;
@@ -319,6 +323,10 @@ export interface UserListResponse {
 
 export interface UserEnvelope {
   user: AdminUserSummary;
+}
+
+export interface UpdateRegistrationSettingsRequest {
+  registration_enabled: boolean;
 }
 
 export interface SystemMetricsResponse {

@@ -3,15 +3,22 @@ import { computed, ref, onMounted, onBeforeUnmount } from "vue";
 import { Icon } from "@iconify/vue";
 import { useI18n } from "vue-i18n";
 
+import {
+  ApiError,
+  getRegistrationSettings,
+  updateRegistrationSettings,
+} from "@/api/client";
 import AppWorkspaceShell from "@/components/blocks/AppWorkspaceShell.vue";
 import GlassPanel from "@/components/ui/GlassPanel.vue";
 import { useDocumentLocale } from "@/composables/useDocumentLocale";
 import { useTheme } from "@/composables/useTheme";
 import { useTypography } from "@/composables/useTypography";
 import { setAppLocale } from "@/locales";
+import { useSessionStore } from "@/stores/session";
 
 const { t, locale } = useI18n();
 const isMobile = ref(false);
+const sessionStore = useSessionStore();
 const {
   chineseFont,
   englishFont,
@@ -24,6 +31,10 @@ const {
   previewReadingFont,
 } = useTypography();
 const { theme, themePreference, setThemePreference } = useTheme();
+const registrationEnabled = ref(false);
+const registrationLoading = ref(false);
+const registrationSaving = ref(false);
+const registrationFeedback = ref("");
 
 useDocumentLocale();
 
@@ -80,6 +91,55 @@ function updateThemePreference(nextPreference: string) {
   setThemePreference(nextPreference as "light" | "dark" | "system");
 }
 
+async function loadRegistrationControl() {
+  if (!sessionStore.isAdmin) {
+    return;
+  }
+
+  registrationLoading.value = true;
+  registrationFeedback.value = "";
+
+  try {
+    const response = await getRegistrationSettings();
+    registrationEnabled.value = response.registration_enabled;
+  } catch (error) {
+    registrationFeedback.value =
+      error instanceof ApiError
+        ? error.message
+        : t("settings.registrationLoadFailed");
+  } finally {
+    registrationLoading.value = false;
+  }
+}
+
+async function updateRegistrationControl(nextValue: string) {
+  if (!sessionStore.isAdmin) {
+    return;
+  }
+
+  registrationSaving.value = true;
+  registrationFeedback.value = "";
+
+  try {
+    const response = await updateRegistrationSettings({
+      registration_enabled: nextValue === "enabled",
+    });
+    registrationEnabled.value = response.registration_enabled;
+    registrationFeedback.value = t("settings.registrationSaved", {
+      state: response.registration_enabled
+        ? t("settings.registrationStateOpen")
+        : t("settings.registrationStateClosed"),
+    });
+  } catch (error) {
+    registrationFeedback.value =
+      error instanceof ApiError
+        ? error.message
+        : t("settings.registrationSaveFailed");
+  } finally {
+    registrationSaving.value = false;
+  }
+}
+
 function syncMobileState() {
   if (typeof window === "undefined") {
     return;
@@ -91,6 +151,7 @@ function syncMobileState() {
 onMounted(() => {
   syncMobileState();
   window.addEventListener("resize", syncMobileState);
+  loadRegistrationControl();
 });
 
 onBeforeUnmount(() => {
@@ -167,6 +228,55 @@ onBeforeUnmount(() => {
             </option>
           </select>
         </label>
+      </GlassPanel>
+
+      <GlassPanel v-if="sessionStore.isAdmin" class="settings-card">
+        <div class="settings-card__head">
+          <Icon icon="ph:user-plus" width="20" />
+          <div>
+            <p class="section-label">{{ t("settings.registrationLabel") }}</p>
+            <h2>{{ t("settings.registrationTitle") }}</h2>
+          </div>
+        </div>
+        <p class="settings-card__body">
+          {{ t("settings.registrationBody") }}
+        </p>
+        <label class="settings-card__field">
+          <span>{{ t("settings.registrationLabel") }}</span>
+          <select
+            :disabled="registrationLoading || registrationSaving"
+            :value="registrationEnabled ? 'enabled' : 'disabled'"
+            @change="
+              updateRegistrationControl(
+                ($event.target as HTMLSelectElement).value,
+              )
+            "
+          >
+            <option value="disabled">
+              {{ t("settings.registrationStateClosed") }}
+            </option>
+            <option value="enabled">
+              {{ t("settings.registrationStateOpen") }}
+            </option>
+          </select>
+        </label>
+        <p class="settings-card__hint">
+          {{
+            registrationLoading
+              ? t("common.loading")
+              : t("settings.registrationCurrent", {
+                  state: registrationEnabled
+                    ? t("settings.registrationStateOpen")
+                    : t("settings.registrationStateClosed"),
+                })
+          }}
+        </p>
+        <p
+          v-if="registrationFeedback"
+          class="settings-card__hint settings-card__hint--status"
+        >
+          {{ registrationFeedback }}
+        </p>
       </GlassPanel>
 
       <GlassPanel
@@ -364,6 +474,10 @@ onBeforeUnmount(() => {
   margin: 0;
   color: var(--text-faint);
   font-size: 0.85rem;
+}
+
+.settings-card__hint--status {
+  color: var(--signal-blue);
 }
 
 .settings-card__field {

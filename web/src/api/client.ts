@@ -12,9 +12,11 @@ import type {
   LoginBackgroundResponse,
   LogListResponse,
   LogoutResponse,
+  RegistrationSettingsResponse,
   RegisterRequest,
   SaveDraftRequest,
   SystemMetricsResponse,
+  UpdateRegistrationSettingsRequest,
   WizardTemplateResponse,
 } from "./types";
 import {
@@ -76,6 +78,15 @@ export function register(payload: RegisterRequest) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function getRegistrationSettings() {
+  return request<RegistrationSettingsResponse>(
+    AUTH_API.registrationSettings(),
+    {
+      method: "GET",
+    },
+  );
 }
 
 export function login(payload: { login: string; password: string }) {
@@ -241,6 +252,18 @@ export function listUsers() {
   return request<UserListResponse>(ADMIN_API.users(), {
     method: "GET",
   });
+}
+
+export function updateRegistrationSettings(
+  payload: UpdateRegistrationSettingsRequest,
+) {
+  return request<RegistrationSettingsResponse>(
+    ADMIN_API.registrationSettings(),
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function updateUserRole(userId: string, role: "admin" | "user") {

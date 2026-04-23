@@ -101,7 +101,7 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
   const sessionStore = useSessionStore(pinia);
   await sessionStore.ensureLoaded();
 
@@ -127,7 +127,11 @@ router.beforeEach(async (to) => {
     sessionStore.isAuthenticated &&
     (to.name === "login" || to.name === "register")
   ) {
-    return { name: "drafts" };
+    if (from.matched.length > 0 && from.name !== to.name) {
+      return false;
+    }
+
+    return { name: "dashboard" };
   }
 
   return true;

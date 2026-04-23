@@ -18,7 +18,8 @@ use crate::web::{
     api::WebAppState,
     auth::{hash_password, session_user_from_jar},
     contracts::{
-        LogoutResponse, SystemMetricsResponse, UpdateUserDisabledRequest,
+        LogoutResponse, RegistrationSettingsResponse, SystemMetricsResponse,
+        UpdateRegistrationSettingsRequest, UpdateUserDisabledRequest,
         UpdateUserPasswordRequest, UpdateUserRoleRequest, UserEnvelope,
         UserListResponse, UserRole,
     },
@@ -28,11 +29,51 @@ use crate::web::{
 pub fn routes() -> Router<WebAppState> {
     Router::new()
         .route("/system", get(get_system_metrics))
+        .route(
+            "/settings/registration",
+            get(get_registration_settings).patch(update_registration_settings),
+        )
         .route("/users", get(list_users))
         .route("/users/{user_id}/role", patch(update_user_role))
         .route("/users/{user_id}/disabled", patch(update_user_disabled))
         .route("/users/{user_id}/password", patch(update_user_password))
         .route("/users/{user_id}", delete(delete_user))
+}
+
+async fn get_registration_settings(
+    State(state): State<WebAppState>,
+    jar: CookieJar,
+) -> Result<Json<RegistrationSettingsResponse>, WebError> {
+    let _admin = require_admin(&state, &jar).await?;
+    Ok(Json(RegistrationSettingsResponse {
+        registration_enabled: state.db.registration_enabled().await?,
+    }))
+}
+
+async fn update_registration_settings(
+    State(state): State<WebAppState>,
+    jar: CookieJar,
+    Json(payload): Json<UpdateRegistrationSettingsRequest>,
+) -> Result<Json<RegistrationSettingsResponse>, WebError> {
+    let admin = require_admin(&state, &jar).await?;
+    let registration_enabled = state
+        .db
+        .set_registration_enabled(payload.registration_enabled)
+        .await?;
+    state
+        .db
+        .write_audit_log(
+            Some(admin.id),
+            "update_registration_settings",
+            "settings",
+            Some("registration".to_string()),
+            json!({ "registration_enabled": registration_enabled }),
+        )
+        .await?;
+
+    Ok(Json(RegistrationSettingsResponse {
+        registration_enabled,
+    }))
 }
 
 async fn require_admin(

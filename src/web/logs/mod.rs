@@ -627,8 +627,8 @@ mod tests {
         );
     }
 
-    async fn build_logs_test_router(
-    ) -> (Router, Database, tempfile::TempDir, LogStreamHub) {
+    async fn build_logs_test_router()
+    -> (Router, Database, tempfile::TempDir, LogStreamHub) {
         let tempdir = tempdir().expect("tempdir");
         let data_dir = tempdir.path().join("web-data");
         let runtime_log_dir = tempdir.path().join("runtime-logs");
@@ -700,7 +700,8 @@ mod tests {
 
     #[tokio::test]
     async fn logs_http_requires_admin() {
-        let (router, _db, _tempdir, _live_logs) = build_logs_test_router().await;
+        let (router, _db, _tempdir, _live_logs) =
+            build_logs_test_router().await;
 
         let response = router
             .oneshot(

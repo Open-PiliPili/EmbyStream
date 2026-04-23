@@ -16,7 +16,7 @@
   "common": {
     "preview": "预览",
     "openPreview": "放大预览",
-    "closePreview": "关闭预览",
+    "close": "关闭",
     "download": "下载",
     "copy": "复制",
     "copied": "已复制",
@@ -89,7 +89,8 @@
       "helper": "建议使用长期邮箱，便于识别和排查",
       "submit": "创建账号",
       "switch": "已有账号？去登录"
-    }
+    },
+    "registerClosedToast": "当前未开放注册"
   },
   "wizard": {
     "eyebrow": "Guided Flow",
@@ -448,6 +449,15 @@
     "languageLabel": "语言",
     "languageTitle": "界面语言",
     "languageBody": "切换后会立即更新界面文案和时间格式",
+    "registrationLabel": "注册开关",
+    "registrationTitle": "公开注册",
+    "registrationBody": "控制访客是否可以从登录页创建本地账号",
+    "registrationStateOpen": "已开放",
+    "registrationStateClosed": "未开放",
+    "registrationCurrent": "当前状态：{state}",
+    "registrationSaved": "注册状态已更新为：{state}",
+    "registrationLoadFailed": "加载注册设置失败",
+    "registrationSaveFailed": "更新注册设置失败",
     "renderFontLabel": "网页渲染字体",
     "renderWeightLabel": "网页字重",
     "renderWeightNormal": "细体",

@@ -158,6 +158,9 @@ mod tests {
         let data_dir = tempdir.path().join("web-data");
         let db = Database::new(data_dir.clone());
         db.initialize().await.expect("initialize db");
+        db.set_registration_enabled(true)
+            .await
+            .expect("enable registration");
         let router = build_router(WebAppState::new(
             db.clone(),
             WebRuntimeConfig {
@@ -251,6 +254,45 @@ mod tests {
             .expect("find admin")
             .expect("admin exists");
         assert_eq!(admin.role, crate::web::contracts::UserRole::Admin);
+    }
+
+    #[tokio::test]
+    async fn registration_is_closed_by_default() {
+        let tempdir = tempdir().expect("tempdir");
+        let data_dir = tempdir.path().join("web-data");
+        let db = Database::new(data_dir.clone());
+        db.initialize().await.expect("initialize db");
+        let router = build_router(WebAppState::new(
+            db,
+            WebRuntimeConfig {
+                listen: "127.0.0.1:17172".parse().expect("socket addr"),
+                data_dir,
+                tmdb_api_key: None,
+                runtime_log_dir: tempdir.path().join("runtime-logs"),
+                stream_log_dir: tempdir.path().join("stream-logs"),
+                executable_path: tempdir.path().join("embystream"),
+                main_config_path: Some(tempdir.path().join("config.toml")),
+            },
+        ));
+
+        let register_request = Request::builder()
+            .method("POST")
+            .uri("/api/auth/register")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "username": "closed-user",
+                    "email": "closed@example.com",
+                    "password": "super-secret"
+                })
+                .to_string(),
+            ))
+            .expect("request");
+        let register_response =
+            router.oneshot(register_request).await.expect("register");
+        assert_eq!(register_response.status(), StatusCode::FORBIDDEN);
+        let body = json_body(register_response).await;
+        assert_eq!(body["error"]["code"], "forbidden");
     }
 
     #[tokio::test]

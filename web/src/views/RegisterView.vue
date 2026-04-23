@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 
-import { ApiError } from "@/api/client";
+import { ApiError, getRegistrationSettings } from "@/api/client";
 import AuthStageShell from "@/components/blocks/AuthStageShell.vue";
 import { useDocumentLocale } from "@/composables/useDocumentLocale";
 import { useTheme } from "@/composables/useTheme";
@@ -21,6 +21,7 @@ const form = reactive({
 });
 const pending = ref(false);
 const errorMessage = ref("");
+const registrationEnabled = ref(true);
 
 useDocumentLocale();
 
@@ -43,11 +44,32 @@ const accentLabel = computed(() =>
 const submitDisabled = computed(
   () =>
     pending.value ||
+    !registrationEnabled.value ||
     !form.username.trim() ||
     !form.password.trim() ||
     !form.email.trim(),
 );
 const authSignals = computed(() => tm("auth.signals") as string[]);
+
+onMounted(async () => {
+  try {
+    const response = await getRegistrationSettings();
+    registrationEnabled.value = response.registration_enabled;
+  } catch {
+    registrationEnabled.value = false;
+  }
+
+  if (!registrationEnabled.value) {
+    await router.replace({
+      name: "login",
+      query: { notice: "registration_closed" },
+    });
+  }
+});
+
+async function handleSwitch() {
+  await router.push({ name: "login" });
+}
 
 async function submit() {
   if (submitDisabled.value) {
@@ -89,6 +111,7 @@ async function submit() {
     :theme-mode="theme"
     :theme-preference="themePreference"
     :title="t('auth.register.title')"
+    @switch="handleSwitch"
     @toggle-theme="cycleThemePreference"
   >
     <form class="auth-form" @submit.prevent="submit">

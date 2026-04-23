@@ -289,11 +289,9 @@ function formatTimestamp(value: string) {
               <button
                 class="users-dialog__close"
                 type="button"
+                :aria-label="t('common.close')"
                 @click="closeDialog"
               >
-                <span class="users-dialog__close-label">{{
-                  t("common.closePreview")
-                }}</span>
                 <svg
                   aria-hidden="true"
                   class="users-dialog__close-icon"
@@ -514,27 +512,22 @@ function formatTimestamp(value: string) {
   align-items: start;
 }
 
-.users-dialog__close-icon {
-  display: none;
+.users-dialog__head > button {
+  border-color: var(--border-strong);
+  box-shadow: none;
 }
 
-@media (max-width: 980px) {
-  .users-dialog__close {
-    min-width: 2.7rem;
-    min-height: 2.7rem;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
+.users-dialog__close {
+  min-width: 2.7rem;
+  min-height: 2.7rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
-  .users-dialog__close-label {
-    display: none;
-  }
-
-  .users-dialog__close-icon {
-    display: block;
-  }
+.users-dialog__close-icon {
+  display: block;
 }
 
 .users-dialog__head h3,

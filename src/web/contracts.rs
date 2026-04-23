@@ -76,6 +76,11 @@ pub struct AuthResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistrationSettingsResponse {
+    pub registration_enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RegisterRequest {
     pub username: String,
     pub email: Option<String>,
@@ -253,6 +258,11 @@ pub struct UpdateUserDisabledRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdateUserPasswordRequest {
     pub password: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateRegistrationSettingsRequest {
+    pub registration_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

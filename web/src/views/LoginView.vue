@@ -1,9 +1,20 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 
-import { ApiError, getLoginBackground } from "@/api/client";
+import {
+  ApiError,
+  getLoginBackground,
+  getRegistrationSettings,
+} from "@/api/client";
 import type { BackgroundItem } from "@/api/types";
 import AuthStageShell from "@/components/blocks/AuthStageShell.vue";
 import { STORAGE_KEYS } from "@/constants/app";
@@ -24,6 +35,9 @@ const form = reactive({
 const pending = ref(false);
 const errorMessage = ref("");
 const backgroundItems = ref<BackgroundItem[]>([]);
+const registrationEnabled = ref(false);
+const toastMessage = ref("");
+let toastTimer: number | undefined;
 
 useDocumentLocale();
 
@@ -88,6 +102,60 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => route.query.notice,
+  async (notice) => {
+    if (notice !== "registration_closed") {
+      return;
+    }
+
+    showToast(t("auth.registerClosedToast"));
+    const nextQuery = { ...route.query };
+    delete nextQuery.notice;
+    await router.replace({ name: "login", query: nextQuery });
+  },
+  { immediate: true },
+);
+
+onMounted(async () => {
+  await loadRegistrationAvailability();
+});
+
+onBeforeUnmount(() => {
+  if (toastTimer !== undefined) {
+    window.clearTimeout(toastTimer);
+  }
+});
+
+async function loadRegistrationAvailability() {
+  try {
+    const response = await getRegistrationSettings();
+    registrationEnabled.value = response.registration_enabled;
+  } catch {
+    registrationEnabled.value = false;
+  }
+}
+
+function showToast(message: string) {
+  toastMessage.value = message;
+  if (toastTimer !== undefined) {
+    window.clearTimeout(toastTimer);
+  }
+  toastTimer = window.setTimeout(() => {
+    toastMessage.value = "";
+    toastTimer = undefined;
+  }, 2800);
+}
+
+async function handleSwitch() {
+  if (!registrationEnabled.value) {
+    showToast(t("auth.registerClosedToast"));
+    return;
+  }
+
+  await router.push({ name: "register" });
+}
+
 async function submit() {
   if (submitDisabled.value) {
     return;
@@ -125,7 +193,9 @@ async function submit() {
     :theme-label="accentLabel"
     :theme-mode="theme"
     :theme-preference="themePreference"
+    :toast-message="toastMessage"
     :title="t('auth.login.title')"
+    @switch="handleSwitch"
     @toggle-theme="cycleThemePreference"
   >
     <form class="auth-form" @submit.prevent="submit">

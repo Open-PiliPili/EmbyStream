@@ -664,15 +664,22 @@ onBeforeUnmount(() => {
               <button
                 class="workspace-shell__about-close"
                 type="button"
-                :aria-label="t('common.closePreview')"
+                :aria-label="t('common.close')"
                 @click="closeAboutDialog"
               >
-                <Icon
+                <svg
                   aria-hidden="true"
                   class="workspace-shell__about-close-icon"
-                  icon="ph:x"
-                  width="18"
-                />
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M6 6l12 12M18 6L6 18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-width="2"
+                  />
+                </svg>
               </button>
             </div>
 
@@ -719,15 +726,22 @@ onBeforeUnmount(() => {
               <button
                 class="workspace-shell__about-close"
                 type="button"
-                :aria-label="t('common.closePreview')"
+                :aria-label="t('common.close')"
                 @click="closeDisclaimerDialog"
               >
-                <Icon
+                <svg
                   aria-hidden="true"
                   class="workspace-shell__about-close-icon"
-                  icon="ph:x"
-                  width="18"
-                />
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M6 6l12 12M18 6L6 18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-width="2"
+                  />
+                </svg>
               </button>
             </div>
 

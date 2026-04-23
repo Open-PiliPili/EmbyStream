@@ -20,7 +20,7 @@ use super::{
     api::WebAppState,
     contracts::{
         AuthResponse, ChangeOwnPasswordRequest, LoginRequest, LogoutResponse,
-        RegisterRequest, SessionUser,
+        RegisterRequest, RegistrationSettingsResponse, SessionUser,
     },
     error::WebError,
 };
@@ -32,11 +32,20 @@ const MAX_LOGIN_ATTEMPTS: usize = 10;
 
 pub fn routes() -> axum::Router<WebAppState> {
     axum::Router::new()
+        .route("/registration-settings", get(get_registration_settings))
         .route("/register", post(register))
         .route("/login", post(login))
         .route("/logout", post(logout))
         .route("/password", patch(change_own_password))
         .route("/me", get(current_user))
+}
+
+async fn get_registration_settings(
+    State(state): State<WebAppState>,
+) -> Result<Json<RegistrationSettingsResponse>, WebError> {
+    Ok(Json(RegistrationSettingsResponse {
+        registration_enabled: state.db.registration_enabled().await?,
+    }))
 }
 
 pub fn hash_password(password: &str) -> Result<String, WebError> {
@@ -92,6 +101,9 @@ async fn register(
     Json(payload): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, WebError> {
     validate_same_origin_headers(&headers)?;
+    if !state.db.registration_enabled().await? {
+        return Err(WebError::Forbidden("Registration is currently disabled."));
+    }
     validate_username(&payload.username)?;
     validate_password(&payload.password)?;
 

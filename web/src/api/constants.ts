@@ -26,6 +26,7 @@ export function buildWebSocketPath(path: string): string {
  */
 export const AUTH_API = {
   register: () => "auth/register",
+  registrationSettings: () => "auth/registration-settings",
   login: () => "auth/login",
   logout: () => "auth/logout",
   password: () => "auth/password",
@@ -83,6 +84,7 @@ export const LOGS_API = {
 export const ADMIN_API = {
   system: () => "admin/system",
   users: () => "admin/users",
+  registrationSettings: () => "admin/settings/registration",
   userRole: (userId: string) => `admin/users/${userId}/role`,
   userDisabled: (userId: string) => `admin/users/${userId}/disabled`,
   userPassword: (userId: string) => `admin/users/${userId}/password`,

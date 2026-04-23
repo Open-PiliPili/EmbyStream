@@ -517,7 +517,9 @@ function isLogStreamMessage(value: unknown): value is LogStreamMessage {
                 autoFollow
                   ? t("logs.followLiveBody")
                   : pendingEntriesCount > 0
-                    ? t("logs.followPausedCount", { count: pendingEntriesCount })
+                    ? t("logs.followPausedCount", {
+                        count: pendingEntriesCount,
+                      })
                     : t("logs.followPausedBody")
               }}
             </span>

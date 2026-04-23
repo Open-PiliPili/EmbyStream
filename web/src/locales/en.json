@@ -16,7 +16,7 @@
   "common": {
     "preview": "Preview",
     "openPreview": "Open preview",
-    "closePreview": "Close preview",
+    "close": "Close",
     "download": "Download",
     "copy": "Copy",
     "copied": "Copied",
@@ -94,7 +94,8 @@
       "helper": "Use a stable email so the workspace stays easy to identify",
       "submit": "Create account",
       "switch": "Already have one? Login"
-    }
+    },
+    "registerClosedToast": "Registration is currently closed"
   },
   "wizard": {
     "eyebrow": "Guided Flow",
@@ -453,6 +454,15 @@
     "languageLabel": "Language",
     "languageTitle": "Interface language",
     "languageBody": "Updates apply immediately to copy and time formatting",
+    "registrationLabel": "Registration",
+    "registrationTitle": "Public registration",
+    "registrationBody": "Control whether visitors can create local accounts from the login screen",
+    "registrationStateOpen": "Open",
+    "registrationStateClosed": "Closed",
+    "registrationCurrent": "Current state: {state}",
+    "registrationSaved": "Registration is now {state}",
+    "registrationLoadFailed": "Failed to load registration settings",
+    "registrationSaveFailed": "Failed to update registration settings",
     "renderFontLabel": "Render font",
     "renderWeightLabel": "Render weight",
     "renderWeightNormal": "Normal",

@@ -16,7 +16,7 @@
   "common": {
     "preview": "預覽",
     "openPreview": "放大預覽",
-    "closePreview": "關閉預覽",
+    "close": "關閉",
     "download": "下載",
     "copy": "複製",
     "copied": "已複製",
@@ -89,7 +89,8 @@
       "helper": "建議使用長期信箱，便於識別與排查",
       "submit": "建立帳號",
       "switch": "已有帳號？去登入"
-    }
+    },
+    "registerClosedToast": "目前未開放註冊"
   },
   "wizard": {
     "eyebrow": "Guided Flow",
@@ -448,6 +449,15 @@
     "languageLabel": "語言",
     "languageTitle": "介面語言",
     "languageBody": "切換後會立即更新介面文案與時間格式",
+    "registrationLabel": "註冊開關",
+    "registrationTitle": "公開註冊",
+    "registrationBody": "控制訪客是否可以從登入頁建立本地帳號",
+    "registrationStateOpen": "已開放",
+    "registrationStateClosed": "未開放",
+    "registrationCurrent": "目前狀態：{state}",
+    "registrationSaved": "註冊狀態已更新為：{state}",
+    "registrationLoadFailed": "載入註冊設定失敗",
+    "registrationSaveFailed": "更新註冊設定失敗",
     "renderFontLabel": "網頁渲染字體",
     "renderWeightLabel": "網頁字重",
     "renderWeightNormal": "細體",

@@ -723,6 +723,9 @@ fn render_systemd_service(raw: &RawConfig, payload: &WizardPayload) -> String {
         &payload.deployment.systemd.config_path,
         "/opt/stream/config.toml",
     );
+    let web_listen = "0.0.0.0:6888";
+    let web_data_dir = format!("{working_directory}/web-config/data");
+    let web_runtime_log_dir = format!("{working_directory}/web-config/logs");
 
     format!(
         r#"[Unit]
@@ -733,7 +736,7 @@ Type=simple
 ExecStartPre=/bin/sleep 3
 # If `embystream` is installed elsewhere, run `which embystream` and update
 # the binary path below.
-ExecStart={binary_path} run --config {config_path}
+ExecStart={binary_path} run --config {config_path} --web --web-listen {web_listen} --web-data-dir {web_data_dir} --web-runtime-log-dir {web_runtime_log_dir}
 # Update these paths if your deployment lives outside the default directory.
 WorkingDirectory={working_directory}
 User=root
@@ -745,6 +748,9 @@ WantedBy=multi-user.target
 "#,
         binary_path = binary_path,
         config_path = config_path,
+        web_listen = web_listen,
+        web_data_dir = web_data_dir,
+        web_runtime_log_dir = web_runtime_log_dir,
         working_directory = working_directory,
     )
 }
@@ -780,6 +786,9 @@ fn render_pm2_config(raw: &RawConfig, payload: &WizardPayload) -> String {
         &payload.deployment.pm2.error_file,
         &format!("{working_directory}/logs/pm2.err.log"),
     );
+    let web_listen = "0.0.0.0:6888";
+    let web_data_dir = format!("{working_directory}/web-config/data");
+    let web_runtime_log_dir = format!("{working_directory}/web-config/logs");
 
     format!(
         r#"module.exports = {{
@@ -792,7 +801,7 @@ fn render_pm2_config(raw: &RawConfig, payload: &WizardPayload) -> String {
       // Update these paths if your deployment lives outside the default
       // directory for this mode.
       cwd: "{working_directory}",
-      args: ["run", "--config", "{config_path}"],
+      args: ["run", "--config", "{config_path}", "--web", "--web-listen", "{web_listen}", "--web-data-dir", "{web_data_dir}", "--web-runtime-log-dir", "{web_runtime_log_dir}"],
       out_file: "{out_file}",
       error_file: "{error_file}",
       time: true,
@@ -806,6 +815,9 @@ fn render_pm2_config(raw: &RawConfig, payload: &WizardPayload) -> String {
         binary_path = binary_path,
         working_directory = working_directory,
         config_path = config_path,
+        web_listen = web_listen,
+        web_data_dir = web_data_dir,
+        web_runtime_log_dir = web_runtime_log_dir,
         out_file = out_file,
         error_file = error_file,
     )
@@ -1053,13 +1065,13 @@ mod tests {
         let pm2 = render_pm2_config(&raw, &payload);
 
         assert!(systemd.contains(
-            "ExecStart=/usr/bin/embystream run --config /opt/stream/config.toml"
+            "ExecStart=/usr/bin/embystream run --config /opt/stream/config.toml --web --web-listen 0.0.0.0:6888 --web-data-dir /opt/stream/web-config/data --web-runtime-log-dir /opt/stream/web-config/logs"
         ));
         assert!(systemd.contains("WorkingDirectory=/opt/stream"));
         assert!(pm2.contains("name: \"stream-backend\""));
         assert!(pm2.contains("cwd: \"/opt/stream-backend\""));
         assert!(pm2.contains(
-            "args: [\"run\", \"--config\", \"/opt/stream-backend/config.toml\"]"
+            "args: [\"run\", \"--config\", \"/opt/stream-backend/config.toml\", \"--web\", \"--web-listen\", \"0.0.0.0:6888\", \"--web-data-dir\", \"/opt/stream-backend/web-config/data\", \"--web-runtime-log-dir\", \"/opt/stream-backend/web-config/logs\"]"
         ));
         assert!(!systemd.to_lowercase().contains("pilipili"));
         assert!(!pm2.to_lowercase().contains("pilipili"));

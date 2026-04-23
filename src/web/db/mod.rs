@@ -26,6 +26,7 @@ use super::{
 
 const DB_FILE_NAME: &str = "web-config-studio.sqlite3";
 const SESSION_TTL_HOURS: i64 = 24 * 14;
+const REGISTRATION_ENABLED_KEY: &str = "registration_enabled";
 
 #[derive(Debug, Clone)]
 pub struct BootstrapAdmin {
@@ -155,6 +156,42 @@ impl Database {
                 }
                 Err(error) => Err(WebError::from(error)),
             }
+        })
+        .await?
+    }
+
+    pub async fn registration_enabled(&self) -> Result<bool, WebError> {
+        let db = self.clone();
+        task::spawn_blocking(move || {
+            let conn = db.open_connection()?;
+            read_registration_enabled(&conn)
+        })
+        .await?
+    }
+
+    pub async fn set_registration_enabled(
+        &self,
+        enabled: bool,
+    ) -> Result<bool, WebError> {
+        let db = self.clone();
+        task::spawn_blocking(move || {
+            let conn = db.open_connection()?;
+            conn.execute(
+                "INSERT INTO app_settings (key, value_json, updated_at)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(key) DO UPDATE SET
+                    value_json = excluded.value_json,
+                    updated_at = excluded.updated_at",
+                params![
+                    REGISTRATION_ENABLED_KEY,
+                    serde_json::to_string(&json!({ "enabled": enabled }))
+                        .map_err(|error| WebError::internal(
+                            error.to_string()
+                        ))?,
+                    Utc::now().to_rfc3339()
+                ],
+            )?;
+            read_registration_enabled(&conn)
         })
         .await?
     }
@@ -1375,6 +1412,12 @@ impl Database {
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
             );
 
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
             CREATE INDEX IF NOT EXISTS idx_drafts_user_id ON drafts(user_id);
@@ -1388,6 +1431,17 @@ impl Database {
             "ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0",
             [],
         );
+
+        conn.execute(
+            "INSERT OR IGNORE INTO app_settings (key, value_json, updated_at)
+             VALUES (?1, ?2, ?3)",
+            params![
+                REGISTRATION_ENABLED_KEY,
+                serde_json::to_string(&json!({ "enabled": false }))
+                    .map_err(|error| WebError::internal(error.to_string()))?,
+                Utc::now().to_rfc3339()
+            ],
+        )?;
 
         let admin_exists: Option<String> = conn
             .query_row(
@@ -1450,6 +1504,28 @@ fn build_audit_log_message(
     } else {
         format!("{action} {target_type} {detail_json}")
     }
+}
+
+fn read_registration_enabled(conn: &Connection) -> Result<bool, WebError> {
+    let value_json = conn
+        .query_row(
+            "SELECT value_json FROM app_settings WHERE key = ?1 LIMIT 1",
+            params![REGISTRATION_ENABLED_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+
+    let Some(value_json) = value_json else {
+        return Ok(false);
+    };
+
+    let value = serde_json::from_str::<serde_json::Value>(&value_json)
+        .map_err(|error| WebError::internal(error.to_string()))?;
+
+    Ok(value
+        .get("enabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false))
 }
 
 fn generate_password() -> String {

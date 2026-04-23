@@ -50,9 +50,9 @@ const _emit = defineEmits<{
               v-if="showClose"
               class="action-dialog__close"
               type="button"
+              :aria-label="cancelLabel"
               @click="$emit('close')"
             >
-              <span class="action-dialog__close-label">{{ cancelLabel }}</span>
               <svg
                 aria-hidden="true"
                 class="action-dialog__close-icon"
@@ -132,6 +132,11 @@ const _emit = defineEmits<{
   justify-content: space-between;
   gap: 1rem;
   align-items: start;
+}
+
+.action-dialog__head > button {
+  border-color: var(--border-strong);
+  box-shadow: none;
 }
 
 .action-dialog__head h3,
@@ -225,26 +230,16 @@ const _emit = defineEmits<{
   transform: scale(0.96);
 }
 
-.action-dialog__close-icon {
-  display: none;
+.action-dialog__close {
+  min-width: 2.7rem;
+  min-height: 2.7rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-@media (max-width: 980px) {
-  .action-dialog__close {
-    min-width: 2.7rem;
-    min-height: 2.7rem;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .action-dialog__close-label {
-    display: none;
-  }
-
-  .action-dialog__close-icon {
-    display: block;
-  }
+.action-dialog__close-icon {
+  display: block;
 }
 </style>
