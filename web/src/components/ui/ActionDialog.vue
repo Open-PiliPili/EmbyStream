@@ -203,5 +203,4 @@ const _emit = defineEmits<{
   opacity: 0;
   transform: scale(0.96);
 }
-
 </style>
