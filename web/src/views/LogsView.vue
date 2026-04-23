@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 
-import { ApiError, listLogs } from "@/api/client";
+import { ApiError, buildLogsStreamUrl, listLogs } from "@/api/client";
+import type { LogStreamMessage } from "@/api/types";
 import AppWorkspaceShell from "@/components/blocks/AppWorkspaceShell.vue";
 import GlassPanel from "@/components/ui/GlassPanel.vue";
 import PillTabs from "@/components/ui/PillTabs.vue";
@@ -22,7 +30,19 @@ const sourceFilter = ref<"stream" | "runtime" | "audit" | undefined>(undefined);
 const levelFilter = ref("all");
 const keywordInput = ref("");
 const debouncedKeyword = ref("");
+const logsConsoleRef = ref<HTMLElement | null>(null);
+const liveStatus = ref<"connecting" | "live" | "reconnecting" | "offline">(
+  "connecting",
+);
+const autoFollow = ref(true);
+const pendingEntriesCount = ref(0);
 let keywordTimer: number | undefined;
+let liveSocket: WebSocket | null = null;
+let reconnectTimer: number | undefined;
+let reconnectAttempts = 0;
+let intentionalSocketClose = false;
+
+const MAX_LIVE_LOGS = 300;
 
 useDocumentLocale();
 
@@ -64,9 +84,39 @@ const sourceOptions = computed(() => [
 
 const selectedSourceMeta = computed(
   () =>
-    sourceOptions.value.find((item) => item.key === (sourceFilter.value ?? "all")) ??
-    sourceOptions.value[0],
+    sourceOptions.value.find(
+      (item) => item.key === (sourceFilter.value ?? "all"),
+    ) ?? sourceOptions.value[0],
 );
+
+const liveStatusMeta = computed(() => {
+  switch (liveStatus.value) {
+    case "live":
+      return {
+        label: t("logs.statusLive"),
+        body: t("logs.statusLiveBody"),
+        className: "logs-toolbar__status--live",
+      };
+    case "reconnecting":
+      return {
+        label: t("logs.statusReconnecting"),
+        body: t("logs.statusReconnectingBody"),
+        className: "logs-toolbar__status--reconnecting",
+      };
+    case "offline":
+      return {
+        label: t("logs.statusOffline"),
+        body: t("logs.statusOfflineBody"),
+        className: "logs-toolbar__status--offline",
+      };
+    default:
+      return {
+        label: t("logs.statusConnecting"),
+        body: t("logs.statusConnectingBody"),
+        className: "logs-toolbar__status--connecting",
+      };
+  }
+});
 
 const filteredLines = computed(() => {
   const keyword = debouncedKeyword.value.trim().toLowerCase();
@@ -100,8 +150,22 @@ watch(keywordInput, (value) => {
   }, 160);
 });
 
+watch(sourceFilter, async () => {
+  await loadLogs();
+  reconnectLiveLogs();
+});
+
 onMounted(async () => {
   await loadLogs();
+  connectLiveLogs();
+});
+
+onBeforeUnmount(() => {
+  closeLiveLogs(true);
+
+  if (keywordTimer !== undefined) {
+    window.clearTimeout(keywordTimer);
+  }
 });
 
 async function loadLogs() {
@@ -114,7 +178,7 @@ async function loadLogs() {
       limit: 50,
       source: sourceFilter.value,
     });
-    lines.value = response.items;
+    replaceLogEntries(response.items);
   } catch (error) {
     errorMessage.value =
       error instanceof ApiError ? error.message : t("errors.logsLoadFailed");
@@ -124,7 +188,227 @@ async function loadLogs() {
 function selectFilter(key: string) {
   sourceFilter.value =
     key === "all" ? undefined : (key as "stream" | "runtime" | "audit");
-  loadLogs();
+}
+
+function connectLiveLogs() {
+  if (
+    typeof window === "undefined" ||
+    !sessionStore.isAdmin ||
+    route.query.access === "forbidden"
+  ) {
+    liveStatus.value = "offline";
+    return;
+  }
+
+  intentionalSocketClose = false;
+  liveStatus.value = reconnectAttempts > 0 ? "reconnecting" : "connecting";
+  liveSocket = new WebSocket(
+    buildLogsStreamUrl({
+      source: sourceFilter.value,
+      limit: 50,
+    }),
+  );
+
+  liveSocket.onopen = () => {
+    reconnectAttempts = 0;
+    liveStatus.value = "live";
+  };
+
+  liveSocket.onmessage = (event) => {
+    handleLiveMessage(event.data);
+  };
+
+  liveSocket.onerror = () => {
+    liveStatus.value = "reconnecting";
+    liveSocket?.close();
+  };
+
+  liveSocket.onclose = () => {
+    liveSocket = null;
+    if (intentionalSocketClose) {
+      liveStatus.value = "offline";
+      return;
+    }
+
+    scheduleReconnect();
+  };
+}
+
+function reconnectLiveLogs() {
+  closeLiveLogs(true);
+  connectLiveLogs();
+}
+
+function closeLiveLogs(intentional: boolean) {
+  intentionalSocketClose = intentional;
+  if (intentional) {
+    liveStatus.value = "offline";
+  }
+
+  if (reconnectTimer !== undefined) {
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+  }
+
+  if (
+    liveSocket &&
+    (liveSocket.readyState === WebSocket.OPEN ||
+      liveSocket.readyState === WebSocket.CONNECTING)
+  ) {
+    liveSocket.close();
+  }
+
+  liveSocket = null;
+}
+
+function scheduleReconnect() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (reconnectTimer !== undefined) {
+    window.clearTimeout(reconnectTimer);
+  }
+
+  const delay = Math.min(1000 * 2 ** reconnectAttempts, 10000);
+  reconnectAttempts += 1;
+  liveStatus.value = "reconnecting";
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = undefined;
+    connectLiveLogs();
+  }, delay);
+}
+
+function handleLiveMessage(raw: string) {
+  let payload: LogStreamMessage;
+
+  try {
+    payload = JSON.parse(raw) as LogStreamMessage;
+  } catch {
+    return;
+  }
+
+  if (!isLogStreamMessage(payload)) {
+    return;
+  }
+
+  if (payload.kind === "replay") {
+    replaceLogEntries(payload.items);
+    return;
+  }
+
+  prependLogEntries([payload.item]);
+}
+
+function replaceLogEntries(nextEntries: typeof lines.value) {
+  lines.value = normalizeLogEntries(nextEntries);
+  if (autoFollow.value) {
+    pendingEntriesCount.value = 0;
+    scrollConsoleToLatest();
+  }
+}
+
+function prependLogEntries(nextEntries: typeof lines.value) {
+  const shouldStickTop = autoFollow.value && isConsolePinnedToTop();
+  lines.value = normalizeLogEntries([...nextEntries, ...lines.value]);
+
+  if (shouldStickTop) {
+    pendingEntriesCount.value = 0;
+    scrollConsoleToLatest();
+  } else {
+    pendingEntriesCount.value = Math.min(
+      pendingEntriesCount.value + nextEntries.length,
+      MAX_LIVE_LOGS,
+    );
+  }
+}
+
+function normalizeLogEntries(nextEntries: typeof lines.value) {
+  const deduped = new Map<string, (typeof lines.value)[number]>();
+
+  for (const entry of nextEntries) {
+    deduped.set(
+      `${entry.timestamp}|${entry.level}|${entry.source}|${entry.message}`,
+      entry,
+    );
+  }
+
+  return Array.from(deduped.values())
+    .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
+    .slice(0, MAX_LIVE_LOGS);
+}
+
+function isConsolePinnedToTop() {
+  if (!logsConsoleRef.value) {
+    return true;
+  }
+
+  return logsConsoleRef.value.scrollTop <= 24;
+}
+
+function handleConsoleScroll() {
+  if (!logsConsoleRef.value) {
+    return;
+  }
+
+  const pinnedToTop = isConsolePinnedToTop();
+  autoFollow.value = pinnedToTop;
+
+  if (pinnedToTop) {
+    pendingEntriesCount.value = 0;
+  }
+}
+
+function pauseAutoFollow() {
+  autoFollow.value = false;
+}
+
+function resumeAutoFollow() {
+  autoFollow.value = true;
+  pendingEntriesCount.value = 0;
+  scrollConsoleToLatest();
+}
+
+function scrollConsoleToLatest() {
+  nextTick(() => {
+    if (logsConsoleRef.value) {
+      logsConsoleRef.value.scrollTop = 0;
+    }
+  });
+}
+
+function isLogEntryPayload(
+  value: unknown,
+): value is (typeof lines.value)[number] {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.timestamp === "string" &&
+    typeof candidate.level === "string" &&
+    typeof candidate.source === "string" &&
+    typeof candidate.message === "string"
+  );
+}
+
+function isLogStreamMessage(value: unknown): value is LogStreamMessage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  if (candidate.kind === "replay" && Array.isArray(candidate.items)) {
+    return candidate.items.every((item) => isLogEntryPayload(item));
+  }
+
+  if (candidate.kind === "entry") {
+    return isLogEntryPayload(candidate.item);
+  }
+
+  return false;
 }
 </script>
 
@@ -143,7 +427,21 @@ function selectFilter(key: string) {
             <p>{{ t("logs.consoleBody") }}</p>
           </div>
 
-          <span class="logs-toolbar__badge">{{ t("common.adminOnly") }}</span>
+          <div class="logs-toolbar__meta-badges">
+            <div class="logs-toolbar__status" :class="liveStatusMeta.className">
+              <strong>{{ liveStatusMeta.label }}</strong>
+              <span>{{ liveStatusMeta.body }}</span>
+              <button
+                v-if="liveStatus !== 'live'"
+                class="logs-toolbar__status-action"
+                type="button"
+                @click="reconnectLiveLogs"
+              >
+                {{ t("logs.reconnectNow") }}
+              </button>
+            </div>
+            <span class="logs-toolbar__badge">{{ t("common.adminOnly") }}</span>
+          </div>
         </div>
 
         <div
@@ -204,7 +502,52 @@ function selectFilter(key: string) {
       </GlassPanel>
 
       <GlassPanel v-else-if="filteredLines.length" class="logs-console-panel">
-        <div class="logs-console" role="log" aria-live="polite">
+        <div class="logs-console-panel__bar">
+          <div
+            class="logs-console-panel__follow"
+            :class="{
+              'logs-console-panel__follow--paused': !autoFollow,
+            }"
+          >
+            <strong>{{
+              autoFollow ? t("logs.followLive") : t("logs.followPaused")
+            }}</strong>
+            <span>
+              {{
+                autoFollow
+                  ? t("logs.followLiveBody")
+                  : pendingEntriesCount > 0
+                    ? t("logs.followPausedCount", { count: pendingEntriesCount })
+                    : t("logs.followPausedBody")
+              }}
+            </span>
+          </div>
+          <div class="logs-console-panel__actions">
+            <button
+              v-if="autoFollow"
+              class="logs-console-panel__action"
+              type="button"
+              @click="pauseAutoFollow"
+            >
+              {{ t("logs.pauseFollow") }}
+            </button>
+            <button
+              v-else
+              class="logs-console-panel__action logs-console-panel__action--primary"
+              type="button"
+              @click="resumeAutoFollow"
+            >
+              {{ t("logs.resumeFollow") }}
+            </button>
+          </div>
+        </div>
+        <div
+          ref="logsConsoleRef"
+          class="logs-console"
+          role="log"
+          aria-live="polite"
+          @scroll="handleConsoleScroll"
+        >
           <div
             v-for="(line, index) in filteredLines"
             :key="`${line.timestamp}-${line.source}-${index}`"
@@ -274,6 +617,12 @@ function selectFilter(key: string) {
   justify-content: space-between;
   gap: 1rem;
   align-items: start;
+}
+
+.logs-toolbar__meta-badges {
+  display: grid;
+  justify-items: end;
+  gap: 0.65rem;
 }
 
 .logs-toolbar__copy h2,
@@ -369,6 +718,57 @@ function selectFilter(key: string) {
   font-weight: 700;
 }
 
+.logs-toolbar__status {
+  display: grid;
+  gap: 0.18rem;
+  width: min(18rem, 100%);
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface-strong) 82%, transparent);
+}
+
+.logs-toolbar__status strong,
+.logs-toolbar__status span {
+  margin: 0;
+}
+
+.logs-toolbar__status strong {
+  font-size: 0.86rem;
+}
+
+.logs-toolbar__status span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.logs-toolbar__status-action {
+  width: fit-content;
+  min-height: 2.15rem;
+  padding-inline: 0.8rem;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--bg-accent) 68%, transparent);
+  color: var(--signal-blue);
+  box-shadow: none;
+}
+
+.logs-toolbar__status--live strong {
+  color: var(--signal-green);
+}
+
+.logs-toolbar__status--connecting strong {
+  color: var(--signal-blue);
+}
+
+.logs-toolbar__status--reconnecting strong {
+  color: var(--signal-warm);
+}
+
+.logs-toolbar__status--offline strong {
+  color: var(--signal-red);
+}
+
 .logs-state {
   display: grid;
   gap: 0.6rem;
@@ -399,6 +799,63 @@ function selectFilter(key: string) {
   line-height: 1.64;
   border: 1px solid
     color-mix(in srgb, var(--code-accent) 14%, var(--border-subtle));
+}
+
+.logs-console-panel__bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+  align-items: start;
+  margin-bottom: 0.9rem;
+}
+
+.logs-console-panel__follow {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface-strong) 78%, transparent);
+}
+
+.logs-console-panel__follow strong,
+.logs-console-panel__follow span {
+  margin: 0;
+}
+
+.logs-console-panel__follow strong {
+  color: var(--signal-green);
+  font-size: 0.86rem;
+}
+
+.logs-console-panel__follow span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.logs-console-panel__follow--paused strong {
+  color: var(--signal-warm);
+}
+
+.logs-console-panel__actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.logs-console-panel__action {
+  min-height: 2.45rem;
+  padding-inline: 0.95rem;
+  white-space: nowrap;
+}
+
+.logs-console-panel__action--primary {
+  border-color: transparent;
+  background: var(--button-primary-bg);
+  color: #fff;
+  box-shadow: none;
 }
 
 .logs-console__line {
@@ -474,6 +931,11 @@ function selectFilter(key: string) {
     flex-direction: column;
   }
 
+  .logs-toolbar__meta-badges {
+    width: 100%;
+    justify-items: stretch;
+  }
+
   .logs-toolbar__filters {
     grid-template-columns: 1fr;
     width: 100%;
@@ -488,6 +950,18 @@ function selectFilter(key: string) {
     max-height: calc(100vh - 15rem);
     padding: 0.95rem;
     font-size: 0.82rem;
+  }
+
+  .logs-console-panel__bar {
+    flex-direction: column;
+  }
+
+  .logs-console-panel__actions {
+    width: 100%;
+  }
+
+  .logs-console-panel__action {
+    flex: 1;
   }
 
   .logs-console__line {

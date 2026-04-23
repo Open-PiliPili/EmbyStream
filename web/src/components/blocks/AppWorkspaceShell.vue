@@ -412,9 +412,9 @@ onBeforeUnmount(() => {
     >
       <div class="workspace-shell__logo-row">
         <BrandMark v-if="!sidebarCollapsed" class="workspace-shell__logo" />
-        <span v-if="!sidebarCollapsed" class="workspace-shell__wordmark"
-          >{{ APP_NAME }}</span
-        >
+        <span v-if="!sidebarCollapsed" class="workspace-shell__wordmark">{{
+          APP_NAME
+        }}</span>
         <button
           class="workspace-shell__sidebar-toggle"
           type="button"
@@ -608,7 +608,6 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </button>
-
       </div>
     </nav>
 

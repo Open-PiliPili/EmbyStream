@@ -8,10 +8,12 @@ use std::{
 };
 
 use axum::Router;
+use chrono::Utc;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
 use tokio::net::TcpListener;
 
 use crate::cli::WebServeArgs;
+use crate::{log_stream::global_log_stream, web::contracts::LogEntry};
 
 use super::{
     api::{WebAppState, build_router},
@@ -98,7 +100,10 @@ pub async fn serve_web_app(config: WebRuntimeConfig) -> Result<(), WebError> {
         print_web_startup_line(
             Some((
                 &config.runtime_log_dir,
-                format!("Bootstrap admin password generated for '{}'.", admin.username),
+                format!(
+                    "Bootstrap admin password generated for '{}'.",
+                    admin.username
+                ),
             )),
             "WARN",
             format!(
@@ -148,6 +153,15 @@ fn print_web_startup_line(
 
     let line = format!("{timestamp} {level:<5} [WEB] {message}");
     println!("{line}");
+    global_log_stream().publish(LogEntry {
+        timestamp: Utc::now(),
+        level: level.trim().to_string(),
+        source: "runtime".to_string(),
+        message: persisted
+            .as_ref()
+            .map(|(_, message)| message.clone())
+            .unwrap_or_else(|| message.clone()),
+    });
 
     if let Some((directory, persisted_message)) = persisted {
         let persisted_line =
@@ -159,7 +173,10 @@ fn print_web_startup_line(
     }
 }
 
-fn append_runtime_log_line(directory: &Path, line: &str) -> Result<(), std::io::Error> {
+fn append_runtime_log_line(
+    directory: &Path,
+    line: &str,
+) -> Result<(), std::io::Error> {
     create_dir_all(directory)?;
 
     let path = directory.join("runtime.log");

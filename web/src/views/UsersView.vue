@@ -286,8 +286,14 @@ function formatTimestamp(value: string) {
                   }}
                 </h3>
               </div>
-              <button class="users-dialog__close" type="button" @click="closeDialog">
-                <span class="users-dialog__close-label">{{ t("common.closePreview") }}</span>
+              <button
+                class="users-dialog__close"
+                type="button"
+                @click="closeDialog"
+              >
+                <span class="users-dialog__close-label">{{
+                  t("common.closePreview")
+                }}</span>
                 <svg
                   aria-hidden="true"
                   class="users-dialog__close-icon"

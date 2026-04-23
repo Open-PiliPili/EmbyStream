@@ -25,6 +25,7 @@ import {
   DRAFTS_API,
   LOGS_API,
   buildApiPath,
+  buildWebSocketPath,
 } from "./constants";
 
 export class ApiError extends Error {
@@ -209,6 +210,25 @@ export function listLogs(params?: { source?: string; limit?: number }) {
   return request<LogListResponse>(`${LOGS_API.list()}${suffix}`, {
     method: "GET",
   });
+}
+
+export function buildLogsStreamUrl(params?: {
+  source?: string;
+  level?: string;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.source) {
+    query.set("source", params.source);
+  }
+  if (params?.level) {
+    query.set("level", params.level);
+  }
+  if (params?.limit) {
+    query.set("limit", String(params.limit));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return `${buildWebSocketPath(LOGS_API.stream())}${suffix}`;
 }
 
 export function getSystemMetrics() {

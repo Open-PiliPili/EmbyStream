@@ -65,7 +65,8 @@ const groups = computed(() => {
       key: "disclaimer",
       icon: "ph:warning-diamond",
       label: t("common.disclaimer"),
-      action: () => router.push({ name: "disclaimer", query: { from: "more" } }),
+      action: () =>
+        router.push({ name: "disclaimer", query: { from: "more" } }),
     },
   ];
 
@@ -139,7 +140,8 @@ const groups = computed(() => {
 }
 
 .more-row + .more-row {
-  border-top: 1px solid color-mix(in srgb, var(--border-strong) 80%, transparent);
+  border-top: 1px solid
+    color-mix(in srgb, var(--border-strong) 80%, transparent);
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }

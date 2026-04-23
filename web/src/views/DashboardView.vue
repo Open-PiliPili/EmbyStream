@@ -153,7 +153,11 @@ function formatUptime(seconds: number) {
             {{ t("dashboard.refreshHint") }}
           </p>
         </div>
-        <button class="dashboard-toolbar__refresh" type="button" @click="fetchMetrics()">
+        <button
+          class="dashboard-toolbar__refresh"
+          type="button"
+          @click="fetchMetrics()"
+        >
           <Icon
             :icon="refreshing ? 'ph:spinner-gap' : 'ph:arrow-clockwise'"
             width="18"

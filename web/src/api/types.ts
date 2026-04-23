@@ -301,6 +301,18 @@ export interface LogListResponse {
   next_cursor?: string | null;
 }
 
+export interface LogStreamReplayMessage {
+  kind: "replay";
+  items: LogListResponse["items"];
+}
+
+export interface LogStreamEntryMessage {
+  kind: "entry";
+  item: LogListResponse["items"][number];
+}
+
+export type LogStreamMessage = LogStreamReplayMessage | LogStreamEntryMessage;
+
 export interface UserListResponse {
   items: AdminUserSummary[];
 }

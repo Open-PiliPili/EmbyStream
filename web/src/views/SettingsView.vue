@@ -119,9 +119,7 @@ onBeforeUnmount(() => {
           <select
             :value="themePreference"
             @change="
-              updateThemePreference(
-                ($event.target as HTMLSelectElement).value,
-              )
+              updateThemePreference(($event.target as HTMLSelectElement).value)
             "
           >
             <option
@@ -134,9 +132,14 @@ onBeforeUnmount(() => {
           </select>
         </label>
         <p class="settings-card__hint">
-          {{ t("settings.themeCurrent", {
-            mode: theme === "dark" ? t("common.themeDark") : t("common.themeLight"),
-          }) }}
+          {{
+            t("settings.themeCurrent", {
+              mode:
+                theme === "dark"
+                  ? t("common.themeDark")
+                  : t("common.themeLight"),
+            })
+          }}
         </p>
       </GlassPanel>
 

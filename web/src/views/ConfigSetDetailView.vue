@@ -124,7 +124,9 @@ async function loadData() {
       collapsedArtifacts[artifact.file_name] = true;
     }
 
-    if (!configSetResponse.items.some((item) => item.id === configSetId.value)) {
+    if (
+      !configSetResponse.items.some((item) => item.id === configSetId.value)
+    ) {
       errorMessage.value = t("configSets.detailMissingBody");
     }
   } catch (error) {
@@ -171,7 +173,11 @@ function closeArtifactModal() {
       <p>{{ t("configSets.detailLoadingBody") }}</p>
     </GlassPanel>
 
-    <GlassPanel v-else-if="errorMessage" class="config-detail__state" tone="warm">
+    <GlassPanel
+      v-else-if="errorMessage"
+      class="config-detail__state"
+      tone="warm"
+    >
       <p class="section-label">{{ t("common.forbidden") }}</p>
       <h3>{{ t("configSets.detailMissingTitle") }}</h3>
       <p>{{ errorMessage }}</p>
@@ -185,7 +191,9 @@ function closeArtifactModal() {
               t(`modes.${selectedConfigSet.stream_mode}`)
             }}</span>
             <span class="config-detail__chip config-detail__chip--muted">
-              {{ t("configSets.countLabel", { count: selectedArtifacts.length }) }}
+              {{
+                t("configSets.countLabel", { count: selectedArtifacts.length })
+              }}
             </span>
           </div>
           <p>{{ t("configSets.updatedAt", { time: selectedUpdatedAt }) }}</p>

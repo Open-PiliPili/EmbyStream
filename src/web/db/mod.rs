@@ -11,6 +11,8 @@ use serde_json::json;
 use tokio::task;
 use uuid::Uuid;
 
+use crate::log_stream::global_log_stream;
+
 use super::{
     artifacts::RenderedArtifact,
     contracts::{
@@ -488,6 +490,9 @@ impl Database {
         let db = self.clone();
         let action = action.to_string();
         let target_type = target_type.to_string();
+        let timestamp = Utc::now();
+        let message =
+            build_audit_log_message(&action, &target_type, &detail_json);
         task::spawn_blocking(move || {
             let conn = db.open_connection()?;
             conn.execute(
@@ -501,12 +506,21 @@ impl Database {
                     target_type,
                     target_id,
                     detail_json.to_string(),
-                    Utc::now().to_rfc3339()
+                    timestamp.to_rfc3339()
                 ],
             )?;
-            Ok(())
+            Ok::<(), WebError>(())
         })
-        .await?
+        .await??;
+
+        global_log_stream().publish(LogEntry {
+            timestamp,
+            level: "INFO".to_string(),
+            source: "audit".to_string(),
+            message,
+        });
+
+        Ok(())
     }
 
     pub async fn create_draft(
@@ -1227,21 +1241,11 @@ impl Database {
                 let detail_json =
                     serde_json::from_str::<serde_json::Value>(&detail_json)
                         .unwrap_or_else(|_| json!({}));
-                let message =
-                    if detail_json.is_null() || detail_json == json!({}) {
-                        format!(
-                            "{} {}",
-                            row.get::<_, String>(1)?,
-                            row.get::<_, String>(2)?
-                        )
-                    } else {
-                        format!(
-                            "{} {} {}",
-                            row.get::<_, String>(1)?,
-                            row.get::<_, String>(2)?,
-                            detail_json
-                        )
-                    };
+                let message = build_audit_log_message(
+                    &row.get::<_, String>(1)?,
+                    &row.get::<_, String>(2)?,
+                    &detail_json,
+                );
                 Ok(LogEntry {
                     timestamp: DateTime::parse_from_rfc3339(
                         &row.get::<_, String>(0)?,
@@ -1433,6 +1437,18 @@ impl Database {
         connection.pragma_update(None, "foreign_keys", "ON")?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         Ok(connection)
+    }
+}
+
+fn build_audit_log_message(
+    action: &str,
+    target_type: &str,
+    detail_json: &serde_json::Value,
+) -> String {
+    if detail_json.is_null() || detail_json == &json!({}) {
+        format!("{action} {target_type}")
+    } else {
+        format!("{action} {target_type} {detail_json}")
     }
 }
 

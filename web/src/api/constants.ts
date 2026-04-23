@@ -11,6 +11,16 @@ export function buildApiPath(path: string): string {
   return `${API_BASE.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
 }
 
+export function buildWebSocketPath(path: string): string {
+  if (typeof window === "undefined") {
+    return buildApiPath(path);
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const apiPath = buildApiPath(path);
+  return `${protocol}//${window.location.host}${apiPath.startsWith("/") ? apiPath : `/${apiPath}`}`;
+}
+
 /**
  * Session and account management endpoints.
  */
@@ -64,6 +74,7 @@ export const BACKGROUNDS_API = {
  */
 export const LOGS_API = {
   list: () => "logs",
+  stream: () => "logs/stream",
 } as const;
 
 /**

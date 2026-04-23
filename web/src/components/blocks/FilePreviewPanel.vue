@@ -198,10 +198,7 @@ function toggleCollapsed() {
           type="button"
           @click.stop="copyContent"
         >
-          <Icon
-            :icon="copied ? 'ph:check' : 'ph:copy'"
-            width="16"
-          />
+          <Icon :icon="copied ? 'ph:check' : 'ph:copy'" width="16" />
         </button>
         <button
           v-if="downloadHref"

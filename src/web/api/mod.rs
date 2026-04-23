@@ -9,6 +9,8 @@ use axum::{
 use dashmap::DashMap;
 use reqwest::Client;
 
+use crate::log_stream::{LogStreamHub, global_log_stream};
+
 use super::{
     admin,
     app::WebRuntimeConfig,
@@ -26,6 +28,7 @@ pub struct WebAppState {
     pub http_client: Client,
     pub started_at: Arc<Instant>,
     pub login_attempts: Arc<DashMap<String, LoginThrottleState>>,
+    pub live_logs: LogStreamHub,
 }
 
 #[derive(Debug, Clone)]
@@ -51,12 +54,21 @@ impl Default for LoginThrottleState {
 
 impl WebAppState {
     pub fn new(db: Database, config: WebRuntimeConfig) -> Self {
+        Self::new_with_live_logs(db, config, global_log_stream())
+    }
+
+    pub fn new_with_live_logs(
+        db: Database,
+        config: WebRuntimeConfig,
+        live_logs: LogStreamHub,
+    ) -> Self {
         Self {
             db,
             config,
             http_client: Client::new(),
             started_at: Arc::new(Instant::now()),
             login_attempts: Arc::new(DashMap::new()),
+            live_logs,
         }
     }
 }

@@ -3,8 +3,7 @@ export const APP_NAME = "EmbyStream";
 export const EXTERNAL_LINKS = {
   claudeCode: "https://www.anthropic.com/claude-code",
   codex: "https://openai.com/codex/",
-  readme:
-    "https://github.com/PiliPili-Team/EmbyStream/blob/main/README.md",
+  readme: "https://github.com/PiliPili-Team/EmbyStream/blob/main/README.md",
   issueNew: "https://github.com/PiliPili-Team/EmbyStream/issues/new",
 } as const;
 

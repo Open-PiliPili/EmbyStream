@@ -14,6 +14,7 @@ pub mod domain;
 pub mod error;
 pub mod gateway;
 pub mod i18n;
+pub mod log_stream;
 pub mod logger;
 pub mod macros;
 pub mod network;

@@ -319,8 +319,7 @@ defineEmits<{
 
 @media (max-width: 640px) {
   .auth-stage {
-    padding:
-      calc(0.9rem + env(safe-area-inset-top, 0px))
+    padding: calc(0.9rem + env(safe-area-inset-top, 0px))
       calc(0.9rem + env(safe-area-inset-right, 0px))
       calc(0.9rem + env(safe-area-inset-bottom, 0px))
       calc(0.9rem + env(safe-area-inset-left, 0px));

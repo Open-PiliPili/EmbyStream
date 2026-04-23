@@ -8,7 +8,9 @@ export type ThemePreference = ThemeMode | "system";
 const themePreference = ref<ThemePreference>("system");
 const systemTheme = ref<ThemeMode>("light");
 const theme = computed<ThemeMode>(() =>
-  themePreference.value === "system" ? systemTheme.value : themePreference.value,
+  themePreference.value === "system"
+    ? systemTheme.value
+    : themePreference.value,
 );
 let initialized = false;
 let hydrated = false;
@@ -89,8 +91,10 @@ function isStandaloneIosPwa() {
     return false;
   }
 
-  const standalone = window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone ===
+      true;
   const isiOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   return standalone && isiOS;

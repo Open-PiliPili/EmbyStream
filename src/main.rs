@@ -36,6 +36,7 @@ use embystream::{
         response::ResponseBuilder,
         reverse_proxy_filter::ReverseProxyFilterMiddleware,
     },
+    log_stream::global_log_stream,
     logger::{LogLevel, Logger, start_cleanup_task},
     system::SystemInfo,
     web::{
@@ -331,6 +332,7 @@ fn setup_logger(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_level(level)
         .with_directory(&config.log.root_path)
         .with_file_prefix(&config.log.prefix)
+        .with_live_logs(global_log_stream(), "stream")
         .build();
 
     start_cleanup_task(config.log.root_path.clone());
