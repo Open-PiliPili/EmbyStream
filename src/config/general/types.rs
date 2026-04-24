@@ -60,6 +60,7 @@ pub struct Log {
 pub struct Emby {
     pub url: String,
     pub port: String,
+    #[serde(default)]
     pub token: String,
 }
 

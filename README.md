@@ -40,12 +40,12 @@ bun run build
 cd ..
 
 cargo run -- web serve \
-  --listen 127.0.0.1:17172 \
+  --listen 127.0.0.1:6888 \
   --data-dir ./web_data \
   --runtime-log-dir ./logs
 ```
 
-Then open `http://127.0.0.1:17172`.
+Then open `http://127.0.0.1:6888`.
 
 The Web Config Studio is now the recommended setup path. It can:
 
@@ -66,26 +66,19 @@ Build an embedded single-binary release locally:
 
 The script builds `web/dist`, compiles the Rust binary, and writes artifacts under `./.build/binary/release/` or `./.build/binary/debug/`.
 
-Build the integrated Web image locally:
+Build the integrated Docker image locally:
 
 ```bash
-./scripts/build-docker.sh --tag embystream-web:latest
+./scripts/build-docker.sh --tag embystream:latest
 ```
 
 By default the script writes Docker metadata and local image archives under `.build/docker/`.
-
-Build the legacy CLI image instead:
-
-```bash
-./scripts/build-docker.sh \
-  --dockerfile Dockerfile \
-  --tag embystream-cli:latest
-```
 
 For published artifacts, see:
 
 - [GitHub Releases](https://github.com/Open-PiliPili/EmbyStream/releases)
 - [Docker Hub - openpilipili/embystream](https://hub.docker.com/r/openpilipili/embystream)
+- `ghcr.io/pilipili-team/embystream`
 
 ## Install
 

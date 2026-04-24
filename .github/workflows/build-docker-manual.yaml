@@ -9,7 +9,8 @@ on:
         default: true
 
 env:
-  IMAGE_NAME: openpilipili/embystream
+  DOCKERHUB_IMAGE_NAME: openpilipili/embystream
+  GHCR_IMAGE_NAME: ghcr.io/pilipili-team/embystream
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -60,8 +61,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ env.IMAGE_NAME }}
-            ghcr.io/${{ github.repository }}
+            ${{ env.DOCKERHUB_IMAGE_NAME }}
+            ${{ env.GHCR_IMAGE_NAME }}
           tags: |
             type=raw,value=${{ steps.cargo_version.outputs.version }}
             type=sha,prefix=sha-
@@ -70,7 +71,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.web
+          file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ inputs.publish }}
           tags: ${{ steps.meta.outputs.tags }}

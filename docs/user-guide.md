@@ -21,7 +21,7 @@ bun run build
 cd ..
 
 cargo run -- web serve \
-  --listen 127.0.0.1:17172 \
+  --listen 127.0.0.1:6888 \
   --data-dir ./web_data \
   --runtime-log-dir ./logs
 ```
@@ -73,21 +73,11 @@ By default the script writes the copied binary and optional `.tar.gz` package to
 
 ### Docker image
 
-Build the integrated web admin image:
+Build the integrated Docker image:
 
 ```bash
-./scripts/build-docker.sh --tag embystream-web:latest
+./scripts/build-docker.sh --tag embystream:latest
 ```
-
-Build the legacy CLI image:
-
-```bash
-./scripts/build-docker.sh \
-  --dockerfile Dockerfile \
-  --tag embystream-cli:latest
-```
-
-The default Docker path for new users is `Dockerfile.web`, not the legacy CLI-only image.
 When the image is loaded locally, the script also exports a Docker image tar and metadata under `./.build/docker/`.
 
 ---

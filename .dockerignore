@@ -1,8 +1,18 @@
 # Shrink build context. Do NOT ignore: src/, locales/, Cargo.toml, Cargo.lock
 /target
+.build
+.claude
+.cursor
 .git
 .github
 .idea
 .vscode
+logs
+*.log
+*.tmp
+*.swp
+web/dist
+web/node_modules
+web/*.tsbuildinfo
 **/.DS_Store
 *.md

@@ -660,9 +660,14 @@ fn render_accel_blocks(raw: &RawConfig, payload: &WizardPayload) -> String {
 }
 
 fn render_docker_compose(raw: &RawConfig) -> String {
-    let mut ports = Vec::new();
+    let mut ports = vec!["      - \"6888:6888\"".to_string()];
     if let Some(frontend) = raw.frontend.as_ref() {
-        ports.push(format!("      - \"{0}:{0}\"", frontend.listen_port));
+        if ports
+            .iter()
+            .all(|entry| !entry.contains(&frontend.listen_port.to_string()))
+        {
+            ports.push(format!("      - \"{0}:{0}\"", frontend.listen_port));
+        }
     }
     if let Some(backend) = raw.backend.as_ref() {
         if ports
@@ -686,6 +691,7 @@ fn render_docker_compose(raw: &RawConfig) -> String {
     volumes:
       # Replace this mount with your real config.toml and edit it as needed.
       - ./config/config.toml:/config/embystream/config.toml
+      - ./data:/data
     restart: unless-stopped
     ports:
 {ports}
@@ -1015,9 +1021,11 @@ mod tests {
         assert!(nginx.content.contains(&frontend_port));
         assert!(docker_compose.content.contains(&frontend_port));
         assert!(docker_compose.content.contains(&backend_port));
+        assert!(docker_compose.content.contains("6888:6888"));
         assert!(docker_compose.content.contains(
             "# Replace this mount with your real config.toml and edit it as needed."
         ));
+        assert!(docker_compose.content.contains("- ./data:/data"));
         assert!(pm2.content.contains("/opt/stream/config.toml"));
         assert!(pm2.content.contains("Asia/Shanghai"));
     }

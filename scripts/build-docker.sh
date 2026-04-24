@@ -5,8 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CURRENT_DIR="$(pwd)"
 OUTPUT_ROOT="${CURRENT_DIR}/.build"
-DOCKERFILE="Dockerfile.web"
-TAGS=("embystream-web:latest")
+DOCKERFILE="Dockerfile"
+TAGS=("embystream:latest")
 PLATFORMS=""
 PUSH=0
 LOAD=1
@@ -32,7 +32,6 @@ Usage:
   ./scripts/build-docker.sh [options]
 
 Options:
-  --dockerfile <path>    Dockerfile to use (default: Dockerfile.web)
   --tag <name:tag>       Image tag to add; may be specified multiple times
   --platform <list>      Buildx platform list, e.g. linux/amd64,linux/arm64
   --output-dir <dir>     Output root directory (default: ./.build)
@@ -46,10 +45,9 @@ Output layout:
   .build/docker/<tag>.tar   # local builds only
 
 Examples:
-  ./scripts/build-docker.sh --tag embystream-web:latest
+  ./scripts/build-docker.sh --tag embystream:latest
   ./scripts/build-docker.sh --platform linux/amd64,linux/arm64 --push \
     --tag openpilipili/embystream:latest
-  ./scripts/build-docker.sh --dockerfile Dockerfile --tag embystream-cli:latest
 EOF
 }
 
@@ -117,14 +115,9 @@ require_option_value() {
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --dockerfile)
-        require_option_value "$1" "${2:-}"
-        DOCKERFILE="$2"
-        shift 2
-        ;;
       --tag)
         require_option_value "$1" "${2:-}"
-        if [[ "${TAGS[*]}" == "embystream-web:latest" && "${#TAGS[@]}" -eq 1 ]]; then
+        if [[ "${TAGS[*]}" == "embystream:latest" && "${#TAGS[@]}" -eq 1 ]]; then
           TAGS=()
         fi
         TAGS+=("$2")

@@ -40,7 +40,7 @@ Starts the Web Config Studio or performs web-admin maintenance tasks.
 
 ```bash
 embystream web serve \
-  --listen 127.0.0.1:17172 \
+  --listen 127.0.0.1:6888 \
   --data-dir ./web_data \
   --runtime-log-dir ./logs
 ```
@@ -49,7 +49,7 @@ Options:
 
 | Option | Description |
 |--------|-------------|
-| `--listen <ADDR>` | Web service listen address. Default `127.0.0.1:17172`. |
+| `--listen <ADDR>` | Web service listen address. Default `0.0.0.0:6888`. |
 | `--data-dir <DIR>` | SQLite data, sessions, generated artifacts, and audit-log state. Default `./web_data`. |
 | `--runtime-log-dir <DIR>` | Directory used for runtime log persistence and browser log replay. Default `./logs`. |
 | `--tmdb-api-key <KEY>` | Optional TMDB API key for login backgrounds. |
@@ -175,10 +175,9 @@ These repository scripts mirror the current local packaging paths:
 
 ```bash
 ./scripts/build-binary.sh
-./scripts/build-docker.sh --tag embystream-web:latest
+./scripts/build-docker.sh --tag embystream:latest
 ```
 
-Use `./scripts/build-docker.sh --dockerfile Dockerfile --tag embystream-cli:latest` for the legacy CLI image.
 Docker metadata and local image archives are written under `./.build/docker/`.
 
 ---

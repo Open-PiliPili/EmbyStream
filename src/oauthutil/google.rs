@@ -492,7 +492,10 @@ host = ""
     async fn token_uses_store_reread_when_shared_store_is_newer() {
         let dir = tempfile::tempdir().expect("temp dir");
         let config_path = dir.path().join("config.toml");
-        let persisted = r#"
+        let expiry = (Utc::now() + Duration::minutes(30))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let persisted = format!(
+            r#"
 [[BackendNode]]
 name = "GoogleDrive"
 type = "googleDrive"
@@ -504,11 +507,13 @@ client_secret = "client-secret"
 drive_id = "drive-id"
 access_token = "persisted-access"
 refresh_token = "persisted-refresh"
-token = { access_token = "persisted-access",
+token = {{ access_token = "persisted-access",
           refresh_token = "persisted-refresh",
           token_type = "Bearer",
-          expiry = 2026-04-16T12:20:00Z }
-"#;
+          expiry = {expiry} }}
+"#,
+            expiry = expiry
+        );
         std::fs::write(&config_path, persisted).expect("write config");
 
         let stale_node =
