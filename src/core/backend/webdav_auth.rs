@@ -267,12 +267,16 @@ mod tests {
         let empty = WebDavConfig::default();
         assert!(!credentials_configured(&empty));
 
-        let mut u = WebDavConfig::default();
-        u.username = "a".into();
+        let u = WebDavConfig {
+            username: "a".into(),
+            ..Default::default()
+        };
         assert!(credentials_configured(&u));
 
-        let mut p = WebDavConfig::default();
-        p.password = "b".into();
+        let p = WebDavConfig {
+            password: "b".into(),
+            ..Default::default()
+        };
         assert!(credentials_configured(&p));
     }
 
